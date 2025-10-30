@@ -1,0 +1,1 @@
+export { default as CompanyProfileManagement } from './CompanyProfileManagement';

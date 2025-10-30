@@ -1,0 +1,10 @@
+{
+  "server/routes/**/*.ts": [
+    "eslint --fix",
+    "npm run type-check"
+  ],
+  "server/routes.ts": [
+    "eslint --fix", 
+    "npm run type-check"
+  ]
+}
