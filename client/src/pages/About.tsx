@@ -14,7 +14,9 @@ import {
   MapPin,
   Mail,
   Phone,
-  Sparkles
+  Sparkles,
+  Lightbulb,
+  User
 } from "lucide-react";
 
 export default function About() {
@@ -53,6 +55,79 @@ export default function About() {
                 Making international education accessible to students worldwide through 
                 innovative technology and expert counseling.
               </p>
+            </div>
+          </div>
+        </section>
+
+        {/* The Meaning Behind Phozos Section */}
+        <section className="py-20 bg-gradient-to-br from-amber-50/50 via-background to-orange-50/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <Badge variant="secondary" className="mb-4 px-4 py-2">
+                <Lightbulb className="mr-2 w-4 h-4" />
+                Our Story
+              </Badge>
+              <h2 className="text-4xl md:text-5xl font-bold mb-4">The Meaning Behind Phozos</h2>
+              <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+                A unique word with a powerful vision
+              </p>
+            </div>
+
+            <div className="max-w-5xl mx-auto">
+              <Card className="border-2 shadow-xl hover:shadow-2xl transition-shadow">
+                <CardContent className="p-10">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="w-20 h-20 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
+                      <Lightbulb className="w-10 h-10 text-white" />
+                    </div>
+                    
+                    <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-8 max-w-3xl">
+                      <span className="font-bold text-foreground text-2xl">"Phozos"</span> is not just a name—it's a 
+                      <span className="font-semibold text-foreground"> unique word coined by our visionary founder, Mr. Chetan</span>, 
+                      to embody the very essence of our mission. Drawing from ancient Greek roots, he masterfully combined 
+                      <span className="font-semibold text-amber-600"> "Phōs"</span> (meaning light) and 
+                      <span className="font-semibold text-orange-600"> "Zoēs"</span> (meaning life) to create a word that 
+                      represents the <span className="font-semibold text-foreground">light that illuminates your path to a brighter future</span>.
+                    </p>
+
+                    <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-8 mb-8 border-2 border-amber-200 w-full max-w-2xl">
+                      <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-2xl md:text-3xl font-bold">
+                        <span className="text-amber-600">Phōs</span>
+                        <span className="text-muted-foreground">+</span>
+                        <span className="text-orange-600">Zoēs</span>
+                        <span className="text-muted-foreground">=</span>
+                        <span className="bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+                          Phozos™
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-4 italic">
+                        Created by Mr. Chetan to mean "Light of Life"
+                      </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6 w-full">
+                      <div className="bg-amber-50/50 rounded-lg p-6 border border-amber-200">
+                        <h3 className="text-xl font-bold mb-3 text-amber-700">Founded Locally</h3>
+                        <p className="text-muted-foreground">
+                          Started in <span className="font-semibold">2023</span> with a vision to transform 
+                          study abroad consulting in India
+                        </p>
+                      </div>
+                      <div className="bg-orange-50/50 rounded-lg p-6 border border-orange-200">
+                        <h3 className="text-xl font-bold mb-3 text-orange-700">Expanded Globally</h3>
+                        <p className="text-muted-foreground">
+                          Reached international markets in <span className="font-semibold">2024</span>, 
+                          serving students worldwide
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-lg text-muted-foreground mt-8 italic">
+                      "Every student deserves the light to find their path and the life to achieve their dreams."
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </section>
@@ -129,6 +204,94 @@ export default function About() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </section>
+
+        {/* Our Founder Section */}
+        <section className="py-20 bg-background">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <Badge variant="secondary" className="mb-4 px-4 py-2">
+                <User className="mr-2 w-4 h-4" />
+                Leadership
+              </Badge>
+              <h2 className="text-4xl md:text-5xl font-bold mb-4">Our Founder</h2>
+              <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+                The visionary behind Phozos
+              </p>
+            </div>
+
+            <div className="max-w-5xl mx-auto">
+              <Card className="border-2 shadow-xl hover:shadow-2xl transition-shadow overflow-hidden">
+                <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 h-2"></div>
+                <CardContent className="p-10">
+                  <div className="flex flex-col items-center text-center mb-8">
+                    <div className="w-24 h-24 bg-gradient-to-br from-amber-500 to-orange-600 rounded-full flex items-center justify-center mb-6 shadow-xl ring-4 ring-amber-100">
+                      <User className="w-12 h-12 text-white" />
+                    </div>
+                    <h3 className="text-3xl font-bold mb-2">Mr. Chetan</h3>
+                    <p className="text-lg text-muted-foreground font-medium">Founder & Visionary</p>
+                  </div>
+
+                  <div className="space-y-6 text-left">
+                    <div className="prose prose-lg max-w-none">
+                      <p className="text-lg text-muted-foreground leading-relaxed">
+                        Mr. Chetan's journey began with a profound realization: countless talented students were being 
+                        held back from pursuing their dreams of studying abroad due to the complexity, high costs, and 
+                        lack of transparency in traditional education consulting. Having witnessed these challenges firsthand, 
+                        he envisioned a platform that would democratize access to international education.
+                      </p>
+
+                      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl p-6 my-6 border-l-4 border-amber-500">
+                        <p className="text-lg font-medium text-foreground italic">
+                          "I wanted to create more than just a business—I wanted to create hope. A light that guides students 
+                          toward their dreams and empowers them to build the life they envision."
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-3">— Mr. Chetan, on creating Phozos</p>
+                      </div>
+
+                      <p className="text-lg text-muted-foreground leading-relaxed">
+                        This vision led him to coin the word <span className="font-bold text-amber-600">"Phozos"</span>—a 
+                        unique term that perfectly encapsulates his mission. By combining the Greek words 
+                        <span className="font-semibold"> "Phōs"</span> (light) and 
+                        <span className="font-semibold"> "Zoēs"</span> (life), he created a name that represents the 
+                        illumination of students' paths toward a brighter, more fulfilling life through education.
+                      </p>
+
+                      <p className="text-lg text-muted-foreground leading-relaxed">
+                        In <span className="font-bold">2023</span>, Mr. Chetan launched Phozos locally in India, 
+                        focusing on building a technology-first platform that combines AI-powered university matching 
+                        with personalized human guidance. The response was overwhelming, validating his belief that 
+                        students were hungry for an affordable, transparent, and effective alternative to traditional 
+                        consultancies.
+                      </p>
+
+                      <p className="text-lg text-muted-foreground leading-relaxed">
+                        By <span className="font-bold">2024</span>, Phozos had expanded globally, serving students 
+                        from around the world and partnering with universities across 50+ countries. Today, Mr. Chetan 
+                        continues to lead Phozos with the same passion and vision that inspired its creation—making 
+                        international education accessible to every deserving student, one dream at a time.
+                      </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-4 mt-8">
+                      <div className="bg-background border-2 border-amber-200 rounded-lg p-6 text-center">
+                        <div className="text-3xl font-bold text-amber-600 mb-2">2023</div>
+                        <p className="text-sm text-muted-foreground">Founded Phozos in India</p>
+                      </div>
+                      <div className="bg-background border-2 border-orange-200 rounded-lg p-6 text-center">
+                        <div className="text-3xl font-bold text-orange-600 mb-2">2024</div>
+                        <p className="text-sm text-muted-foreground">Expanded globally</p>
+                      </div>
+                      <div className="bg-background border-2 border-amber-200 rounded-lg p-6 text-center">
+                        <div className="text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent mb-2">1000s</div>
+                        <p className="text-sm text-muted-foreground">Students helped worldwide</p>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </section>
 

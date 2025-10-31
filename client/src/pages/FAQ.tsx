@@ -16,7 +16,7 @@ import { HelpCircle } from "lucide-react";
 const faqs = [
   {
     question: "What is Phozos Study Abroad?",
-    answer: "Phozos is a comprehensive platform that helps students find and apply to universities worldwide. We combine AI-powered university matching, application tracking, expert counseling, and a supportive community to make your study abroad journey smooth and successful."
+    answer: "Phozos - a unique word coined by founder Mr. Chetan from the Greek words 'Phōs' (light) and 'Zoēs' (life) meaning 'Light of Life' - is a comprehensive platform that helps students find and apply to universities worldwide. We combine AI-powered university matching, application tracking, expert counseling, and a supportive community to make your study abroad journey smooth and successful."
   },
   {
     question: "How does the AI university matching work?",
