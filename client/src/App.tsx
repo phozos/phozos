@@ -28,6 +28,9 @@ import ConversionTest from "@/pages/ConversionTest";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import CookiePolicy from "@/pages/CookiePolicy";
+import About from "@/pages/About";
+import Contact from "@/pages/Contact";
+import FAQ from "@/pages/FAQ";
 import { CookieBanner } from "@/components/CookieConsent";
 
 // FID Optimization: Lazy load heavy components for better initial load performance
@@ -73,6 +76,9 @@ function AppContent() {
         <Route path="/auth" component={Auth} />
         <Route path="/auth/staff-invite/:token" component={StaffInvite} />
         <Route path="/plans" component={PublicPlans} />
+        <Route path="/about" component={About} />
+        <Route path="/contact" component={Contact} />
+        <Route path="/faq" component={FAQ} />
 
         {/* Dashboard routes with consolidated protection patterns */}
         <Route path="/dashboard/student">
