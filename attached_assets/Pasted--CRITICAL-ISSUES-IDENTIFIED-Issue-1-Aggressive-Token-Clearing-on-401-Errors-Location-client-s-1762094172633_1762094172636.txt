@@ -1,0 +1,165 @@
+🔴 CRITICAL ISSUES IDENTIFIED
+Issue #1: Aggressive Token Clearing on 401 Errors
+Location: client/src/hooks/useAuth.tsx (lines 94-99)
+Your checkAuthStatus() function immediately deletes the JWT token from localStorage whenever it receives a 401 response, without distinguishing between:
+Legitimate token expiration (should clear)
+Network delays or timing issues (should NOT clear)
+Race conditions in token retrieval (should NOT clear)
+This is what's causing students to be logged out!
+Issue #2: Race Condition in Token Retrieval
+Location: client/src/lib/api-client.ts (lines 100-116)
+When the browser tab closes/reopens or the page refreshes:
+The in-memory authToken variable becomes null
+AuthProvider mounts and calls checkAuthStatus()
+If localStorage read is slightly delayed, the request goes out without an Authorization header
+Server returns 401 (no token attached)
+Issue #1 triggers: token gets deleted from localStorage
+User is logged out
+Issue #3: React StrictMode Doubling the Problem
+React's StrictMode (enabled in development) causes components to mount twice, making checkAuthStatus() run twice on every page load - doubling the chances of hitting the race condition.
+
+✅ WHAT YOUR APP IS DOING
+Aspect
+Your Implementation
+Status
+Token Storage
+localStorage
+⚠️ Works but XSS-vulnerable
+Token Type
+JWT only (no refresh token)
+⚠️ Works but not ideal
+Token Lifetime
+24 hours
+✅ Reasonable
+Navigation
+wouter Link (client-side)
+✅ Correct
+CSRF Protection
+Double-submit cookie pattern
+✅ Correct
+Error Handling
+Aggressive clearing on 401
+❌ Too aggressive
+
+
+🌟 INDUSTRY STANDARDS (2025)
+1. Token Storage - Security Best Practices
+Current: JWT in localStorage
+Industry Standard: HttpOnly cookies
+Method
+Security
+Persistence
+Industry View
+localStorage
+❌ XSS vulnerable
+✅ Yes
+❌ Avoid
+HttpOnly Cookies
+✅ XSS protected
+✅ Yes
+✅ Recommended
+
+Why cookies are better:
+HttpOnly flag prevents JavaScript access (protects against XSS attacks)
+Secure flag ensures HTTPS-only transmission
+SameSite=Strict provides CSRF protection
+2. Token Refresh Pattern
+Current: Single JWT with 24h expiration
+Industry Standard: Access Token (15min) + Refresh Token (7 days)
+// Modern approach
+Access Token:  15-60 minutes (short-lived, in HttpOnly cookie)
+Refresh Token: 7-30 days (separate HttpOnly cookie, rotated on each use)
+Benefits:
+Limits exposure window if token is compromised
+Allows silent refresh without disrupting user experience
+Rotating refresh tokens detect stolen credentials
+3. Session Timeout Standards
+For educational platforms (medium-risk):
+Timeout Type
+Recommended
+Purpose
+Idle Timeout
+15-30 minutes
+Logs out inactive users
+Absolute Timeout
+4-8 hours
+Maximum session duration
+
+Your current 24h absolute timeout is acceptable but higher than typical.
+4. Handling 401 Errors - Best Practice
+Industry approach:
+Intercept 401 responses globally
+Attempt token refresh automatically
+Queue concurrent requests during refresh (prevents race conditions)
+Only logout if refresh fails (confirmed expiration)
+Never clear tokens on transient failures
+Example pattern:
+// Axios interceptor with refresh mutex
+let isRefreshing = false;
+let failedQueue = [];
+axios.interceptors.response.use(
+ response => response,
+ async error => {
+   if (error.response?.status === 401 && !originalRequest._retry) {
+     if (isRefreshing) {
+       // Queue request and wait for refresh
+       return queueRequest(originalRequest);
+     }
+    
+     isRefreshing = true;
+     originalRequest._retry = true;
+    
+     try {
+       const newToken = await refreshToken();
+       processQueue(newToken);
+       return retryRequest(originalRequest, newToken);
+     } catch (refreshError) {
+       // Only NOW clear tokens and logout
+       clearTokens();
+       redirectToLogin();
+     } finally {
+       isRefreshing = false;
+     }
+   }
+ }
+);
+5. Race Condition Prevention
+Industry solutions:
+Token refresh mutex - prevents multiple simultaneous refresh attempts
+Request queuing - holds concurrent requests during token refresh
+Cleanup patterns - use AbortController to cancel stale requests
+Loading states - explicit isLoading flag to prevent premature operations
+
+📊 COMPARISON SUMMARY
+What's Causing Your Logout Bug:
+❌ No retry logic - First 401 immediately clears token
+❌ No token refresh mechanism - Can't recover from expiration
+❌ Race condition vulnerability - localStorage read timing issues
+❌ No request queuing - Multiple simultaneous auth checks conflict
+Industry Best Practices You're Missing:
+✅ HttpOnly cookies instead of localStorage (XSS protection)
+✅ Refresh token pattern (better UX, security)
+✅ 401 retry logic with token refresh
+✅ Request queuing during refresh (race condition protection)
+✅ Refresh mutex (prevents duplicate refresh calls)
+✅ Idle timeout warnings (UX improvement)
+
+🎯 ROOT CAUSE OF YOUR ISSUE
+Students are being logged out because:
+Footer navigation or browser tab close/reopen causes React to remount components
+useEffect in AuthProvider runs checkAuthStatus()
+In-memory token is null, localStorage read has slight delay
+Request to /api/auth/me goes out without Authorization header
+Server correctly returns 401
+Your code mistakes this for token expiration and deletes the valid token
+Student is logged out
+This is a race condition, not a token expiration issue.
+
+💡 RECOMMENDATIONS
+No changes have been made as requested. When you're ready to fix this, the solution involves:
+Remove aggressive token clearing - Only clear on confirmed expiration
+Add retry logic - Retry 401 requests once before clearing tokens
+Implement token refresh - Use access + refresh token pattern
+Add request queuing - Prevent race conditions during auth checks
+Consider migrating to HttpOnly cookies - Better security posture
+
