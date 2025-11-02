@@ -13,6 +13,7 @@ interface AuthContextType {
   // Authentication state
   user: User | null;
   loading: boolean;
+  authReady: boolean;
   
   // Authentication actions
   login: (userData: User, token?: string) => Promise<void>;
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Authentication state
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [authCheckAttempted, setAuthCheckAttempted] = useState(false);
   
   // ✅ STEP 1.5: StrictMode protection - use ref to persist across re-mounts
@@ -102,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('ℹ️ [AUTH] No token found - user not logged in');
         setUser(null);
         setLoading(false);
+        setAuthReady(true);
         setAuthCheckAttempted(true);
         return;
       }
@@ -112,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await api.get('/api/auth/me') as any;
       console.log('✅ [AUTH] Authentication valid, user:', userData.email);
       setUser(userData);
+      setAuthReady(true);
       
     } catch (error: any) {
       console.error('❌ [AUTH] Authentication check failed:', error);
@@ -150,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
     } finally {
       setLoading(false);
+      setAuthReady(true);
       setAuthCheckAttempted(true);
     }
   };
@@ -178,6 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Update React state
     setUser(userData);
     setLoading(false);
+    setAuthReady(true);
     setAuthCheckAttempted(true);
     
     // Small delay to ensure React state updates are processed
@@ -230,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Authentication
     user,
     loading,
+    authReady,
     login,
     logout,
     

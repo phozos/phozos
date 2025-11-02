@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -874,7 +874,7 @@ export default function TeamDashboard() {
   if (statsLoading || teamLoading || applicationsLoading || studentsLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <AppShell />
         <div className="max-w-7xl mx-auto px-4 py-8">
           <LoadingSkeleton type="card" count={4} />
         </div>
@@ -884,7 +884,7 @@ export default function TeamDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <AppShell />
       
       <div className="flex h-[calc(100vh-4rem)] pt-20">
         {/* Floating Toggle Button (when sidebar is closed) */}

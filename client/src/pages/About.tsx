@@ -1,4 +1,4 @@
-import Navigation from "@/components/Navigation";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { SEO } from "@/components/SEO";
@@ -30,7 +30,7 @@ export default function About() {
       />
       
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         <Breadcrumbs items={[{ label: 'About', href: '/about' }]} />
         
         {/* Hero Section */}

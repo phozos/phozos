@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useApiQuery } from "@/hooks/api-hooks";
 import { api } from "@/lib/api-client";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -225,7 +225,7 @@ export default function Universities() {
         />
         
         <div className="min-h-screen bg-background">
-          <Header />
+          <AppShell />
           <div className="max-w-7xl mx-auto px-4 pt-24 pb-8">
             <LoadingSkeleton type="card" count={6} />
           </div>
@@ -246,7 +246,7 @@ export default function Universities() {
       />
       
       <div className="min-h-screen bg-background">
-        <Header />
+        <AppShell />
         
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-8">
           {/* Header */}

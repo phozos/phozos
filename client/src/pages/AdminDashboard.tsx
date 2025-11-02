@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1860,7 +1860,7 @@ export default function AdminDashboard() {
   if (statsLoading || universitiesLoading || studentsLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <AppShell />
         <div className="max-w-7xl mx-auto px-4 py-8 pt-24">
           <LoadingSkeleton type="card" count={4} />
         </div>
@@ -1870,7 +1870,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <AppShell />
       
       <div className="flex h-[calc(100vh-4rem)] pt-16">
         {/* Floating Toggle Button (when sidebar is closed) */}
@@ -4111,7 +4111,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <AppShell />
       
       <div className="flex pt-16">
         {/* Sidebar */}

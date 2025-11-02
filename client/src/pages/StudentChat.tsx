@@ -3,7 +3,7 @@ import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -309,7 +309,7 @@ export default function StudentChat() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
-      <Header />
+      <AppShell />
       
       <main className="container mx-auto px-4 pt-24 pb-8">
         {/* Header with Back Button */}

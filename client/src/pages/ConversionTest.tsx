@@ -1,5 +1,5 @@
 import React from "react";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SubscriptionConversionTest } from "@/components/SubscriptionConversionTest";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,7 +13,7 @@ export default function ConversionTest() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <AppShell />
       
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-8">

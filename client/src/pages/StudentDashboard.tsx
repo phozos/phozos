@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useApiQuery } from "@/hooks/api-hooks";
 import { useAuth } from "@/hooks/useAuth";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -151,7 +151,7 @@ export default function StudentDashboard() {
       {/* Subtle grain texture overlay */}
       <div className="fixed inset-0 opacity-[0.02] bg-[url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%20256%20256%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cfilter%20id%3D%22noiseFilter%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%220.9%22%20numOctaves%3D%224%22%20stitchTiles%3D%22stitch%22/%3E%3C/filter%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20filter%3D%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] pointer-events-none"></div>
       
-      <Header />
+      <AppShell />
       
       <main className="container mx-auto px-4 pt-24 pb-8 space-y-8 relative z-10">
         {/* Hero Section with Premium Liquid Glass Effect */}

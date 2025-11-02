@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, Star, Crown, Zap, Award, Sparkles, Globe, Users, Heart, Rocket, TrendingUp } from "lucide-react";
-import Navigation from "@/components/Navigation";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { PremiumBadgeDisplay } from "@/components/PremiumBadges";
@@ -95,7 +95,7 @@ export default function PublicPlans() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         <div className="max-w-7xl mx-auto px-4 py-16">
           <div className="text-center">
             <div className="animate-pulse space-y-4">
@@ -128,7 +128,7 @@ export default function PublicPlans() {
       <FAQSchema items={faqItems} />
       
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         <Breadcrumbs items={[{ label: 'Plans', href: '/plans' }]} />
       
       {/* Hero Section - Enhanced with homepage styling */}

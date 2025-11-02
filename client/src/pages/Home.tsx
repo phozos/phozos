@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useApiQuery } from "@/hooks/api-hooks";
-import Navigation from "@/components/Navigation";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -90,7 +90,7 @@ export default function Home() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         <div className="max-w-7xl mx-auto px-4 py-16">
           <LoadingSkeleton type="card" count={3} />
         </div>
@@ -124,7 +124,7 @@ export default function Home() {
       {/* Subtle grain texture overlay */}
       <div className="fixed inset-0 opacity-[0.02] bg-[url('data:image/svg+xml,%3Csvg%20viewBox%3D%220%200%20256%20256%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cfilter%20id%3D%22noiseFilter%22%3E%3CfeTurbulence%20type%3D%22fractalNoise%22%20baseFrequency%3D%220.9%22%20numOctaves%3D%224%22%20stitchTiles%3D%22stitch%22/%3E%3C/filter%3E%3Crect%20width%3D%22100%25%22%20height%3D%22100%25%22%20filter%3D%22url(%23noiseFilter)%22/%3E%3C/svg%3E')] pointer-events-none"></div>
       
-      <Navigation user={user} />
+      <AppShell />
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center justify-center overflow-hidden">

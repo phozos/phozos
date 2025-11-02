@@ -1,4 +1,4 @@
-import Navigation from "@/components/Navigation";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { SEO } from "@/components/SEO";
@@ -26,7 +26,7 @@ export default function Contact() {
       />
       
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         <Breadcrumbs items={[{ label: 'Contact', href: '/contact' }]} />
         
         {/* Hero Section */}

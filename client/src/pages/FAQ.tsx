@@ -1,4 +1,4 @@
-import Navigation from "@/components/Navigation";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { SEO } from "@/components/SEO";
@@ -89,7 +89,7 @@ export default function FAQ() {
       <FAQSchema items={faqs} />
       
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         <Breadcrumbs items={[{ label: 'FAQ', href: '/faq' }]} />
         
         {/* Hero Section */}

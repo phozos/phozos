@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api-client";
-import Header from "@/components/Header";
+import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import ProfileOverviewCard from "@/components/profile/ProfileOverviewCard";
 import PersonalInfoForm from "@/components/profile/PersonalInfoForm";
@@ -53,7 +53,7 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <AppShell />
       
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}

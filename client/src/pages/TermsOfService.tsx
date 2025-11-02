@@ -1,6 +1,6 @@
 import { SEO } from '@/components/SEO';
 import { BreadcrumbSchema } from '@/components/StructuredData';
-import Navigation from '@/components/Navigation';
+import AppShell from '@/components/AppShell';
 import Footer from '@/components/Footer';
 
 export default function TermsOfService() {
@@ -17,7 +17,7 @@ export default function TermsOfService() {
       ]} />
       
       <div className="min-h-screen bg-background">
-        <Navigation />
+        <AppShell />
         
         <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 pt-24">
           <h1 className="text-4xl font-bold text-foreground mb-4">Terms of Service</h1>

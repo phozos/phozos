@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery, useApiMutation } from '@/hooks/api-hooks';
 import { useAuth } from '@/hooks/useAuth';
-import Header from '@/components/Header';
+import AppShell from '@/components/AppShell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,7 +103,7 @@ export default function CompanyDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <AppShell />
       
       <div className="container mx-auto px-4 py-8 pt-24">
         {/* Company Header */}

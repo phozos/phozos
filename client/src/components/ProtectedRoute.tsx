@@ -1,6 +1,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import LoadingScreen from "@/components/LoadingScreen";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -13,12 +14,12 @@ export default function ProtectedRoute({
   allowedUserTypes = ['customer', 'team_member', 'company_profile'],
   allowedRoles 
 }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, authReady } = useAuth();
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    // Don't redirect while authentication is still loading
-    if (loading) {
+    // Don't redirect while authentication is still loading or not ready
+    if (loading || !authReady) {
       return;
     }
 
@@ -60,18 +61,14 @@ export default function ProtectedRoute({
         }
       }
     }
-  }, [user, loading, navigate, allowedUserTypes, allowedRoles]);
+  }, [user, loading, authReady, navigate, allowedUserTypes, allowedRoles]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+  if (loading || !authReady) {
+    return <LoadingScreen message="Verifying authentication..." />;
   }
 
   if (!user) {
-    return null;
+    return <LoadingScreen message="Redirecting to login..." />;
   }
 
   return <>{children}</>;
