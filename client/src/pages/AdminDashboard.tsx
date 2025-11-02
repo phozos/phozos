@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, memo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
+import { useAuthenticatedQuery, useApiMutation } from "@/hooks/api-hooks";
 import AppShell from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -964,8 +964,8 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch reported posts data
-  const { data: rawReportedPosts, isLoading: reportedPostsLoading, error: reportedPostsError } = useApiQuery(
+  // Phase 3: Use authenticated queries with authReady guard
+  const { data: rawReportedPosts, isLoading: reportedPostsLoading, error: reportedPostsError } = useAuthenticatedQuery(
     ["/api/admin/forum/reported-posts"],
     "/api/admin/forum/reported-posts",
     undefined,
@@ -1022,32 +1022,32 @@ export default function AdminDashboard() {
     }
   };
 
-  // Fetch admin dashboard stats
-  const { data: adminStats, isLoading: statsLoading } = useApiQuery(
+  // Phase 3: Fetch admin dashboard stats with authReady guard
+  const { data: adminStats, isLoading: statsLoading } = useAuthenticatedQuery(
     ["/api/admin/stats"],
     "/api/admin/stats",
     undefined,
     { staleTime: 5 * 60 * 1000 }
   );
 
-  // Fetch universities for management  
-  const { data: rawUniversities, isLoading: universitiesLoading } = useApiQuery(
+  // Phase 3: Fetch universities for management with authReady guard
+  const { data: rawUniversities, isLoading: universitiesLoading } = useAuthenticatedQuery(
     ["/api/admin/universities"],
     "/api/admin/universities",
     undefined,
     { staleTime: 2 * 60 * 1000 }
   );
 
-  // Fetch students for management  
-  const { data: rawStudents, isLoading: studentsLoading } = useApiQuery(
+  // Phase 3: Fetch students for management with authReady guard
+  const { data: rawStudents, isLoading: studentsLoading } = useAuthenticatedQuery(
     ["/api/admin/students"],
     "/api/admin/students",
     undefined,
     { staleTime: 2 * 60 * 1000 }
   );
 
-  // Fetch counselors for assignment dropdown
-  const { data: rawCounselors, isLoading: counselorsLoading } = useApiQuery(
+  // Phase 3: Fetch counselors for assignment dropdown with authReady guard
+  const { data: rawCounselors, isLoading: counselorsLoading } = useAuthenticatedQuery(
     ["/api/admin/counselors"],
     "/api/admin/counselors",
     undefined,
@@ -1057,8 +1057,8 @@ export default function AdminDashboard() {
     }
   );
 
-  // Fetch staff members
-  const { data: rawStaffMembers, isLoading: staffMembersLoading, error: staffError } = useApiQuery(
+  // Phase 3: Fetch staff members with authReady guard
+  const { data: rawStaffMembers, isLoading: staffMembersLoading, error: staffError } = useAuthenticatedQuery(
     ["/api/admin/staff"],
     "/api/admin/staff",
     undefined,
@@ -1114,8 +1114,8 @@ export default function AdminDashboard() {
     }
   );
 
-  // Security Settings Query
-  const { data: securitySettings, isLoading: securityLoading, refetch: refetchSecuritySettings } = useApiQuery(
+  // Phase 3: Security Settings Query with authReady guard
+  const { data: securitySettings, isLoading: securityLoading, refetch: refetchSecuritySettings } = useAuthenticatedQuery(
     ['/api/admin/security/settings'],
     '/api/admin/security/settings',
     undefined
@@ -3205,8 +3205,8 @@ export default function AdminDashboard() {
     const [isUpdating, setIsUpdating] = useState(false);
     const { toast } = useToast();
 
-    // Query for community forum settings
-    const { data: settings, isLoading, refetch } = useApiQuery(
+    // Phase 3: Query for community forum settings with authReady guard
+    const { data: settings, isLoading, refetch } = useAuthenticatedQuery(
       ["/api/admin/security-settings"],
       "/api/admin/security-settings",
       undefined,

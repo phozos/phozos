@@ -232,6 +232,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Phase 4.4: Listen to token refresh events
+  useEffect(() => {
+    const handleTokenRefreshed = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('✅ [AUTH] Token refreshed event received', customEvent.detail);
+      // Token is already updated in api-client.ts, no action needed here
+      // Could show a non-intrusive notification if desired
+    };
+
+    const handleTokenRefreshFailed = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.error('❌ [AUTH] Token refresh failed event received', customEvent.detail);
+      
+      // Token refresh failed, user needs to re-authenticate
+      // The logout is handled in api-client.ts, just update UI state here
+      setUser(null);
+      setAuthReady(true);
+      setLoading(false);
+      
+      // Could show a user-friendly notification here
+      // toast({ title: "Session Expired", description: "Please log in again.", variant: "destructive" });
+    };
+
+    const handleTokenRefreshStarted = () => {
+      console.log('🔄 [AUTH] Token refresh started event received');
+      // Could set a subtle loading indicator here if desired
+      // setRefreshing(true);
+    };
+
+    const handleAuthTokenExpired = () => {
+      console.log('⏰ [AUTH] Auth token expired event received');
+      // Clear user state and redirect to login
+      setUser(null);
+      setAuthReady(true);
+      setLoading(false);
+      
+      // The logout/redirect is typically handled by the component using useAuth
+      // or could be handled here with a navigate call if needed
+    };
+
+    // Add event listeners
+    window.addEventListener('token-refreshed', handleTokenRefreshed);
+    window.addEventListener('token-refresh-failed', handleTokenRefreshFailed);
+    window.addEventListener('token-refresh-started', handleTokenRefreshStarted);
+    window.addEventListener('auth-token-expired', handleAuthTokenExpired);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('token-refreshed', handleTokenRefreshed);
+      window.removeEventListener('token-refresh-failed', handleTokenRefreshFailed);
+      window.removeEventListener('token-refresh-started', handleTokenRefreshStarted);
+      window.removeEventListener('auth-token-expired', handleAuthTokenExpired);
+    };
+  }, []);
+
   const value = {
     // Authentication
     user,

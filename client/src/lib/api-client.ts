@@ -189,6 +189,117 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Shared promise for in-flight CSRF token refreshes to prevent race conditions
 let csrfRefreshPromise: Promise<void> | null = null;
 
+// Phase 4.3: 401 Handling Race Condition Fix
+// Track refresh state and queue requests during refresh
+let tokenRefreshInProgress = false;
+let tokenRefreshPromise: Promise<string | null> | null = null;
+
+interface QueuedRequest {
+  resolve: (value: any) => void;
+  reject: (error: any) => void;
+  url: string;
+  options?: RequestOptions;
+  responseSchema?: z.ZodSchema<any>;
+}
+
+let requestQueue: QueuedRequest[] = [];
+
+/**
+ * Phase 4.3: Queue requests during token refresh and retry after refresh completes
+ * 
+ * This prevents 401 race conditions by:
+ * 1. Detecting 401 errors during active token refresh
+ * 2. Queuing the failed request instead of rejecting immediately
+ * 3. Retrying all queued requests after successful refresh
+ * 4. Only logging out if refresh itself fails
+ */
+async function handleTokenRefreshAndRetry<T>(
+  url: string,
+  options?: RequestOptions,
+  responseSchema?: z.ZodSchema<T>
+): Promise<T> {
+  // If refresh is already in progress, queue this request
+  if (tokenRefreshInProgress && tokenRefreshPromise) {
+    console.log(`⏳ [401] Request queued during token refresh: ${url}`);
+    
+    return new Promise((resolve, reject) => {
+      requestQueue.push({ resolve, reject, url, options, responseSchema });
+    });
+  }
+  
+  // Start token refresh
+  tokenRefreshInProgress = true;
+  console.log(`🔄 [401] Starting token refresh for failed request: ${url}`);
+  
+  tokenRefreshPromise = refreshToken();
+  
+  try {
+    const newToken = await tokenRefreshPromise;
+    
+    if (newToken) {
+      // Refresh successful - update token and retry
+      setAuthToken(newToken);
+      console.log(`✅ [401] Token refreshed, retrying original request: ${url}`);
+      
+      // Retry the original request
+      const result = await apiRequest<T>(url, options, responseSchema);
+      
+      // Process queued requests
+      if (requestQueue.length > 0) {
+        console.log(`🔄 [401] Processing ${requestQueue.length} queued requests`);
+        
+        const queue = [...requestQueue];
+        requestQueue = [];
+        
+        // Process queued requests in parallel
+        queue.forEach(async (queuedReq) => {
+          try {
+            const queuedResult = await apiRequest(
+              queuedReq.url,
+              queuedReq.options,
+              queuedReq.responseSchema
+            );
+            queuedReq.resolve(queuedResult);
+          } catch (error) {
+            queuedReq.reject(error);
+          }
+        });
+      }
+      
+      return result;
+    } else {
+      // Refresh failed - reject all queued requests and logout
+      console.error(`❌ [401] Token refresh failed, logging out`);
+      
+      // Reject queued requests
+      const queue = [...requestQueue];
+      requestQueue = [];
+      queue.forEach(queuedReq => {
+        queuedReq.reject(new ApiError(
+          'AUTH_TOKEN_EXPIRED',
+          'Session expired. Please log in again.',
+          401
+        ));
+      });
+      
+      // Clear token and trigger logout
+      clearAuthToken();
+      
+      // Emit event for logout
+      window.dispatchEvent(new CustomEvent('auth-token-expired'));
+      
+      throw new ApiError(
+        'AUTH_TOKEN_EXPIRED',
+        'Session expired. Please log in again.',
+        401
+      );
+    }
+  } finally {
+    tokenRefreshInProgress = false;
+    tokenRefreshPromise = null;
+  }
+}
+
 /**
  * Ensure CSRF token and cookie are synchronized before state-changing requests
  * This guarantees both header and cookie are present and matching
@@ -355,12 +466,27 @@ export async function apiRequest<T>(
             errorData.hint
           );
           
-          // Retry logic for auth checks on 401
-          if (isAuthCheck && response.status === 401 && attempt < maxRetries) {
-            const backoffDelay = 300; // 300ms delay before retry
-            console.log(`⏳ [AUTH] 401 received, retrying after ${backoffDelay}ms...`);
-            await sleep(backoffDelay);
-            continue; // Retry
+          // Phase 4.3: Enhanced 401 handling with token refresh and request queuing
+          if (response.status === 401) {
+            // Special case: auth checks get simple retry logic
+            if (isAuthCheck && attempt < maxRetries) {
+              const backoffDelay = 300; // 300ms delay before retry
+              console.log(`⏳ [AUTH] 401 received on auth check, retrying after ${backoffDelay}ms...`);
+              await sleep(backoffDelay);
+              continue; // Retry
+            }
+            
+            // For all other 401s: attempt token refresh and queue request
+            // Skip refresh endpoints to prevent infinite loops
+            if (!url.includes('/api/auth/refresh') && !url.includes('/api/auth/logout')) {
+              try {
+                console.log(`🔐 [401] Unauthorized, attempting token refresh for: ${url}`);
+                return await handleTokenRefreshAndRetry<T>(url, options, responseSchema);
+              } catch (refreshError) {
+                // If refresh fails, throw the original 401 error
+                throw apiError;
+              }
+            }
           }
           
           throw apiError;

@@ -14,6 +14,7 @@ import { useQuery, useMutation, UseQueryOptions, UseMutationOptions } from "@tan
 import { z } from "zod";
 import { apiRequest, api, ApiError } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Essential Hook #1: Type-safe useQuery wrapper for GET requests
@@ -195,6 +196,56 @@ export function useDependentQuery<T, TDep>(
       ...options
     }
   );
+}
+
+/**
+ * Phase 3.2: useAuthenticatedQuery - Authenticated query wrapper
+ * 
+ * This wrapper automatically guards queries with authReady to prevent:
+ * - Queries firing before authentication is established
+ * - Race conditions during token refresh
+ * - Unnecessary 401 errors during auth initialization
+ * 
+ * Use this for any endpoint requiring authentication (user data, applications, etc.)
+ * For public endpoints, use useApiQuery directly
+ * 
+ * @param queryKey Query key for caching
+ * @param url API endpoint URL
+ * @param responseSchema Optional Zod schema for response validation
+ * @param options Additional React Query options
+ */
+export function useAuthenticatedQuery<T>(
+  queryKey: (string | number | boolean)[],
+  url: string,
+  responseSchema?: z.ZodSchema<T>,
+  options?: Omit<UseQueryOptions<T, ApiError>, 'queryKey' | 'queryFn' | 'enabled'>
+) {
+  const { authReady } = useAuth();
+  
+  return useApiQuery(
+    queryKey,
+    url,
+    responseSchema,
+    {
+      // Guard query with authReady to prevent premature execution
+      // This ensures the query only runs after auth state is determined
+      enabled: authReady && (options?.enabled !== undefined ? options.enabled : true),
+      ...options
+    }
+  );
+}
+
+/**
+ * Phase 3.2: useAuthReady - Simple hook to access authReady state
+ * 
+ * Convenience hook that returns only the authReady boolean without
+ * requiring destructuring the full auth context.
+ * 
+ * Useful for components that only need to know if auth is ready.
+ */
+export function useAuthReady(): boolean {
+  const { authReady } = useAuth();
+  return authReady;
 }
 
 /**

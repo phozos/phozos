@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApiQuery } from "@/hooks/api-hooks";
+import { useAuthenticatedQuery } from "@/hooks/api-hooks";
 import { useAuth } from "@/hooks/useAuth";
 import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
@@ -47,28 +47,34 @@ export default function StudentDashboard() {
     return <LoadingSkeleton type="card" count={3} />;
   }
 
-  // Fetch real student application data
-  const { data: applications = [], isLoading: applicationsLoading } = useApiQuery<any[]>(
+  // Phase 3: Use authenticated queries with authReady guard to prevent race conditions
+  // These queries automatically wait for auth state to be ready before executing
+  const { data: applications = [], isLoading: applicationsLoading } = useAuthenticatedQuery<any[]>(
     ['/api/applications'],
     '/api/applications',
     undefined,
-    { enabled: !!user }
+    { 
+      // User profile data can be cached for longer (10 minutes)
+      staleTime: 10 * 60 * 1000
+    }
   );
 
-  // Fetch real student documents
-  const { data: documents = [], isLoading: documentsLoading } = useApiQuery<any[]>(
+  const { data: documents = [], isLoading: documentsLoading } = useAuthenticatedQuery<any[]>(
     ['/api/documents'],
     '/api/documents',
     undefined,
-    { enabled: !!user }
+    { 
+      staleTime: 10 * 60 * 1000
+    }
   );
 
-  // Fetch AI university recommendations
-  const { data: recommendations = [], isLoading: recommendationsLoading } = useApiQuery<any[]>(
+  const { data: recommendations = [], isLoading: recommendationsLoading } = useAuthenticatedQuery<any[]>(
     ['/api/recommendations'],
     '/api/recommendations',
     undefined,
-    { enabled: !!user }
+    { 
+      staleTime: 10 * 60 * 1000
+    }
   );
 
   // Mock data as fallback for demonstration

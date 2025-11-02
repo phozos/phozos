@@ -41,13 +41,25 @@ const defaultQueryFn: QueryFunction = async ({ queryKey }) => {
 };
 
 /**
- * QueryClient Configuration
+ * QueryClient Configuration (Phase 3: React Query Optimization)
  * 
- * This configuration balances fresh data with performance:
- * - staleTime: 5 minutes means data is considered fresh for 5 min
- * - refetchOnWindowFocus: true ensures users see fresh data when returning to the app
- * - refetchOnMount: true provides fresh data when components mount (if stale)
- * - refetchOnReconnect: true fetches fresh data after network recovery
+ * Optimized configuration to reduce unnecessary refetches and coordinate with auth state:
+ * 
+ * STALE TIME STRATEGY (Tiered):
+ * - Default: 5 minutes for general data (applications, documents, etc.)
+ * - User Profile: 10 minutes (override in individual queries with staleTime: 10 * 60 * 1000)
+ * - Real-time data: 0 minutes (override in individual queries with staleTime: 0)
+ * 
+ * REFETCH POLICIES (Optimized for auth coordination):
+ * - refetchOnWindowFocus: false by default (prevents race conditions during token refresh)
+ *   - Individual queries can opt-in with refetchOnWindowFocus: true
+ * - refetchOnMount: 'always' only refetches if data is stale (respects staleTime)
+ * - refetchOnReconnect: true for fresh data after network recovery
+ * 
+ * AUTH COORDINATION:
+ * - Use enabled: authReady in queries requiring authentication
+ * - Use useAuthenticatedQuery wrapper for convenience
+ * - Queries respect token refresh lifecycle to avoid 401 race conditions
  * 
  * Individual queries can override these defaults using options parameter.
  */
@@ -56,11 +68,24 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: defaultQueryFn,
       refetchInterval: false,
-      refetchOnWindowFocus: true,   // ✅ Enable for fresh data when tab regains focus
-      staleTime: 5 * 60 * 1000,     // 5 minutes - data stays fresh for 5 min
+      
+      // ⚡ Phase 3 Optimization: Disable refetchOnWindowFocus by default
+      // This prevents queries from firing during token refresh, reducing 401 race conditions
+      // Individual queries can opt-in with refetchOnWindowFocus: true if needed
+      refetchOnWindowFocus: false,
+      
+      // ⏱️ Phase 3 Optimization: Tiered staleTime (default 5 min, user profile 10 min)
+      // Data is considered fresh for this duration, preventing unnecessary refetches
+      staleTime: 5 * 60 * 1000,     // 5 minutes default
+      
       retry: false,                  // Handled by useApiQuery/useApiMutation
-      refetchOnMount: true,          // ✅ Enable for fresh data on component mount
-      refetchOnReconnect: true,      // ✅ Enable for fresh data after network recovery
+      
+      // 🔄 Only refetch on mount if data is stale (respects staleTime)
+      refetchOnMount: 'always',
+      
+      // 🌐 Refetch after network reconnection for fresh data
+      refetchOnReconnect: true,
+      
       refetchIntervalInBackground: false,
     },
     mutations: {
