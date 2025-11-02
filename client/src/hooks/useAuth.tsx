@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { api, setAuthToken, clearAuthToken, getAuthToken, setCsrfToken } from '@/lib/api-client';
 import type { User } from '../../../shared/types';
 
@@ -31,6 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authCheckAttempted, setAuthCheckAttempted] = useState(false);
+  
+  // ✅ STEP 1.5: StrictMode protection - use ref to persist across re-mounts
+  const isInitializing = useRef(false);
   
   // CSRF state (consolidated into auth provider)
   const [csrfToken, setCsrfTokenState] = useState<string | null>(null);
@@ -84,19 +87,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [csrfToken, fetchCsrfToken]);
 
   /**
-   * Check authentication status
+   * Check authentication status with smart token clearing logic
+   * ✅ STEP 1.3: Only clear tokens on confirmed expiration, not on race conditions
    */
   const checkAuthStatus = async () => {
+    console.log('🔐 [AUTH] Checking authentication status...');
+    
     try {
-      // API client now auto-unwraps the envelope, so we get user data directly
-      const userData = await api.get('/api/auth/me') as any;
-      setUser(userData);
-    } catch (error: any) {
-      // Clear token and user on auth failure
-      if (error.status === 401) {
-        clearAuthToken();
+      // First check if we have a token at all
+      const token = getAuthToken();
+      
+      if (!token) {
+        console.log('ℹ️ [AUTH] No token found - user not logged in');
+        setUser(null);
+        setLoading(false);
+        setAuthCheckAttempted(true);
+        return;
       }
-      setUser(null);
+      
+      console.log('🔐 [AUTH] Token exists, validating with server...');
+      
+      // API client now auto-unwraps the envelope
+      const userData = await api.get('/api/auth/me') as any;
+      console.log('✅ [AUTH] Authentication valid, user:', userData.email);
+      setUser(userData);
+      
+    } catch (error: any) {
+      console.error('❌ [AUTH] Authentication check failed:', error);
+      
+      // ✅ CRITICAL FIX: Distinguish between different types of failures
+      if (error.status === 401) {
+        console.warn('⚠️ [AUTH] 401 Unauthorized received');
+        
+        // Check if this is a confirmed token expiration vs. potential race condition
+        const tokenStillExists = getAuthToken();
+        
+        if (!tokenStillExists) {
+          // Token was already cleared elsewhere - this is expected
+          console.log('ℹ️ [AUTH] Token already cleared');
+          setUser(null);
+        } else {
+          // Token exists but server rejected it
+          // This COULD be a race condition (no Auth header sent due to timing)
+          // or a genuinely invalid token
+          
+          // CONSERVATIVE APPROACH: Don't clear token immediately
+          // Let the user try to use it. If it fails again on actual API calls,
+          // those will trigger proper logout through 401 interceptor (Phase 2)
+          console.warn('⚠️ [AUTH] Token rejected but not clearing (may be race condition)');
+          setUser(null); // Set user to null but keep token
+        }
+      } else if (error.code === 'NETWORK_ERROR') {
+        // Network error - definitely don't clear token
+        console.warn('⚠️ [AUTH] Network error - keeping token for retry');
+        setUser(null);
+      } else {
+        // Other errors - don't clear token
+        console.error('❌ [AUTH] Unexpected error - keeping token:', error);
+        setUser(null);
+      }
+      
     } finally {
       setLoading(false);
       setAuthCheckAttempted(true);
@@ -155,8 +205,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshCsrfToken();
   };
 
-  // Initialize on mount
+  // Initialize on mount with StrictMode protection
   useEffect(() => {
+    // ✅ STEP 1.5: Prevent double execution in StrictMode
+    if (isInitializing.current) {
+      console.log('⚠️ [AUTH] Already initializing, skipping duplicate mount (StrictMode)');
+      return;
+    }
+    
+    isInitializing.current = true;
+    console.log('🔄 [AUTH] Initializing auth provider...');
+    
     checkAuthStatus();
     if (!csrfInitialized) {
       fetchCsrfToken().finally(() => setCsrfInitialized(true));

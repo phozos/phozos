@@ -72,6 +72,18 @@ const TOKEN_STORAGE_KEY = 'auth_token';
 let authToken: string | null = null;
 let csrfToken: string | null = null;
 
+// ✅ STEP 1.1: Eager token hydration - load token immediately on module initialization
+// This prevents race conditions by ensuring authToken is populated before any API calls
+try {
+  const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+  if (storedToken) {
+    authToken = storedToken;
+    console.log('✅ [AUTH] Token hydrated from localStorage on module load');
+  }
+} catch (error) {
+  console.warn('⚠️ [AUTH] Failed to hydrate token on module load:', error);
+}
+
 /**
  * Set JWT token for Authorization headers
  */
@@ -80,16 +92,19 @@ export function setAuthToken(token: string | null) {
   
   if (token) {
     try {
+      console.log('🔐 [AUTH] Storing token in localStorage');
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      console.log('✅ [AUTH] Token stored successfully');
     } catch (error) {
-      console.error('Failed to store token in localStorage:', error);
+      console.error('❌ [AUTH] Failed to store token:', error);
       throw error; // Re-throw to handle in calling code
     }
   } else {
     try {
+      console.log('🗑️ [AUTH] Clearing token from localStorage');
       localStorage.removeItem(TOKEN_STORAGE_KEY);
     } catch (error) {
-      console.warn('Failed to clear token from localStorage:', error);
+      console.warn('⚠️ [AUTH] Failed to clear token:', error);
     }
   }
 }
@@ -98,18 +113,24 @@ export function setAuthToken(token: string | null) {
  * Get current JWT token
  */
 export function getAuthToken(): string | null {
+  console.log('🔍 [AUTH] Retrieving token...');
+  
   if (authToken) {
+    console.log('✅ [AUTH] Token found in memory');
     return authToken;
   }
   
   try {
+    console.log('📦 [AUTH] Checking localStorage...');
     const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (storedToken) {
+      console.log('✅ [AUTH] Token restored from localStorage');
       authToken = storedToken;
       return storedToken;
     }
+    console.log('⚠️ [AUTH] No token found in localStorage');
   } catch (error) {
-    console.warn('Failed to read token from localStorage:', error);
+    console.error('❌ [AUTH] localStorage access failed:', error);
   }
   
   return null;
@@ -144,6 +165,11 @@ function getCookieValue(name: string): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
   return match ? match[2] : null;
 }
+
+/**
+ * Sleep utility for retry logic
+ */
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Shared promise for in-flight CSRF token refreshes to prevent race conditions
 let csrfRefreshPromise: Promise<void> | null = null;
@@ -225,157 +251,194 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const { method = 'GET', body, headers, skipCsrf = false, includeCredentials = false } = options || {};
   
-  // Prepare request headers
-  const requestHeaders: Record<string, string> = {
-    ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
-    ...headers,
-  };
+  // ✅ STEP 1.4: Special handling for /api/auth/me - add retry logic
+  const isAuthCheck = url === '/api/auth/me';
+  const maxRetries = isAuthCheck ? 1 : 0; // Single retry for auth checks
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Prepare request headers
+      const requestHeaders: Record<string, string> = {
+        ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
+        ...headers,
+      };
 
-  // Add JWT token for Authorization header
-  const token = getAuthToken();
-  if (token) {
-    requestHeaders['Authorization'] = `Bearer ${token}`;
-  }
+      // Add JWT token for Authorization header
+      const token = getAuthToken();
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+        if (isAuthCheck && attempt > 0) {
+          console.log(`🔄 [AUTH] Retry attempt ${attempt} with token present`);
+        }
+      } else if (isAuthCheck) {
+        console.warn('⚠️ [AUTH] No token available for auth check');
+      }
 
-  // Add CSRF token for state-changing requests with guaranteed synchronization
-  const needsCsrf = !skipCsrf && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
-  if (needsCsrf) {
-    // ALWAYS ensure both token and cookie are synchronized
-    await ensureCsrfReady();
-    
-    const csrf = getCsrfToken();
-    if (!csrf) {
-      throw new ApiError('CSRF_NOT_READY', 'CSRF protection not ready', 403);
-    }
-    
-    requestHeaders['x-csrf-token'] = csrf;
-  }
+      // Add CSRF token for state-changing requests with guaranteed synchronization
+      const needsCsrf = !skipCsrf && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+      if (needsCsrf) {
+        // ALWAYS ensure both token and cookie are synchronized
+        await ensureCsrfReady();
+        
+        const csrf = getCsrfToken();
+        if (!csrf) {
+          throw new ApiError('CSRF_NOT_READY', 'CSRF protection not ready', 403);
+        }
+        
+        requestHeaders['x-csrf-token'] = csrf;
+      }
 
-  // Prepare fetch options
-  const fetchOptions: RequestInit = {
-    method,
-    headers: requestHeaders,
-    body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined)
-  };
+      // Prepare fetch options
+      const fetchOptions: RequestInit = {
+        method,
+        headers: requestHeaders,
+        body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined)
+      };
 
-  // Include credentials for CSRF-protected endpoints (they need CSRF cookies)
-  // or when explicitly requested
-  if (needsCsrf || includeCredentials) {
-    fetchOptions.credentials = "include";
-  }
+      // Include credentials for CSRF-protected endpoints (they need CSRF cookies)
+      // or when explicitly requested
+      if (needsCsrf || includeCredentials) {
+        fetchOptions.credentials = "include";
+      }
 
-  try {
-    // Support both relative URLs (monolithic) and absolute URLs (split deployment)
-    const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-    const response = await fetch(fullUrl, fetchOptions);
-
-    // Handle response
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorData;
-      
       try {
-        errorData = JSON.parse(errorText);
-      } catch {
-        errorData = { message: errorText || response.statusText };
+        // Support both relative URLs (monolithic) and absolute URLs (split deployment)
+        const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+        const response = await fetch(fullUrl, fetchOptions);
+
+        // Handle response
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorData;
+          
+          try {
+            errorData = JSON.parse(errorText);
+          } catch {
+            errorData = { message: errorText || response.statusText };
+          }
+          
+          const apiError = new ApiError(
+            errorData.code || 'REQUEST_FAILED',
+            errorData.message || response.statusText,
+            response.status,
+            errorData.details,
+            errorData.field,
+            errorData.hint
+          );
+          
+          // Retry logic for auth checks on 401
+          if (isAuthCheck && response.status === 401 && attempt < maxRetries) {
+            const backoffDelay = 300; // 300ms delay before retry
+            console.log(`⏳ [AUTH] 401 received, retrying after ${backoffDelay}ms...`);
+            await sleep(backoffDelay);
+            continue; // Retry
+          }
+          
+          throw apiError;
+        }
+
+        // Parse response
+        const responseText = await response.text();
+        const contentType = response.headers.get('content-type') || '';
+        
+        // Handle non-JSON responses based on Content-Type
+        if (contentType.includes('text/csv') || 
+            contentType.includes('application/octet-stream') ||
+            contentType.startsWith('image/')) {
+          return responseText as T; // Return raw text for file downloads
+        }
+        
+        let data;
+        try {
+          data = responseText ? JSON.parse(responseText) : null;
+        } catch {
+          throw new ApiError(
+            'INVALID_RESPONSE',
+            'Invalid JSON response from server',
+            response.status
+          );
+        }
+
+        // Auto-unwrap ApiResponse envelope: { success: true, data: {...} } -> {...}
+        // This ensures frontend always receives clean data without the wrapper
+        const unwrappedData = data?.success === true ? data.data : data;
+
+        // Enforce response validation - throw on validation failure (no silent failures)
+        if (responseSchema) {
+          try {
+            const validated = responseSchema.parse(unwrappedData);
+            return validated;
+          } catch (error) {
+            // Log detailed validation error for debugging
+            console.error('Response validation failed:', {
+              url,
+              error,
+              receivedData: unwrappedData
+            });
+            
+            // Throw validation error instead of returning invalid data
+            throw new ApiError(
+              'RESPONSE_VALIDATION_ERROR',
+              'API response does not match expected schema',
+              200, // Response was successful but data format is wrong
+              error instanceof Error ? error.message : 'Unknown validation error'
+            );
+          }
+        }
+
+        return unwrappedData;
+        
+      } catch (error) {
+        lastError = error;
+        if (attempt >= maxRetries) {
+          throw error;
+        }
+        // Continue to next retry attempt
       }
       
-      throw new ApiError(
-        errorData.code || 'REQUEST_FAILED',
-        errorData.message || response.statusText,
-        response.status,
-        errorData.details,
-        errorData.field,
-        errorData.hint
-      );
-    }
-
-    // Parse response
-    const responseText = await response.text();
-    const contentType = response.headers.get('content-type') || '';
-    
-    // Handle non-JSON responses based on Content-Type
-    if (contentType.includes('text/csv') || 
-        contentType.includes('application/octet-stream') ||
-        contentType.startsWith('image/')) {
-      return responseText as T; // Return raw text for file downloads
-    }
-    
-    let data;
-    try {
-      data = responseText ? JSON.parse(responseText) : null;
-    } catch {
-      throw new ApiError(
-        'INVALID_RESPONSE',
-        'Invalid JSON response from server',
-        response.status
-      );
-    }
-
-    // Auto-unwrap ApiResponse envelope: { success: true, data: {...} } -> {...}
-    // This ensures frontend always receives clean data without the wrapper
-    const unwrappedData = data?.success === true ? data.data : data;
-
-    // Enforce response validation - throw on validation failure (no silent failures)
-    if (responseSchema) {
-      try {
-        const validated = responseSchema.parse(unwrappedData);
-        return validated;
-      } catch (error) {
-        // Log detailed validation error for debugging
-        console.error('Response validation failed:', {
-          url,
-          error,
-          receivedData: unwrappedData
-        });
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxRetries) {
+        // Handle CSRF token errors with single retry (prevent infinite recursion)
+        if (error instanceof ApiError && 
+            (error.code.startsWith('CSRF_TOKEN_') || (error.status === 403 && error.message.toLowerCase().includes('csrf'))) &&
+            !options?.__csrfRetried) {
+          try {
+            // Single retry with fresh CSRF token and retry guard
+            await ensureCsrfReady();
+            return apiRequest(url, { ...(options || {}), __csrfRetried: true }, responseSchema);
+          } catch (retryError) {
+            // If retry fails, throw original error
+            throw error;
+          }
+        }
         
-        // Throw validation error instead of returning invalid data
+        // Re-throw ApiError instances
+        if (error instanceof ApiError) {
+          throw error;
+        }
+        
+        // Handle network errors
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          throw new ApiError(
+            'NETWORK_ERROR',
+            'Network request failed',
+            0
+          );
+        }
+        
+        // Handle other errors
         throw new ApiError(
-          'RESPONSE_VALIDATION_ERROR',
-          'API response does not match expected schema',
-          200, // Response was successful but data format is wrong
-          error instanceof Error ? error.message : 'Unknown validation error'
+          'UNKNOWN_ERROR',
+          error instanceof Error ? error.message : 'Unknown error occurred',
+          0
         );
       }
     }
-
-    return unwrappedData;
-  } catch (error) {
-    // Handle CSRF token errors with single retry (prevent infinite recursion)
-    if (error instanceof ApiError && 
-        (error.code.startsWith('CSRF_TOKEN_') || (error.status === 403 && error.message.toLowerCase().includes('csrf'))) &&
-        !options?.__csrfRetried) {
-      try {
-        // Single retry with fresh CSRF token and retry guard
-        await ensureCsrfReady();
-        return apiRequest(url, { ...(options || {}), __csrfRetried: true }, responseSchema);
-      } catch (retryError) {
-        // If retry fails, throw original error
-        throw error;
-      }
-    }
-    
-    // Re-throw ApiError instances
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    
-    // Handle network errors
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new ApiError(
-        'NETWORK_ERROR',
-        'Network request failed',
-        0
-      );
-    }
-    
-    // Handle other errors
-    throw new ApiError(
-      'UNKNOWN_ERROR',
-      error instanceof Error ? error.message : 'Unknown error occurred',
-      0
-    );
   }
+  
+  throw lastError;
 }
 
 /**
