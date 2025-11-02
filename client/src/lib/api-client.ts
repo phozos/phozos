@@ -324,14 +324,11 @@ export async function apiRequest<T>(
       const fetchOptions: RequestInit = {
         method,
         headers: requestHeaders,
-        body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined)
+        body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
+        // Phase 3: Always include credentials for HttpOnly refresh token cookies
+        // This ensures cookies are sent/received on all requests
+        credentials: 'include'
       };
-
-      // Include credentials for CSRF-protected endpoints (they need CSRF cookies)
-      // or when explicitly requested
-      if (needsCsrf || includeCredentials) {
-        fetchOptions.credentials = "include";
-      }
 
       try {
         // Support both relative URLs (monolithic) and absolute URLs (split deployment)

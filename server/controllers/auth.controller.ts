@@ -5,6 +5,8 @@ import { IAuthService } from '../services/domain/auth.service';
 import { IRegistrationService } from '../services/domain/registration.service';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
+import { cookiesConfig } from '../config/index';
+import { RefreshTokenService } from '../services/domain/refresh-token.service';
 
 // Validation schemas
 const registerSchema = z.object({
@@ -45,10 +47,30 @@ const registerStaffSchema = z.object({
  * - Service layer delegation for business logic
  * - Standardized error handling
  * 
+ * Phase 3: HttpOnly Cookies
+ * - Refresh tokens stored in HttpOnly cookies for XSS protection
+ * - Access tokens returned in response body (short-lived, stored in memory)
+ * - Cookie configuration centralized in config module
+ * 
  * @class AuthController
  * @extends {BaseController}
  */
 export class AuthController extends BaseController {
+  /**
+   * Get refresh token cookie options (Phase 3: HttpOnly Cookies)
+   * 
+   * @returns Cookie options object with security settings from config
+   */
+  private getRefreshTokenCookieOptions() {
+    return {
+      httpOnly: true,
+      secure: cookiesConfig.COOKIE_SECURE,
+      sameSite: cookiesConfig.COOKIE_SAMESITE as 'strict' | 'lax' | 'none',
+      maxAge: cookiesConfig.COOKIE_MAX_AGE * 1000, // Convert seconds to milliseconds
+      domain: cookiesConfig.COOKIE_DOMAIN,
+      path: '/'
+    };
+  }
   /**
    * Register a new student account
    * 
@@ -132,16 +154,10 @@ export class AuthController extends BaseController {
       const authService = getService<IAuthService>(TYPES.IAuthService);
       const result = await authService.loginStudentComplete(email, password, deviceInfo, ipAddress);
 
-      // Set refresh token in HttpOnly cookie (Phase 2: Token Refresh Pattern)
-      res.cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        path: '/'
-      });
+      // Set refresh token in HttpOnly cookie (Phase 3: HttpOnly Cookies)
+      res.cookie('refreshToken', result.refreshToken, this.getRefreshTokenCookieOptions());
 
-      // Return access token (don't include refresh token in response body)
+      // Return access token only (refresh token is in HttpOnly cookie)
       return this.sendSuccess(res, {
         user: result.user,
         token: result.token,
@@ -185,16 +201,10 @@ export class AuthController extends BaseController {
       const authService = getService<IAuthService>(TYPES.IAuthService);
       const result = await authService.loginTeamComplete(email, password, deviceInfo, ipAddress);
 
-      // Set refresh token in HttpOnly cookie (Phase 2: Token Refresh Pattern)
-      res.cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        path: '/'
-      });
+      // Set refresh token in HttpOnly cookie (Phase 3: HttpOnly Cookies)
+      res.cookie('refreshToken', result.refreshToken, this.getRefreshTokenCookieOptions());
 
-      // Return access token (don't include refresh token in response body)
+      // Return access token only (refresh token is in HttpOnly cookie)
       return this.sendSuccess(res, {
         user: result.user,
         token: result.token
@@ -217,17 +227,17 @@ export class AuthController extends BaseController {
    * @param {Response} res - Express response object
    * @returns {Promise<Response>} Returns new access token
    * 
-   * Phase 2: Implements token rotation for security
-   * - Reads refresh token from HttpOnly cookie
+   * Phase 3: HttpOnly Cookies with token rotation
+   * - Reads refresh token from HttpOnly cookie (not request body)
    * - Validates and rotates the token (old token revoked, new token issued)
-   * - Returns new access token
+   * - Returns new access token only
    * - Sets new refresh token in HttpOnly cookie
    * 
    * @throws {401} Unauthorized if refresh token is missing or invalid
    */
   async refreshToken(req: Request, res: Response) {
     try {
-      // Read refresh token from HttpOnly cookie
+      // Read refresh token from HttpOnly cookie (Phase 3: HttpOnly Cookies)
       const refreshToken = req.cookies?.refreshToken;
 
       if (!refreshToken) {
@@ -238,21 +248,15 @@ export class AuthController extends BaseController {
       const result = await authService.refreshAccessToken(refreshToken);
 
       if (!result) {
-        // Clear invalid refresh token cookie
-        res.clearCookie('refreshToken');
+        // Clear invalid refresh token cookie (use same options for proper clearing)
+        res.clearCookie('refreshToken', this.getRefreshTokenCookieOptions());
         return this.sendError(res, 401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
       }
 
-      // Set new refresh token in HttpOnly cookie
-      res.cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        path: '/'
-      });
+      // Set new refresh token in HttpOnly cookie (Phase 3: HttpOnly Cookies)
+      res.cookie('refreshToken', result.refreshToken, this.getRefreshTokenCookieOptions());
 
-      // Return new access token
+      // Return new access token only (refresh token is in HttpOnly cookie)
       return this.sendSuccess(res, {
         accessToken: result.accessToken
       });
@@ -282,7 +286,7 @@ export class AuthController extends BaseController {
   }
 
   /**
-   * Logout current user (client-side token removal for JWT)
+   * Logout current user (Phase 3: HttpOnly Cookies)
    * 
    * @route POST /api/auth/logout
    * @access Protected (requires authentication)
@@ -290,11 +294,27 @@ export class AuthController extends BaseController {
    * @param {Response} res - Express response object
    * @returns {Promise<Response>} Returns success message
    * 
-   * @note With JWT tokens, logout is handled client-side by removing the token
+   * Phase 3: Server-side logout with refresh token revocation
+   * - Reads refresh token from HttpOnly cookie
+   * - Revokes the refresh token in database
+   * - Clears the HttpOnly cookie
+   * - Client clears access token from memory
    */
   async logout(req: AuthenticatedRequest, res: Response) {
     try {
-      // With JWT tokens, logout is handled client-side by removing the token
+      // Read refresh token from HttpOnly cookie (Phase 3: HttpOnly Cookies)
+      const refreshToken = req.cookies?.refreshToken;
+
+      if (refreshToken) {
+        // Revoke the refresh token in the database
+        const refreshTokenService = new RefreshTokenService();
+        const tokenHash = refreshTokenService.hashToken(refreshToken);
+        await refreshTokenService.revokeToken(tokenHash);
+      }
+
+      // Clear the HttpOnly cookie (use same options for proper clearing)
+      res.clearCookie('refreshToken', this.getRefreshTokenCookieOptions());
+
       return this.sendSuccess(res, { message: 'Logged out successfully' });
     } catch (error) {
       return this.handleError(res, error, 'AuthController.logout');

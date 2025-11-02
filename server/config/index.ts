@@ -151,11 +151,13 @@ const corsConfigSchema = z.object({
 });
 
 /**
- * Cookie configuration schema
+ * Cookie configuration schema (Phase 3: HttpOnly Cookies)
  */
 const cookiesConfigSchema = z.object({
   COOKIE_SECURE: booleanSchema,
   COOKIE_SAMESITE: z.enum(['strict', 'lax', 'none']).default('lax'),
+  COOKIE_MAX_AGE: z.string().optional().transform((val) => parseInt(val || '604800', 10)), // Default 7 days in seconds
+  COOKIE_DOMAIN: z.string().optional(),
 });
 
 /**
@@ -250,6 +252,8 @@ function validateConfiguration() {
       cookies: {
         COOKIE_SECURE: process.env.COOKIE_SECURE,
         COOKIE_SAMESITE: process.env.COOKIE_SAMESITE,
+        COOKIE_MAX_AGE: process.env.COOKIE_MAX_AGE,
+        COOKIE_DOMAIN: process.env.COOKIE_DOMAIN,
       },
       build: {
         HMR_ENABLED: process.env.HMR_ENABLED,
