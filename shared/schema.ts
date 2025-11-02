@@ -55,6 +55,19 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Refresh tokens table for token rotation pattern
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: varchar("token_hash", { length: 255 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at"),
+  deviceInfo: varchar("device_info", { length: 500 }),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  isRevoked: boolean("is_revoked").default(false).notNull()
+});
+
 // Student profiles
 export const studentProfiles = pgTable("student_profiles", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -645,6 +658,8 @@ export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ i
 // Export types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type RefreshToken = typeof refreshTokens.$inferSelect;
+export type InsertRefreshToken = typeof refreshTokens.$inferInsert;
 export type StudentProfile = typeof studentProfiles.$inferSelect;
 export type InsertStudentProfile = z.infer<typeof insertStudentProfileSchema>;
 export type University = typeof universities.$inferSelect;

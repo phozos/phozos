@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { api, setAuthToken, clearAuthToken, getAuthToken, setCsrfToken } from '@/lib/api-client';
+import { stopTokenRefresh } from '@/lib/token-refresh';
 import type { User } from '../../../shared/types';
 
 /**
@@ -185,7 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Logout user
+   * Logout user (Phase 2: Token Refresh Pattern)
    */
   const logout = async () => {
     try {
@@ -193,6 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     }
+    
+    // Stop automatic token refresh (Phase 2)
+    stopTokenRefresh();
     
     clearAuthToken();
     setUser(null);

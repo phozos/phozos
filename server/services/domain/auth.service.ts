@@ -8,10 +8,12 @@ import { User } from '@shared/schema';
 import {
   AuthenticationError
 } from '../errors';
+import { refreshTokenService } from './refresh-token.service';
 
 export interface LoginStudentDTO {
   user: any;
   token: string;
+  refreshToken: string;
   coolingPeriod: boolean;
   coolingPeriodEnds: Date | null;
 }
@@ -19,6 +21,7 @@ export interface LoginStudentDTO {
 export interface LoginTeamDTO {
   user: any;
   token: string;
+  refreshToken: string;
 }
 
 export interface TeamLoginVisibilityDTO {
@@ -28,8 +31,9 @@ export interface TeamLoginVisibilityDTO {
 export interface IAuthService {
   login(email: string, password: string, userType?: string): Promise<{ user: User }>;
   loginWithType(email: string, password: string, allowedTypes: string[]): Promise<{ user: User }>;
-  loginStudentComplete(email: string, password: string): Promise<LoginStudentDTO>;
-  loginTeamComplete(email: string, password: string): Promise<LoginTeamDTO>;
+  loginStudentComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginStudentDTO>;
+  loginTeamComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginTeamDTO>;
+  refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null>;
   getTeamLoginVisibilityStatus(): Promise<TeamLoginVisibilityDTO>;
   validatePassword(userId: string, password: string): Promise<boolean>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -179,8 +183,9 @@ export class AuthService extends BaseService implements IAuthService {
   /**
    * Complete student login with JWT token and cooling period info
    * Handles all business logic including email normalization, authentication, token generation
+   * Phase 2: Generates short-lived access token (15 min) and long-lived refresh token (30 days)
    */
-  async loginStudentComplete(email: string, password: string): Promise<LoginStudentDTO> {
+  async loginStudentComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginStudentDTO> {
     try {
       const emailLower = email.toLowerCase();
       const result = await this.loginWithType(emailLower, password, ['customer', 'company_profile']);
@@ -189,19 +194,25 @@ export class AuthService extends BaseService implements IAuthService {
       const coolingPeriod = this.isInCoolingPeriod(user);
       const coolingPeriodEnds = this.getCoolingPeriodEnd(user);
 
-      const token = jwtService.sign(
+      // Generate short-lived access token (15 minutes)
+      const accessToken = jwtService.sign(
         { userId: user.id, userType: user.userType },
-        { expiresIn: '24h', subject: user.id }
+        { expiresIn: '15m', subject: user.id }
       );
+
+      // Generate long-lived refresh token (30 days)
+      const refreshToken = refreshTokenService.generateToken();
+      await refreshTokenService.createRefreshToken(user.id, refreshToken, deviceInfo, ipAddress);
 
       const sanitizedUser = this.sanitizeUser(user);
 
       return {
         user: {
           ...sanitizedUser,
-          token
+          token: accessToken
         },
-        token,
+        token: accessToken,
+        refreshToken,
         coolingPeriod,
         coolingPeriodEnds
       };
@@ -213,29 +224,73 @@ export class AuthService extends BaseService implements IAuthService {
   /**
    * Complete team login with JWT token
    * Handles all business logic including email normalization, authentication, token generation
+   * Phase 2: Generates short-lived access token (15 min) and long-lived refresh token (30 days)
    */
-  async loginTeamComplete(email: string, password: string): Promise<LoginTeamDTO> {
+  async loginTeamComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginTeamDTO> {
     try {
       const emailLower = email.toLowerCase();
       const result = await this.login(emailLower, password, 'team_member');
       const user = result.user;
 
-      const token = jwtService.sign(
+      // Generate short-lived access token (15 minutes)
+      const accessToken = jwtService.sign(
         { userId: user.id, userType: user.userType, teamRole: user.teamRole },
-        { expiresIn: '24h', subject: user.id }
+        { expiresIn: '15m', subject: user.id }
       );
+
+      // Generate long-lived refresh token (30 days)
+      const refreshToken = refreshTokenService.generateToken();
+      await refreshTokenService.createRefreshToken(user.id, refreshToken, deviceInfo, ipAddress);
 
       const sanitizedUser = this.sanitizeUser(user);
 
       return {
         user: {
           ...sanitizedUser,
-          token
+          token: accessToken
         },
-        token
+        token: accessToken,
+        refreshToken
       };
     } catch (error) {
       return this.handleError(error, 'AuthService.loginTeamComplete');
+    }
+  }
+
+  /**
+   * Refresh access token using refresh token rotation pattern
+   * Phase 2: Implements token rotation for security
+   * 
+   * @param refreshToken - The refresh token to validate and rotate
+   * @returns New access token and refresh token, or null if invalid
+   */
+  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {
+    try {
+      // Validate and rotate the refresh token
+      const result = await refreshTokenService.validateAndRotate(refreshToken);
+
+      if (!result) {
+        return null;
+      }
+
+      // Get user data and verify account is still active
+      const user = await this.userRepo.findById(result.userId);
+      if (!user || user.accountStatus !== 'active') {
+        return null;
+      }
+
+      // Generate new access token (15 minutes)
+      const accessToken = jwtService.sign(
+        { userId: user.id, userType: user.userType, teamRole: user.teamRole },
+        { expiresIn: '15m', subject: user.id }
+      );
+
+      return {
+        accessToken,
+        refreshToken: result.newToken
+      };
+    } catch (error) {
+      return this.handleError(error, 'AuthService.refreshAccessToken');
     }
   }
 

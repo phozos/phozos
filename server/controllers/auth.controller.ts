@@ -126,11 +126,28 @@ export class AuthController extends BaseController {
   async loginStudent(req: Request, res: Response) {
     try {
       const { email, password } = loginSchema.parse(req.body);
+      const deviceInfo = req.get('User-Agent');
+      const ipAddress = req.ip;
 
       const authService = getService<IAuthService>(TYPES.IAuthService);
-      const result = await authService.loginStudentComplete(email, password);
+      const result = await authService.loginStudentComplete(email, password, deviceInfo, ipAddress);
 
-      return this.sendSuccess(res, result);
+      // Set refresh token in HttpOnly cookie (Phase 2: Token Refresh Pattern)
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        path: '/'
+      });
+
+      // Return access token (don't include refresh token in response body)
+      return this.sendSuccess(res, {
+        user: result.user,
+        token: result.token,
+        coolingPeriod: result.coolingPeriod,
+        coolingPeriodEnds: result.coolingPeriodEnds
+      });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
@@ -162,17 +179,85 @@ export class AuthController extends BaseController {
   async loginTeam(req: Request, res: Response) {
     try {
       const { email, password } = teamLoginSchema.parse(req.body);
+      const deviceInfo = req.get('User-Agent');
+      const ipAddress = req.ip;
 
       const authService = getService<IAuthService>(TYPES.IAuthService);
-      const result = await authService.loginTeamComplete(email, password);
+      const result = await authService.loginTeamComplete(email, password, deviceInfo, ipAddress);
 
-      return this.sendSuccess(res, result);
+      // Set refresh token in HttpOnly cookie (Phase 2: Token Refresh Pattern)
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        path: '/'
+      });
+
+      // Return access token (don't include refresh token in response body)
+      return this.sendSuccess(res, {
+        user: result.user,
+        token: result.token
+      });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
       }
       
       return this.handleError(res, error, 'AuthController.loginTeam');
+    }
+  }
+
+  /**
+   * Refresh access token using refresh token rotation
+   * 
+   * @route POST /api/auth/refresh
+   * @access Public (requires valid refresh token cookie)
+   * @param {Request} req - Express request object with refresh token cookie
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns new access token
+   * 
+   * Phase 2: Implements token rotation for security
+   * - Reads refresh token from HttpOnly cookie
+   * - Validates and rotates the token (old token revoked, new token issued)
+   * - Returns new access token
+   * - Sets new refresh token in HttpOnly cookie
+   * 
+   * @throws {401} Unauthorized if refresh token is missing or invalid
+   */
+  async refreshToken(req: Request, res: Response) {
+    try {
+      // Read refresh token from HttpOnly cookie
+      const refreshToken = req.cookies?.refreshToken;
+
+      if (!refreshToken) {
+        return this.sendError(res, 401, 'NO_REFRESH_TOKEN', 'No refresh token provided');
+      }
+
+      const authService = getService<IAuthService>(TYPES.IAuthService);
+      const result = await authService.refreshAccessToken(refreshToken);
+
+      if (!result) {
+        // Clear invalid refresh token cookie
+        res.clearCookie('refreshToken');
+        return this.sendError(res, 401, 'INVALID_REFRESH_TOKEN', 'Invalid or expired refresh token');
+      }
+
+      // Set new refresh token in HttpOnly cookie
+      res.cookie('refreshToken', result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        path: '/'
+      });
+
+      // Return new access token
+      return this.sendSuccess(res, {
+        accessToken: result.accessToken
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AuthController.refreshToken');
     }
   }
 

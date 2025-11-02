@@ -13,6 +13,12 @@
  */
 
 import { z } from "zod";
+import { 
+  isTokenExpiringSoon, 
+  refreshAccessToken as refreshToken, 
+  scheduleTokenRefresh, 
+  stopTokenRefresh 
+} from "./token-refresh";
 
 // API Base URL configuration for split frontend/backend deployments
 // Uses VITE_API_URL environment variable if set, otherwise defaults to relative URLs (monolithic deployment)
@@ -85,7 +91,8 @@ try {
 }
 
 /**
- * Set JWT token for Authorization headers
+ * Set JWT token for Authorization headers (Phase 2: Token Refresh Pattern)
+ * Now includes automatic token refresh scheduling
  */
 export function setAuthToken(token: string | null) {
   authToken = token;
@@ -95,6 +102,10 @@ export function setAuthToken(token: string | null) {
       console.log('🔐 [AUTH] Storing token in localStorage');
       localStorage.setItem(TOKEN_STORAGE_KEY, token);
       console.log('✅ [AUTH] Token stored successfully');
+      
+      // Schedule automatic token refresh (Phase 2)
+      scheduleTokenRefresh(token);
+      console.log('⏰ [AUTH] Token refresh scheduled');
     } catch (error) {
       console.error('❌ [AUTH] Failed to store token:', error);
       throw error; // Re-throw to handle in calling code
@@ -103,6 +114,10 @@ export function setAuthToken(token: string | null) {
     try {
       console.log('🗑️ [AUTH] Clearing token from localStorage');
       localStorage.removeItem(TOKEN_STORAGE_KEY);
+      
+      // Stop automatic token refresh (Phase 2)
+      stopTokenRefresh();
+      console.log('⏹️ [AUTH] Token refresh stopped');
     } catch (error) {
       console.warn('⚠️ [AUTH] Failed to clear token:', error);
     }
@@ -258,6 +273,22 @@ export async function apiRequest<T>(
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // Phase 2: Check if token is expiring soon and auto-refresh
+      // Skip for /api/auth/refresh endpoint to prevent infinite loops
+      if (!url.includes('/api/auth/refresh')) {
+        const token = getAuthToken();
+        if (token && isTokenExpiringSoon(token)) {
+          console.log('⏰ [AUTH] Token expiring soon, refreshing...');
+          const newToken = await refreshToken();
+          if (newToken) {
+            setAuthToken(newToken);
+            console.log('✅ [AUTH] Token refreshed successfully');
+          } else {
+            console.warn('⚠️ [AUTH] Token refresh failed');
+          }
+        }
+      }
+      
       // Prepare request headers
       const requestHeaders: Record<string, string> = {
         ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
