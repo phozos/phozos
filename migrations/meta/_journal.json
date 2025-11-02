@@ -8,20 +8,6 @@
       "when": 1761125941928,
       "tag": "0000_baseline_schema",
       "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1762100895792,
-      "tag": "0001_late_sugar_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1762100932403,
-      "tag": "0002_whole_dakota_north",
-      "breakpoints": true
     }
   ]
 }
