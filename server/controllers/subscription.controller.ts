@@ -155,6 +155,48 @@ export class SubscriptionController extends BaseController {
       return this.handleError(res, error, 'SubscriptionController.createSubscription');
     }
   }
+
+  /**
+   * Subscribe user to a subscription plan
+   * 
+   * @route POST /api/subscription/user/subscribe
+   * @access Private (requires authentication)
+   * @param {AuthenticatedRequest} req - Request with authenticated user and plan ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns created subscription
+   * 
+   * @example
+   * // Request body:
+   * {
+   *   "planId": "plan-premium-001"
+   * }
+   * 
+   * @throws {422} Validation error if plan ID is invalid
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {500} Internal server error
+   */
+  async subscribe(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return this.sendError(res, 401, 'UNAUTHORIZED', 'User not authenticated');
+      }
+
+      const { planId } = subscribeSchema.parse(req.body);
+      
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const subscription = await userSubscriptionService.subscribeUserToPlan(userId, planId);
+      
+      res.status(201);
+      return this.sendSuccess(res, subscription);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'SubscriptionController.subscribe');
+    }
+  }
 }
 
 export const subscriptionController = new SubscriptionController();

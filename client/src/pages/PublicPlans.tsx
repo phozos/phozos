@@ -31,8 +31,8 @@ interface SubscriptionPlan {
 export default function PublicPlans() {
   // Fetch active subscription plans for public display
   const { data: plans = [], isLoading } = useApiQuery<SubscriptionPlan[]>(
-    ["/api/subscription-plans"],
-    '/api/subscription-plans'
+    ["/api/subscription/plans"],
+    '/api/subscription/plans'
   );
 
   const faqItems = [
