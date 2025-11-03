@@ -1,9 +1,10 @@
 import { BaseService } from '../base.service';
-import { IUserSubscriptionRepository } from '../../repositories';
+import { IUserSubscriptionRepository, ISubscriptionPlanRepository } from '../../repositories';
 import { container, TYPES } from '../container';
 import { UserSubscription, InsertUserSubscription } from '@shared/schema';
-import { ValidationServiceError } from '../errors';
+import { ValidationServiceError, InvalidOperationError } from '../errors';
 import { CommonValidators } from '../validation';
+import { NotFoundError } from '../../repositories/errors';
 
 export interface IUserSubscriptionService {
   getCurrentSubscription(userId: string): Promise<UserSubscription | undefined>;
@@ -12,13 +13,15 @@ export interface IUserSubscriptionService {
   createSubscription(subscription: InsertUserSubscription): Promise<UserSubscription>;
   updateSubscription(id: string, updates: Partial<UserSubscription>): Promise<UserSubscription | undefined>;
   cancelSubscription(subscriptionId: string): Promise<boolean>;
+  validateUpgrade(currentSubscription: UserSubscription, targetPlanId: string): Promise<{ allowed: boolean; reason?: string }>;
   upgradeSubscription(userId: string, newPlanId: string): Promise<UserSubscription>;
   subscribeUserToPlan(userId: string, planId: string): Promise<UserSubscription>;
 }
 
 export class UserSubscriptionService extends BaseService implements IUserSubscriptionService {
   constructor(
-    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository)
+    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository),
+    private subscriptionPlanRepo: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository)
   ) {
     super();
   }
@@ -139,6 +142,34 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
     }
   }
 
+  async validateUpgrade(
+    currentSubscription: UserSubscription,
+    targetPlanId: string
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    try {
+      const targetPlan = await this.subscriptionPlanRepo.findById(targetPlanId);
+      if (!targetPlan) {
+        throw new NotFoundError('Subscription Plan', targetPlanId);
+      }
+
+      const currentPlan = await this.subscriptionPlanRepo.findById(currentSubscription.planId);
+      if (!currentPlan) {
+        throw new NotFoundError('Subscription Plan', currentSubscription.planId);
+      }
+
+      if (targetPlan.tierLevel <= currentPlan.tierLevel) {
+        return {
+          allowed: false,
+          reason: `Cannot ${targetPlan.tierLevel < currentPlan.tierLevel ? 'downgrade' : 'switch to same tier'}. Only upgrades to higher tiers are allowed.`
+        };
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      return this.handleError(error, 'UserSubscriptionService.validateUpgrade');
+    }
+  }
+
   async upgradeSubscription(userId: string, newPlanId: string): Promise<UserSubscription> {
     try {
       const errors: Record<string, string> = {};
@@ -160,19 +191,31 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
       const currentSubscription = await this.userSubscriptionRepo.findByUser(userId);
       
       if (currentSubscription) {
+        // Validate upgrade
+        const validation = await this.validateUpgrade(currentSubscription, newPlanId);
+        if (!validation.allowed) {
+          throw new InvalidOperationError('upgrade subscription', validation.reason || 'Upgrade not allowed');
+        }
+
+        // Fetch new plan to get tierLevel
+        const newPlan = await this.subscriptionPlanRepo.findById(newPlanId);
+        if (!newPlan) {
+          throw new NotFoundError('Subscription Plan', newPlanId);
+        }
+
         const updated = await this.userSubscriptionRepo.update(currentSubscription.id, {
           planId: newPlanId,
           status: 'active',
-          startedAt: new Date()
+          isLifetime: true,
+          tierLevel: newPlan.tierLevel,
+          highestTierReached: newPlan.tierLevel,
+          expiresAt: null,
+          autoRenew: null,
+          lifetimeActivatedAt: currentSubscription.lifetimeActivatedAt || new Date()
         });
         return updated!;
       } else {
-        return await this.createSubscription({
-          userId,
-          planId: newPlanId,
-          status: 'active',
-          startedAt: new Date()
-        });
+        return await this.subscribeUserToPlan(userId, newPlanId);
       }
     } catch (error) {
       return this.handleError(error, 'UserSubscriptionService.upgradeSubscription');
@@ -197,15 +240,25 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
         throw new ValidationServiceError('Subscription', errors);
       }
 
+      // Fetch the plan to get tierLevel
+      const plan = await this.subscriptionPlanRepo.findById(planId);
+      if (!plan) {
+        throw new NotFoundError('Subscription Plan', planId);
+      }
+
       const startDate = new Date();
-      const expiresDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
       return await this.createSubscription({
         userId,
         planId,
         status: 'active',
         startedAt: startDate,
-        expiresAt: expiresDate
+        isLifetime: true,
+        tierLevel: plan.tierLevel,
+        lifetimeActivatedAt: new Date(),
+        highestTierReached: plan.tierLevel,
+        expiresAt: null,
+        autoRenew: null
       });
     } catch (error) {
       return this.handleError(error, 'UserSubscriptionService.subscribeUserToPlan');

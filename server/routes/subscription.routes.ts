@@ -16,5 +16,6 @@ router.get('/status/:studentId', asyncHandler((req: Request, res: Response) => s
 router.use(requireAuth);
 router.get('/user/subscription', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserSubscription(req, res)));
 router.post('/user/subscribe', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.subscribe(req, res)));
+router.post('/upgrade', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.upgradeSubscription(req, res)));
 
 export default router;

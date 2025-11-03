@@ -26,6 +26,8 @@ interface SubscriptionPlan {
   supportType: string;
   isActive: boolean;
   displayOrder: number;
+  tierLevel?: number;
+  isLifetime?: boolean;
 }
 
 export default function PublicPlans() {
@@ -38,27 +40,27 @@ export default function PublicPlans() {
   const faqItems = [
     {
       question: "Can I change my plan anytime?",
-      answer: "Absolutely! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate any differences."
+      answer: "You can upgrade to a higher plan at any time! All our plans are lifetime access - once purchased, you have permanent access to all features. Note: Downgrades are not available to protect the value of your investment."
     },
     {
-      question: "Is there a free trial?",
-      answer: "Our Explorer plan includes free features to get you started. Experience our platform before committing to premium features."
+      question: "Are these really lifetime plans?",
+      answer: "Yes! Unlike monthly subscriptions, you pay once and get lifetime access. Your plan never expires, and you'll continue to receive updates and support. You can upgrade to unlock more universities and premium features whenever you want."
     },
     {
       question: "What payment methods do you accept?",
-      answer: "We accept all major credit cards, PayPal, and bank transfers for annual plans. All payments are secured and encrypted."
+      answer: "We accept all major payment methods through Razorpay - credit cards, debit cards, UPI, net banking, and digital wallets. All payments are secured with industry-standard encryption."
     },
     {
       question: "Do you offer student discounts?",
-      answer: "Yes! We offer 20% student discounts on all plans. Simply contact our support team with your valid student ID to get started."
+      answer: "Yes! We offer special pricing for students. Contact our support team with your valid student ID to learn about current promotions and discounts."
     },
     {
-      question: "What if I need to cancel?",
-      answer: "You can cancel anytime with no hidden fees. We offer a 30-day money-back guarantee if you're not completely satisfied."
+      question: "What if I'm not satisfied?",
+      answer: "We offer a 30-day money-back guarantee. If you're not completely satisfied with your purchase, contact us within 30 days for a full refund - no questions asked."
     },
     {
-      question: "How does the university matching work?",
-      answer: "Our AI analyzes your profile, grades, preferences, and goals to recommend the best-fit universities with high acceptance probability."
+      question: "How does upgrading work?",
+      answer: "Upgrading is instant! When you upgrade to a higher tier, you'll immediately gain access to additional universities, countries, and premium features. The price difference is calculated, and your lifetime access continues uninterrupted."
     }
   ];
 
@@ -235,6 +237,13 @@ export default function PublicPlans() {
                           Most Popular
                         </Badge>
                       </div>
+                    )}
+                    
+                    {/* Lifetime Access Badge */}
+                    {plan.isLifetime && (
+                      <Badge className="absolute top-4 right-4 bg-green-600 text-white px-3 py-1">
+                        Lifetime Access
+                      </Badge>
                     )}
                     
                     <CardHeader className="text-center pb-6 relative z-10">

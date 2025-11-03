@@ -197,6 +197,47 @@ export class SubscriptionController extends BaseController {
       return this.handleError(res, error, 'SubscriptionController.subscribe');
     }
   }
+
+  /**
+   * Upgrade user subscription to a higher tier plan
+   * 
+   * @route POST /api/subscription/upgrade
+   * @access Private (requires authentication)
+   * @param {AuthenticatedRequest} req - Request with authenticated user and plan ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns upgraded subscription
+   * 
+   * @example
+   * // Request body:
+   * {
+   *   "planId": "plan-premium-001"
+   * }
+   * 
+   * @throws {400} Missing plan ID
+   * @throws {403} Upgrade not allowed (downgrade or same tier)
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {500} Internal server error
+   */
+  async upgradeSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { planId } = req.body;
+
+      if (!planId) {
+        return this.sendError(res, 400, 'MISSING_PLAN_ID', 'Plan ID is required');
+      }
+
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const subscription = await userSubscriptionService.upgradeSubscription(userId, planId);
+      
+      return this.sendSuccess(res, subscription);
+    } catch (error: any) {
+      if (error.name === 'InvalidOperationError') {
+        return this.sendError(res, 403, 'UPGRADE_NOT_ALLOWED', error.message);
+      }
+      return this.handleError(res, error, 'SubscriptionController.upgradeSubscription');
+    }
+  }
 }
 
 export const subscriptionController = new SubscriptionController();
