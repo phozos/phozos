@@ -5,6 +5,7 @@ import { razorpayService } from '../services/integration/razorpay.service';
 import { userSubscriptionService } from '../services/domain/user-subscription.service';
 import { subscriptionPlanRepository } from '../repositories/subscription.repository';
 import config from '../config';
+import crypto from 'crypto';
 
 export class PaymentController extends BaseController {
   /**
@@ -37,11 +38,20 @@ export class PaymentController extends BaseController {
       // Convert price to paise (Razorpay uses smallest currency unit)
       const amountInPaise = Math.round(parseFloat(plan.price) * 100);
 
+      // Generate unique receipt ID (max 40 chars for Razorpay)
+      // Format: timestamp_hash (e.g., 1730668192000_a1b2c3d4e5f6g7h8i9)
+      const receiptHash = crypto
+        .createHash('md5')
+        .update(`${userId}_${planId}`)
+        .digest('hex')
+        .substring(0, 18);
+      const receiptId = `${Date.now()}_${receiptHash}`;
+
       // Create Razorpay order
       const order = await razorpayService.createOrder({
         amount: amountInPaise,
         currency: plan.currency || 'INR',
-        receipt: `receipt_${userId}_${planId}_${Date.now()}`,
+        receipt: receiptId,
         notes: {
           userId,
           planId,
