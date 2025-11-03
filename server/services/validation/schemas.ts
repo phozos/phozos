@@ -81,7 +81,8 @@ export const subscriptionPlanSchema = z.object({
   features: z.array(z.string()),
   maxUniversities: z.number().int().positive('Max universities must be positive').optional(),
   maxCountries: z.number().int().positive('Max countries must be positive').optional(),
-  turnaroundDays: z.number().int().positive('Turnaround days must be positive')
+  turnaroundDays: z.number().int().positive('Turnaround days must be positive'),
+  tierLevel: z.number().int().positive('Tier level must be positive')
 });
 
 export const userSubscriptionSchema = z.object({

@@ -41,6 +41,7 @@ interface SubscriptionPlan {
   includeNetworkingEvents: boolean;
   includeFlightAccommodation: boolean;
   isBusinessFocused: boolean;
+  tierLevel: number;
   displayOrder: number;
   isActive: boolean;
   createdAt: string;
@@ -175,6 +176,7 @@ export default function SubscriptionPlans() {
       includeNetworkingEvents: formData.get("includeNetworkingEvents") === "on",
       includeFlightAccommodation: formData.get("includeFlightAccommodation") === "on",
       isBusinessFocused: formData.get("isBusinessFocused") === "on",
+      tierLevel: parseInt(formData.get("tierLevel") as string),
       displayOrder: parseInt(formData.get("displayOrder") as string) || 0,
       isActive: formData.get("isActive") === "on",
     };
@@ -205,6 +207,7 @@ export default function SubscriptionPlans() {
       includeNetworkingEvents: formData.get("includeNetworkingEvents") === "on",
       includeFlightAccommodation: formData.get("includeFlightAccommodation") === "on",
       isBusinessFocused: formData.get("isBusinessFocused") === "on",
+      tierLevel: parseInt(formData.get("tierLevel") as string),
       displayOrder: parseInt(formData.get("displayOrder") as string) || 0,
       isActive: formData.get("isActive") === "on",
     };
@@ -234,6 +237,13 @@ export default function SubscriptionPlans() {
       case "whatsapp": return "bg-green-100 text-green-800";
       default: return "bg-blue-100 text-blue-800";
     }
+  };
+
+  // Calculate next available tier level
+  const getNextTierLevel = () => {
+    if (plans.length === 0) return 1;
+    const maxTierLevel = Math.max(...plans.map(plan => plan.tierLevel || 0));
+    return maxTierLevel + 1;
   };
 
   if (plansLoading || subscriptionsLoading) {
@@ -283,6 +293,21 @@ export default function SubscriptionPlans() {
                       <SelectItem value="INR">INR</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label htmlFor="tierLevel">Tier Level</Label>
+                  <Input 
+                    id="tierLevel" 
+                    name="tierLevel" 
+                    type="number" 
+                    min="1"
+                    step="1"
+                    defaultValue={getNextTierLevel()} 
+                    required 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Unique hierarchical level for this plan (e.g., 1 for basic, 2 for standard, 3 for premium)
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="displayOrder">Display Order</Label>
@@ -582,6 +607,21 @@ export default function SubscriptionPlans() {
                       <SelectItem value="INR">INR</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div>
+                  <Label htmlFor="edit-tierLevel">Tier Level</Label>
+                  <Input 
+                    id="edit-tierLevel" 
+                    name="tierLevel" 
+                    type="number" 
+                    min="1"
+                    step="1"
+                    defaultValue={editingPlan.tierLevel} 
+                    required 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Unique hierarchical level for this plan (e.g., 1 for basic, 2 for standard, 3 for premium)
+                  </p>
                 </div>
                 <div>
                   <Label htmlFor="edit-displayOrder">Display Order</Label>
