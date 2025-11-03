@@ -44,7 +44,7 @@ export class RazorpayService {
 
       return order as RazorpayOrder;
     } catch (error: any) {
-      throw new Error(`Razorpay order creation failed: ${error.message}`);
+      throw new Error(`Razorpay order creation failed: ${error.error?.description || error.statusCode || 'Unknown error'}`);
     }
   }
 
@@ -56,7 +56,7 @@ export class RazorpayService {
       const order = await this.razorpay.orders.fetch(orderId);
       return order as RazorpayOrder;
     } catch (error: any) {
-      throw new Error(`Failed to fetch order: ${error.message}`);
+      throw new Error(`Failed to fetch order: ${error.error?.description || error.statusCode || 'Unknown error'}`);
     }
   }
 
@@ -104,7 +104,7 @@ export class RazorpayService {
     try {
       return await this.razorpay.payments.fetch(paymentId);
     } catch (error: any) {
-      throw new Error(`Failed to fetch payment: ${error.message}`);
+      throw new Error(`Failed to fetch payment: ${error.error?.description || error.statusCode || 'Unknown error'}`);
     }
   }
 }
