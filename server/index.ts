@@ -100,6 +100,10 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
+// CRITICAL: Webhook endpoint must receive raw body for signature verification
+// This MUST come before express.json() middleware
+app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());

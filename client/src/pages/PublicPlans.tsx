@@ -51,9 +51,9 @@ export default function PublicPlans() {
 
     try {
       await initiatePayment(plan.id, plan.name, {
-        name: user.fullName,
+        name: `${user.firstName} ${user.lastName}`,
         email: user.email,
-        contact: user.phone,
+        contact: undefined, // Phone not available on base User type
       });
     } catch (error) {
       console.error('Purchase failed:', error);

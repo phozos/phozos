@@ -163,7 +163,7 @@ export const notificationSchema = z.object({
 });
 
 // Payment-related schemas
-export const paymentGatewaySchema = z.enum(['stripe', 'paypal', 'flutterwave', 'paystack']);
+export const paymentGatewaySchema = z.enum(['razorpay', 'paypal', 'flutterwave', 'paystack']);
 
 export const paymentSchema = z.object({
   amount: z.number().positive('Payment amount must be positive'),

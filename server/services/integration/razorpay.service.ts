@@ -17,6 +17,7 @@ export interface RazorpayOrder {
   receipt: string;
   status: string;
   created_at: number;
+  notes?: Record<string, any>;
 }
 
 export class RazorpayService {
@@ -48,15 +49,32 @@ export class RazorpayService {
   }
 
   /**
+   * Fetch order details from Razorpay
+   */
+  async fetchOrder(orderId: string): Promise<RazorpayOrder> {
+    try {
+      const order = await this.razorpay.orders.fetch(orderId);
+      return order as RazorpayOrder;
+    } catch (error: any) {
+      throw new Error(`Failed to fetch order: ${error.message}`);
+    }
+  }
+
+  /**
    * Verify webhook signature for security
+   * Accepts Buffer (raw body) or string
    */
   verifyWebhookSignature(
-    webhookBody: string,
+    webhookBody: Buffer | string,
     signature: string
   ): boolean {
+    const bodyString = Buffer.isBuffer(webhookBody) 
+      ? webhookBody.toString('utf8') 
+      : webhookBody;
+    
     const expectedSignature = crypto
       .createHmac('sha256', config.razorpay.webhookSecret)
-      .update(webhookBody)
+      .update(bodyString)
       .digest('hex');
 
     return expectedSignature === signature;

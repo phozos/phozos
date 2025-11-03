@@ -40,7 +40,7 @@ export default function ConversionTest() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Test Component */}
           <div className="space-y-6">
-            <SubscriptionConversionTest currentUserId={user?.id} />
+            <SubscriptionConversionTest />
           </div>
 
           {/* Information Panel */}
@@ -136,7 +136,7 @@ export default function ConversionTest() {
                       POST /api/webhooks/subscription
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      For third-party payment processors (Stripe, PayPal, etc.)
+                      For third-party payment processors (Razorpay, PayPal, etc.)
                     </p>
                   </div>
                 </div>

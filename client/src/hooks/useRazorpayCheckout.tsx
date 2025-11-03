@@ -26,18 +26,38 @@ interface RazorpayOptions {
   };
 }
 
+interface CreateOrderResponse {
+  success: boolean;
+  data: {
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+  };
+}
+
+interface VerifyPaymentResponse {
+  success: boolean;
+  data: {
+    subscription: any;
+    paymentId: string;
+  };
+}
+
 export function useRazorpayCheckout() {
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const createOrderMutation = useApiMutation(
+  const createOrderMutation = useApiMutation<CreateOrderResponse, { planId: string }>(
     async (data: { planId: string }) => {
-      return await api.post('/api/payment/create-order', data);
+      const response = await api.post('/api/payment/create-order', data);
+      return response as CreateOrderResponse;
     }
   );
   
-  const verifyPaymentMutation = useApiMutation(
+  const verifyPaymentMutation = useApiMutation<VerifyPaymentResponse, { orderId: string; paymentId: string; signature: string; planId: string }>(
     async (data: { orderId: string; paymentId: string; signature: string; planId: string }) => {
-      return await api.post('/api/payment/verify', data);
+      const response = await api.post('/api/payment/verify', data);
+      return response as VerifyPaymentResponse;
     }
   );
 

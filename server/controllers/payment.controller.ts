@@ -4,6 +4,7 @@ import { AuthenticatedRequest } from '../types/auth';
 import { razorpayService } from '../services/integration/razorpay.service';
 import { userSubscriptionService } from '../services/domain/user-subscription.service';
 import { subscriptionPlanRepository } from '../repositories/subscription.repository';
+import config from '../config';
 
 export class PaymentController extends BaseController {
   /**
@@ -18,13 +19,19 @@ export class PaymentController extends BaseController {
       const userId = req.user?.id;
 
       if (!userId) {
-        return this.sendErrorResponse(res, 'User not authenticated', 401);
+        return res.status(401).json({
+          success: false,
+          message: 'User not authenticated'
+        });
       }
 
       // Fetch plan details
       const plan = await subscriptionPlanRepository.findById(planId);
       if (!plan) {
-        return this.sendErrorResponse(res, 'Plan not found', 404);
+        return res.status(404).json({
+          success: false,
+          message: 'Plan not found'
+        });
       }
 
       // Convert price to paise (Razorpay uses smallest currency unit)
@@ -43,12 +50,15 @@ export class PaymentController extends BaseController {
         },
       });
 
-      return this.sendSuccessResponse(res, {
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        keyId: process.env.RAZORPAY_KEY_ID, // Send to frontend for checkout
-      }, 'Order created successfully');
+      return res.status(200).json({
+        success: true,
+        data: {
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          keyId: config.razorpay.keyId,
+        }
+      });
     } catch (error) {
       return this.handleError(res, error, 'PaymentController.createOrder');
     }
@@ -56,6 +66,12 @@ export class PaymentController extends BaseController {
 
   /**
    * Verify payment and activate subscription
+   * 
+   * SECURITY: This method validates payment integrity by:
+   * 1. Verifying Razorpay signature
+   * 2. Fetching order from Razorpay to get original planId
+   * 3. Validating planId matches order metadata (prevents plan switching fraud)
+   * 4. Validating payment amount matches plan price
    * 
    * @route POST /api/payment/verify
    * @access Private
@@ -66,10 +82,13 @@ export class PaymentController extends BaseController {
       const userId = req.user?.id;
 
       if (!userId) {
-        return this.sendErrorResponse(res, 'User not authenticated', 401);
+        return res.status(401).json({
+          success: false,
+          message: 'User not authenticated'
+        });
       }
 
-      // Verify signature
+      // Step 1: Verify payment signature
       const isValid = razorpayService.verifyPaymentSignature(
         orderId,
         paymentId,
@@ -77,34 +96,80 @@ export class PaymentController extends BaseController {
       );
 
       if (!isValid) {
-        return this.sendErrorResponse(res, 'Invalid payment signature', 400);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid payment signature'
+        });
       }
 
-      // Fetch payment details from Razorpay
+      // Step 2: Fetch order details from Razorpay to get original metadata
+      const order = await razorpayService.fetchOrder(orderId);
+
+      // Step 3: Validate planId matches the order metadata (CRITICAL SECURITY CHECK)
+      if (!order.notes?.planId || order.notes.planId !== planId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Plan ID mismatch - payment verification failed'
+        });
+      }
+
+      // Step 4: Validate userId matches the order metadata
+      if (order.notes.userId !== userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID mismatch - payment verification failed'
+        });
+      }
+
+      // Step 5: Fetch plan details to validate amount
+      const plan = await subscriptionPlanRepository.findById(planId);
+      if (!plan) {
+        return res.status(404).json({
+          success: false,
+          message: 'Plan not found'
+        });
+      }
+
+      // Step 6: Validate payment amount matches plan price (CRITICAL SECURITY CHECK)
+      const expectedAmountInPaise = Math.round(parseFloat(plan.price) * 100);
+      if (order.amount !== expectedAmountInPaise) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment amount mismatch - verification failed'
+        });
+      }
+
+      // Step 7: Fetch payment details from Razorpay
       const paymentDetails = await razorpayService.getPaymentDetails(paymentId);
 
-      // Check if payment was successful
+      // Step 8: Check if payment was successful
       if (paymentDetails.status !== 'captured') {
-        return this.sendErrorResponse(res, 'Payment not captured', 400);
+        return res.status(400).json({
+          success: false,
+          message: 'Payment not captured'
+        });
       }
 
-      // Activate subscription
+      // Step 9: All validations passed - activate subscription
       const subscription = await userSubscriptionService.subscribeUserToPlan(
         userId,
         planId
       );
 
-      // Update subscription with payment reference
+      // Step 10: Update subscription with payment reference
       await userSubscriptionService.updateSubscription(subscription.id, {
         paymentReference: paymentId,
         paymentGateway: 'razorpay',
         status: 'active',
       });
 
-      return this.sendSuccessResponse(res, {
-        subscription,
-        paymentId,
-      }, 'Payment verified and subscription activated');
+      return res.status(200).json({
+        success: true,
+        data: {
+          subscription,
+          paymentId,
+        }
+      });
     } catch (error) {
       return this.handleError(res, error, 'PaymentController.verifyPayment');
     }
@@ -113,23 +178,53 @@ export class PaymentController extends BaseController {
   /**
    * Handle Razorpay webhooks
    * 
+   * SECURITY: Webhook signature is computed over raw body bytes.
+   * The route must use express.raw() middleware to preserve the raw body.
+   * We verify signature first, then parse JSON.
+   * 
    * @route POST /api/payment/webhook
    * @access Public (but verified via signature)
    */
   async handleWebhook(req: Request, res: Response) {
     try {
-      const signature = req.headers['x-razorpay-signature'] as string;
-      const webhookBody = JSON.stringify(req.body);
+      // Verify we received raw body (Buffer) for signature verification
+      if (!Buffer.isBuffer(req.body)) {
+        console.error('❌ Webhook received parsed body instead of raw Buffer');
+        return res.status(400).json({
+          error: 'Webhook must receive raw body for signature verification. Check middleware order in server/index.ts'
+        });
+      }
 
-      // Verify webhook signature
+      const signature = req.headers['x-razorpay-signature'] as string;
+      
+      if (!signature) {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing webhook signature'
+        });
+      }
+
+      // req.body will be a Buffer when using express.raw() middleware
+      const webhookBody = req.body;
+
+      // Verify webhook signature (accepts Buffer or string)
       const isValid = razorpayService.verifyWebhookSignature(webhookBody, signature);
 
       if (!isValid) {
-        return this.sendErrorResponse(res, 'Invalid webhook signature', 400);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid webhook signature'
+        });
       }
 
-      const event = req.body.event;
-      const payload = req.body.payload;
+      // Parse JSON after signature verification
+      const bodyString = Buffer.isBuffer(webhookBody) 
+        ? webhookBody.toString('utf8') 
+        : webhookBody;
+      const parsedBody = JSON.parse(bodyString);
+
+      const event = parsedBody.event;
+      const payload = parsedBody.payload;
 
       // Handle different webhook events
       switch (event) {

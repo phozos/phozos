@@ -218,7 +218,7 @@ export function useAuthenticatedQuery<T>(
   queryKey: (string | number | boolean)[],
   url: string,
   responseSchema?: z.ZodSchema<T>,
-  options?: Omit<UseQueryOptions<T, ApiError>, 'queryKey' | 'queryFn' | 'enabled'>
+  options?: Omit<UseQueryOptions<T, ApiError>, 'queryKey' | 'queryFn'>
 ) {
   const { authReady } = useAuth();
   

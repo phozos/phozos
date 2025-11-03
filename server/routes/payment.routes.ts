@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import express, { Router, Response } from 'express';
 import { paymentController } from '../controllers/payment.controller';
 import { requireAuth } from '../middleware/authentication';
 import { asyncHandler } from '../middleware/error-handler';
@@ -16,6 +16,7 @@ router.post('/verify', requireAuth, asyncHandler((req: AuthenticatedRequest, res
 ));
 
 // Public webhook endpoint (verified via signature)
+// Raw body handling configured globally in server/index.ts
 router.post('/webhook', asyncHandler((req: AuthenticatedRequest, res: Response) => 
   paymentController.handleWebhook(req, res)
 ));
