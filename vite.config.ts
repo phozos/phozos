@@ -98,12 +98,14 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5000,
+    strictPort: true,
+    hmr: {
+      clientPort: 443,
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],
     },
-    // HMR and WebSocket configuration - disable when HMR_ENABLED is false
-    ...(buildConfig.HMR_ENABLED ? {} : { hmr: false, ws: false }),
   },
   // Disable client-side refresh in Replit environment
   ...(process.env.REPL_ID && {
