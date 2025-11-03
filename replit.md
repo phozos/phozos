@@ -6,7 +6,17 @@ EduPath is a comprehensive international education platform designed to connect 
 
 ## Recent Changes
 
-**October 28, 2025 - Environment Configuration Modernization (Phase 4 Complete)**
+**November 3, 2025 - Razorpay Payment Integration (Phase 4 Complete)**
+- ✅ Implemented complete Razorpay payment gateway integration for subscription purchases
+- ✅ Created secure payment verification system with multi-step validation (signature, plan matching, amount verification)
+- ✅ Fixed critical security vulnerabilities: payment plan mismatch protection, webhook signature verification
+- ✅ Added payment routes: `/api/payment/create-order`, `/api/payment/verify`, `/api/payment/webhook`
+- ✅ Integrated Razorpay Checkout in frontend with React hooks
+- ✅ Removed all Stripe references and replaced with Razorpay
+- ✅ Configured secure webhook handling with raw body middleware for signature verification
+- **Impact:** Production-ready payment system for Indian market with comprehensive security controls
+
+**October 28, 2025 - Environment Configuration Modernization**
 - ✅ Removed all legacy `dotenv/config` imports from codebase
 - ✅ Migrated database migration script to use centralized config module
 - ✅ Eliminated duplicate environment loading logic
@@ -32,6 +42,7 @@ Preferred communication style: Simple, everyday language.
 - **Security Implementation:** Features JWT-based authentication with refresh tokens, HMAC-signed CSRF protection with session binding, rate limiting, bcrypt password hashing, secure IP detection, account lockout, and cryptographically secure 16-character temporary password generation via `TemporaryPasswordService`.
 - **Error Handling Strategy:** Centralized error handling using custom error classes (e.g., `ServiceError`, `AuthenticationError`, `ValidationServiceError`) that map to standardized API error responses and appropriate HTTP status codes.
 - **Centralized Configuration System:** Production-ready configuration module (`server/config/index.ts`) with layered environment file loading via dotenv-flow, Zod schema validation, type-safe exports, and feature flags for business logic. All runtime configuration flows through a single validated entry point, eliminating scattered `process.env` checks and enabling testable production features in development.
+- **Payment Integration:** Secure Razorpay payment gateway with comprehensive fraud prevention. Features multi-step payment verification (signature validation, order fetching, plan/amount matching, payment status confirmation), webhook signature verification with raw body handling, and integration with subscription activation flow.
 - **Modularization:** Ongoing effort to transition to a modular architecture, focusing on single responsibility for repositories, DTOs, moving business logic to services, and increasing test coverage.
 - **CORS Implementation:** Comprehensive CORS middleware supporting split deployment architectures with secure defaults (explicit origins, credentials, CSRF compatibility) and robust monitoring.
 - **Image Optimization Strategy:** Automated image optimization pipeline using vite-plugin-imagemin for production builds, achieving 30-50% file size reduction through WebP conversion, lazy loading, and async decoding. Includes OptimizedImage component for improved Core Web Vitals (LCP, CLS).
@@ -42,12 +53,12 @@ Preferred communication style: Simple, everyday language.
 ### Third-Party Services
 - **Email:** SendGrid (for notifications and verification).
 - **Authentication:** JWT (jsonwebtoken), Passport Google OAuth 2.0.
-- **Payment Processing:** Stripe (planned integration).
+- **Payment Processing:** Razorpay (production-ready integration for Indian market).
 - **File Storage:** Local filesystem (multer) for document uploads.
 - **Database:** Neon PostgreSQL (serverless) via `@neondatabase/serverless` driver.
 
 ### Key NPM Packages
-- **Backend:** `express`, `drizzle-orm`, `zod`, `bcrypt`, `cookie-parser`, `express-rate-limit`, `express-slow-down`.
+- **Backend:** `express`, `drizzle-orm`, `zod`, `bcrypt`, `cookie-parser`, `express-rate-limit`, `express-slow-down`, `razorpay`.
 - **Frontend:** `@tanstack/react-query`, `react-hook-form`, `wouter`, `@radix-ui/*`, `tailwindcss`.
 - **Development:** `vite`, `tsx`, `esbuild`, `vitest`, `eslint`, `@typescript-eslint`, `husky`, `lint-staged`.
 
@@ -55,5 +66,5 @@ Preferred communication style: Simple, everyday language.
 - **Planned:** University data providers, AI/ML services for matching, document verification services, Visa application tracking APIs.
 
 ### Environment Configuration
-- **Required:** `DATABASE_URL`, `JWT_SECRET`, `CSRF_SECRET`, `NODE_ENV`.
-- **Optional:** `SENDGRID_API_KEY`, `ADMIN_PASSWORD`, `ADMIN_IPS`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`.
+- **Required:** `DATABASE_URL`, `JWT_SECRET`, `CSRF_SECRET`, `NODE_ENV`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`.
+- **Optional:** `SENDGRID_API_KEY`, `ADMIN_PASSWORD`, `ADMIN_IPS`.
