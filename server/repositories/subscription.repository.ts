@@ -18,6 +18,8 @@ export interface ISubscriptionPlanRepository {
   create(data: InsertSubscriptionPlan): Promise<SubscriptionPlan>;
   update(id: string, data: Partial<SubscriptionPlan>): Promise<SubscriptionPlan>;
   delete(id: string): Promise<boolean>;
+  findByTierLevel(tierLevel: number): Promise<SubscriptionPlan | undefined>;
+  findHigherTiers(currentTierLevel: number): Promise<SubscriptionPlan[]>;
 }
 
 export interface IUserSubscriptionRepository {
@@ -62,6 +64,31 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
         .orderBy(subscriptionPlans.displayOrder, subscriptionPlans.price) as SubscriptionPlan[];
     } catch (error) {
       handleDatabaseError(error, 'SubscriptionPlanRepository.findActive');
+    }
+  }
+
+  async findByTierLevel(tierLevel: number): Promise<SubscriptionPlan | undefined> {
+    try {
+      const results = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.tierLevel, tierLevel))
+        .limit(1);
+      return results[0] as SubscriptionPlan | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findByTierLevel');
+    }
+  }
+
+  async findHigherTiers(currentTierLevel: number): Promise<SubscriptionPlan[]> {
+    try {
+      return await db
+        .select()
+        .from(subscriptionPlans)
+        .where(sql`${subscriptionPlans.tierLevel} > ${currentTierLevel}`)
+        .orderBy(subscriptionPlans.tierLevel) as SubscriptionPlan[];
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findHigherTiers');
     }
   }
 

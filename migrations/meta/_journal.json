@@ -15,6 +15,13 @@
       "when": 1762168751783,
       "tag": "0001_natural_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1762169681171,
+      "tag": "0002_dazzling_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }
