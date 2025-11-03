@@ -190,6 +190,15 @@ const buildConfigSchema = z.object({
 });
 
 /**
+ * Razorpay configuration schema
+ */
+const razorpayConfigSchema = z.object({
+  keyId: z.string().min(1, 'RAZORPAY_KEY_ID is required'),
+  keySecret: z.string().min(1, 'RAZORPAY_KEY_SECRET is required'),
+  webhookSecret: z.string().min(1, 'RAZORPAY_WEBHOOK_SECRET is required'),
+});
+
+/**
  * Complete configuration schema combining all sections
  */
 const configSchema = z.object({
@@ -203,6 +212,7 @@ const configSchema = z.object({
   cors: corsConfigSchema,
   cookies: cookiesConfigSchema,
   build: buildConfigSchema,
+  razorpay: razorpayConfigSchema,
 });
 
 /**
@@ -259,6 +269,11 @@ function validateConfiguration() {
         HMR_ENABLED: process.env.HMR_ENABLED,
         IMAGE_OPTIMIZATION_ENABLED: process.env.IMAGE_OPTIMIZATION_ENABLED,
         CARTOGRAPHER_ENABLED: process.env.CARTOGRAPHER_ENABLED,
+      },
+      razorpay: {
+        keyId: process.env.RAZORPAY_KEY_ID,
+        keySecret: process.env.RAZORPAY_KEY_SECRET,
+        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
       },
     };
 
@@ -317,6 +332,7 @@ export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
 export type CorsConfig = z.infer<typeof corsConfigSchema>;
 export type CookiesConfig = z.infer<typeof cookiesConfigSchema>;
 export type BuildConfig = z.infer<typeof buildConfigSchema>;
+export type RazorpayConfig = z.infer<typeof razorpayConfigSchema>;
 
 /**
  * Main configuration object with all sections
@@ -336,6 +352,7 @@ export const loggingConfig: LoggingConfig = config.logging;
 export const corsConfig: CorsConfig = config.cors;
 export const cookiesConfig: CookiesConfig = config.cookies;
 export const buildConfig: BuildConfig = config.build;
+export const razorpayConfig: RazorpayConfig = config.razorpay;
 
 /**
  * Helper function to check if running in development mode

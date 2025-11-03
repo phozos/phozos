@@ -12,6 +12,8 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import { PremiumBadgeDisplay } from "@/components/PremiumBadges";
 import { SEO } from "@/components/SEO";
 import { FAQSchema } from "@/components/StructuredData";
+import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
+import { useAuth } from "@/hooks/useAuth";
 
 interface SubscriptionPlan {
   id: string;
@@ -36,6 +38,27 @@ export default function PublicPlans() {
     ["/api/subscription/plans"],
     '/api/subscription/plans'
   );
+
+  const { initiatePayment, isProcessing } = useRazorpayCheckout();
+  const { user } = useAuth();
+
+  const handlePurchasePlan = async (plan: SubscriptionPlan) => {
+    if (!user) {
+      // Redirect to login
+      window.location.href = '/auth?redirect=/plans';
+      return;
+    }
+
+    try {
+      await initiatePayment(plan.id, plan.name, {
+        name: user.fullName,
+        email: user.email,
+        contact: user.phone,
+      });
+    } catch (error) {
+      console.error('Purchase failed:', error);
+    }
+  };
 
   const faqItems = [
     {
@@ -336,6 +359,8 @@ export default function PublicPlans() {
 
                       {/* CTA Button */}
                       <Button 
+                        onClick={() => handlePurchasePlan(plan)}
+                        disabled={isProcessing}
                         className={`
                           w-full mt-8 text-base font-semibold py-6 relative overflow-hidden group
                           ${isPopular 
@@ -349,7 +374,7 @@ export default function PublicPlans() {
                       >
                         <div className="flex items-center justify-center space-x-2">
                           <Rocket className="w-5 h-5" />
-                          <span>{isFree ? 'Get Started Free' : 'Choose Plan'}</span>
+                          <span>{isProcessing ? 'Processing...' : (isFree ? 'Get Started Free' : 'Purchase Lifetime Access')}</span>
                         </div>
                         {isPopular && (
                           <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>

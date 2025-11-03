@@ -19,6 +19,7 @@ import companyRoutes from './company.routes';
 import subscriptionRoutes from './subscription.routes';
 import testimonialRoutes from './testimonial.routes';
 import systemRoutes from './system.routes';
+import paymentRoutes from './payment.routes';
 import { WebSocketService } from '../services/infrastructure/websocket';
 import { WebSocketEventHandlers } from '../services/infrastructure/websocket-handlers';
 import { adminSecurityService } from '../services/domain/admin';
@@ -106,6 +107,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   apiRouter.use('/company', companyRoutes);
   apiRouter.use('/subscription', subscriptionRoutes);
   apiRouter.use('/testimonials', testimonialRoutes);
+  apiRouter.use('/payment', paymentRoutes);
   apiRouter.use('/', systemRoutes);
 
   return apiRouter;
