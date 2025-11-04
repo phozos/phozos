@@ -34,8 +34,27 @@ const allowedOrigins = config.cors.ALLOWED_ORIGINS.length > 0
 
 const app = express();
 
-// Configure trust proxy for secure IP detection and rate limiting
-// Using config value instead of hardcoded 'true' to prevent IP spoofing
+/**
+ * CRITICAL: Configure trust proxy for production deployments
+ * 
+ * REQUIRED FOR WEBHOOK IP VALIDATION:
+ * - Enables Express to trust X-Forwarded-* headers from proxies (Nginx, AWS ALB, etc.)
+ * - Allows req.ip to reflect the true client IP, not the proxy IP
+ * - Without this, webhook IP whitelist validation will FAIL in production
+ * 
+ * WHY THIS MATTERS:
+ * - Razorpay webhooks arrive through proxies in production
+ * - Express exposes proxied IPs as IPv6-mapped: ::ffff:3.7.71.51
+ * - X-Forwarded-For header contains the original client IP
+ * - Webhook security middleware needs this to validate Razorpay IPs
+ * 
+ * SECURITY NOTE:
+ * - Set TRUST_PROXY=1 (trust first proxy) for most deployments
+ * - Set TRUST_PROXY=false only for direct connections (no proxy)
+ * - Never set to 'true' (unlimited) to prevent IP spoofing attacks
+ * 
+ * CONFIG: Controlled via TRUST_PROXY environment variable
+ */
 app.set('trust proxy', securityConfig.TRUST_PROXY);
 
 // HTTPS Redirect Middleware (Feature flag controlled)
@@ -102,7 +121,8 @@ app.use(cors({
 
 // CRITICAL: Webhook endpoint must receive raw body for signature verification
 // This MUST come before express.json() middleware
-app.use('/api/payment/webhook', express.raw({ type: 'application/json' }));
+// Limit webhook payload to 1KB to prevent large payload attacks
+app.use('/api/payment/webhook', express.raw({ type: 'application/json', limit: '1kb' }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

@@ -196,6 +196,13 @@ const razorpayConfigSchema = z.object({
   keyId: z.string().min(1, 'RAZORPAY_KEY_ID is required'),
   keySecret: z.string().min(1, 'RAZORPAY_KEY_SECRET is required'),
   webhookSecret: z.string().min(1, 'RAZORPAY_WEBHOOK_SECRET is required'),
+  webhookIps: commaSeparatedSchema.transform((ips) => {
+    // Default to Razorpay's official webhook IP addresses if not configured
+    if (ips.length === 0) {
+      return ['3.7.71.51', '3.7.71.52', '3.7.71.53'];
+    }
+    return ips;
+  }),
 });
 
 /**
@@ -274,6 +281,7 @@ function validateConfiguration() {
         keyId: process.env.RAZORPAY_KEY_ID,
         keySecret: process.env.RAZORPAY_KEY_SECRET,
         webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+        webhookIps: process.env.RAZORPAY_WEBHOOK_IPS,
       },
     };
 

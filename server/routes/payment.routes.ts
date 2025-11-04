@@ -2,6 +2,7 @@ import express, { Router, Response } from 'express';
 import { paymentController } from '../controllers/payment.controller';
 import { requireAuth } from '../middleware/authentication';
 import { asyncHandler } from '../middleware/error-handler';
+import { webhookIpWhitelist, webhookRateLimit } from '../middleware/webhook-security';
 import { AuthenticatedRequest } from '../types/auth';
 
 const router = Router();
@@ -17,7 +18,8 @@ router.post('/verify', requireAuth, asyncHandler((req: AuthenticatedRequest, res
 
 // Public webhook endpoint (verified via signature)
 // Raw body handling configured globally in server/index.ts
-router.post('/webhook', asyncHandler((req: AuthenticatedRequest, res: Response) => 
+// Security: IP whitelist first, then rate limit, then handler
+router.post('/webhook', webhookIpWhitelist, webhookRateLimit, asyncHandler((req: AuthenticatedRequest, res: Response) => 
   paymentController.handleWebhook(req, res)
 ));
 

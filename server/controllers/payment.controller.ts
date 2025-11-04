@@ -3,7 +3,9 @@ import { BaseController } from './base.controller';
 import { AuthenticatedRequest } from '../types/auth';
 import { razorpayService } from '../services/integration/razorpay.service';
 import { userSubscriptionService } from '../services/domain/user-subscription.service';
+import { paymentTransactionService } from '../services/domain/payment-transaction.service';
 import { subscriptionPlanRepository } from '../repositories/subscription.repository';
+import { webhookDeduplicationService } from '../services/infrastructure/webhook-deduplication.service';
 import config from '../config';
 import crypto from 'crypto';
 
@@ -140,21 +142,15 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 400, 'PAYMENT_NOT_CAPTURED', 'Payment not captured');
       }
 
-      // Step 9: All validations passed - activate subscription with idempotency
-      const subscription = await userSubscriptionService.subscribeUserToPlan(
+      // Step 9: All validations passed - activate subscription with transaction isolation
+      // This uses SERIALIZABLE isolation + row-level locking to prevent race conditions
+      // between webhook and manual verification
+      const subscription = await paymentTransactionService.createSubscriptionWithLock(
         userId,
         planId,
-        orderId  // Idempotency key - prevents duplicate subscriptions on webhook retries
+        orderId,
+        paymentId
       );
-
-      // Step 10: Update subscription with payment reference if not already set
-      if (!subscription.paymentReference) {
-        await userSubscriptionService.updateSubscription(subscription.id, {
-          paymentReference: paymentId,
-          paymentGateway: 'razorpay',
-          status: 'active',
-        });
-      }
 
       return this.sendSuccess(res, {
         subscription,
@@ -215,27 +211,91 @@ export class PaymentController extends BaseController {
 
       const event = parsedBody.event;
       const payload = parsedBody.payload;
+      const eventId = parsedBody.event_id || parsedBody.id;
 
-      // Handle different webhook events
-      switch (event) {
-        case 'payment.captured':
-          await this.handlePaymentCaptured(payload.payment.entity);
-          break;
-
-        case 'payment.failed':
-          await this.handlePaymentFailed(payload.payment.entity);
-          break;
-
-        case 'order.paid':
-          await this.handleOrderPaid(payload.order.entity);
-          break;
-
-        default:
-          console.log(`Unhandled webhook event: ${event}`);
+      // TIMESTAMP VALIDATION: Prevent replay attacks by rejecting old webhooks
+      const createdAt = parsedBody.created_at;
+      
+      if (!createdAt) {
+        console.warn('⚠️ [Webhook Security] Webhook missing created_at timestamp - rejecting as invalid');
+        return res.status(400).json({
+          error: 'WEBHOOK_INVALID',
+          message: 'Webhook missing created_at timestamp'
+        });
       }
 
-      // Always respond 200 OK to Razorpay
-      return res.status(200).send('OK');
+      // Calculate webhook age in seconds (Razorpay created_at is Unix timestamp in seconds)
+      const currentTimestamp = Date.now() / 1000; // Convert milliseconds to seconds
+      const age = currentTimestamp - createdAt;
+
+      // Reject webhooks older than 5 minutes (300 seconds)
+      if (age > 300) {
+        console.warn(`⚠️ [Webhook Security] Webhook too old - Age: ${age.toFixed(2)}s, Created: ${new Date(createdAt * 1000).toISOString()}, Current: ${new Date(currentTimestamp * 1000).toISOString()}`);
+        return res.status(400).json({
+          error: 'WEBHOOK_TOO_OLD',
+          message: 'Webhook timestamp too old, possible replay attack'
+        });
+      }
+
+      console.log(`✅ [Webhook Security] Timestamp validated - Age: ${age.toFixed(2)}s (within 5 minute window)`);
+
+      // DEDUPLICATION: Check if this event has already been processed
+      if (!eventId) {
+        console.error('❌ Webhook missing event_id:', parsedBody);
+        return res.status(400).json({
+          success: false,
+          message: 'Webhook missing event_id'
+        });
+      }
+
+      // Check if event already processed
+      const isProcessed = await webhookDeduplicationService.isEventProcessed(eventId);
+      if (isProcessed) {
+        console.log(`✅ [Webhook Deduplication] Event ${eventId} already processed - returning 200 OK (idempotent)`);
+        return res.status(200).send('OK');
+      }
+
+      // Record new event in database
+      await webhookDeduplicationService.recordEvent(eventId, event, parsedBody);
+
+      try {
+        // Handle different webhook events
+        switch (event) {
+          case 'payment.captured':
+            await this.handlePaymentCaptured(payload.payment.entity);
+            break;
+
+          case 'payment.failed':
+            await this.handlePaymentFailed(payload.payment.entity);
+            break;
+
+          case 'order.paid':
+            await this.handleOrderPaid(payload.order.entity);
+            break;
+
+          default:
+            console.log(`Unhandled webhook event: ${event}`);
+        }
+
+        // Mark event as successfully processed
+        await webhookDeduplicationService.markSuccess(eventId);
+
+        // Always respond 200 OK to Razorpay
+        return res.status(200).send('OK');
+      } catch (processingError) {
+        // Mark event as failed with error details
+        const errorMessage = processingError instanceof Error 
+          ? processingError.message 
+          : 'Unknown error during webhook processing';
+        
+        await webhookDeduplicationService.markFailed(eventId, errorMessage);
+        
+        console.error('❌ Webhook processing error:', processingError);
+        
+        // Still return 200 OK to prevent Razorpay retries
+        // The event is marked as failed in our database for manual review
+        return res.status(200).send('OK');
+      }
     } catch (error) {
       console.error('Webhook error:', error);
       return res.status(500).send('Internal server error');
@@ -266,11 +326,20 @@ export class PaymentController extends BaseController {
         return;
       }
 
-      // Activate subscription with idempotency - prevents duplicate subscriptions on webhook retries
-      const subscription = await userSubscriptionService.subscribeUserToPlan(
+      // Extract paymentId from order.payments array if available, otherwise use orderId
+      // Razorpay order object may include payments array with payment details
+      let paymentId = orderId; // Fallback to orderId
+      if (order.payments && Array.isArray(order.payments) && order.payments.length > 0) {
+        paymentId = order.payments[0].id;
+      }
+
+      // Activate subscription with transaction isolation - prevents race conditions
+      // between webhook and manual verification using SERIALIZABLE isolation + row-level locking
+      const subscription = await paymentTransactionService.createSubscriptionWithLock(
         userId,
         planId,
-        orderId  // Idempotency key
+        orderId,
+        paymentId
       );
 
       console.log('Subscription activated via webhook:', subscription.id);
