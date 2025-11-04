@@ -6,8 +6,10 @@ import { userSubscriptionService } from '../services/domain/user-subscription.se
 import { paymentTransactionService } from '../services/domain/payment-transaction.service';
 import { subscriptionPlanRepository } from '../repositories/subscription.repository';
 import { webhookDeduplicationService } from '../services/infrastructure/webhook-deduplication.service';
+import { paymentFailureService } from '../services/domain/payment-failure.service';
 import config from '../config';
 import crypto from 'crypto';
+import logger from '../utils/logger';
 
 export class PaymentController extends BaseController {
   /**
@@ -25,9 +27,19 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 401, 'AUTH_REQUIRED', 'User not authenticated');
       }
 
+      logger.info('Payment order creation started', {
+        userId,
+        planId,
+      });
+
       // Check if user can purchase this plan
       const validation = await userSubscriptionService.canPurchasePlan(userId, planId);
       if (!validation.allowed) {
+        logger.warn('Payment order creation failed - user already subscribed', {
+          userId,
+          planId,
+          reason: validation.reason,
+        });
         return this.sendError(res, 409, 'ALREADY_SUBSCRIBED', validation.reason || 'You already have an active subscription', {
           currentPlan: validation.currentPlan
         });
@@ -36,6 +48,10 @@ export class PaymentController extends BaseController {
       // Fetch plan details
       const plan = await subscriptionPlanRepository.findById(planId);
       if (!plan) {
+        logger.error('Payment order creation failed - plan not found', {
+          userId,
+          planId,
+        });
         return this.sendError(res, 404, 'PLAN_NOT_FOUND', 'Plan not found');
       }
 
@@ -65,6 +81,15 @@ export class PaymentController extends BaseController {
         },
       });
 
+      logger.info('Payment order created successfully', {
+        userId,
+        planId,
+        orderId: order.id,
+        amount: amountInPaise,
+        currency: order.currency,
+        isUpgrade: validation.requiresUpgrade || false,
+      });
+
       return this.sendSuccess(res, {
         orderId: order.id,
         amount: order.amount,
@@ -73,6 +98,11 @@ export class PaymentController extends BaseController {
         isUpgrade: validation.requiresUpgrade || false,
       });
     } catch (error) {
+      logger.error('Payment order creation error', {
+        error,
+        userId: req.user?.id,
+        planId: req.body.planId,
+      });
       return this.handleError(res, error, 'PaymentController.createOrder');
     }
   }
@@ -98,6 +128,13 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 401, 'AUTH_REQUIRED', 'User not authenticated');
       }
 
+      logger.info('Payment verification started', {
+        userId,
+        orderId,
+        paymentId,
+        planId,
+      });
+
       // Step 1: Verify payment signature
       const isValid = razorpayService.verifyPaymentSignature(
         orderId,
@@ -106,20 +143,33 @@ export class PaymentController extends BaseController {
       );
 
       if (!isValid) {
-        return this.sendError(res, 400, 'INVALID_SIGNATURE', 'Invalid payment signature');
+        logger.error('Payment signature verification failed', {
+          userId,
+          orderId,
+          paymentId,
+          planId,
+        });
+        return this.sendError(res, 400, 'PAYMENT_SIGNATURE_INVALID', 'Payment verification failed. The payment signature is invalid. Please try again or contact support if the issue persists.');
       }
+
+      logger.info('Payment signature verified successfully', {
+        userId,
+        orderId,
+        paymentId,
+        planId,
+      });
 
       // Step 2: Fetch order details from Razorpay to get original metadata
       const order = await razorpayService.fetchOrder(orderId);
 
       // Step 3: Validate planId matches the order metadata (CRITICAL SECURITY CHECK)
       if (!order.notes?.planId || order.notes.planId !== planId) {
-        return this.sendError(res, 400, 'PLAN_MISMATCH', 'Plan ID mismatch - payment verification failed');
+        return this.sendError(res, 400, 'PAYMENT_PLAN_MISMATCH', 'The subscription plan does not match your payment. Please restart the payment process or contact support.');
       }
 
       // Step 4: Validate userId matches the order metadata
       if (order.notes.userId !== userId) {
-        return this.sendError(res, 400, 'USER_MISMATCH', 'User ID mismatch - payment verification failed');
+        return this.sendError(res, 400, 'PAYMENT_USER_MISMATCH', 'This payment was initiated by a different account. Please ensure you are logged in with the correct account.');
       }
 
       // Step 5: Fetch plan details to validate amount
@@ -131,32 +181,86 @@ export class PaymentController extends BaseController {
       // Step 6: Validate payment amount matches plan price (CRITICAL SECURITY CHECK)
       const expectedAmountInPaise = Math.round(parseFloat(plan.price) * 100);
       if (order.amount !== expectedAmountInPaise) {
-        return this.sendError(res, 400, 'AMOUNT_MISMATCH', 'Payment amount mismatch - verification failed');
+        logger.error('Payment amount mismatch', {
+          userId,
+          orderId,
+          paymentId,
+          planId,
+          expectedAmount: expectedAmountInPaise,
+          actualAmount: order.amount,
+        });
+        return this.sendError(res, 400, 'PAYMENT_AMOUNT_MISMATCH', 'The payment amount does not match the subscription plan price. Please try again or contact support.');
       }
+
+      logger.info('Payment amount validated successfully', {
+        userId,
+        orderId,
+        paymentId,
+        planId,
+        amount: order.amount,
+      });
 
       // Step 7: Fetch payment details from Razorpay
       const paymentDetails = await razorpayService.getPaymentDetails(paymentId);
 
       // Step 8: Check if payment was successful
       if (paymentDetails.status !== 'captured') {
-        return this.sendError(res, 400, 'PAYMENT_NOT_CAPTURED', 'Payment not captured');
+        logger.error('Payment not captured', {
+          userId,
+          orderId,
+          paymentId,
+          planId,
+          paymentStatus: paymentDetails.status,
+        });
+        return this.sendError(res, 400, 'PAYMENT_NOT_CAPTURED', 'Your payment was not completed successfully. Please try again or use a different payment method. If money was deducted, it will be refunded within 5-7 business days.');
       }
 
       // Step 9: All validations passed - activate subscription with transaction isolation
       // This uses SERIALIZABLE isolation + row-level locking to prevent race conditions
       // between webhook and manual verification
+      const amountPaid = order.amount / 100; // Convert paise to rupees
+      const currency = order.currency || 'INR';
+      
+      logger.info('Creating subscription with payment details', {
+        userId,
+        orderId,
+        paymentId,
+        planId,
+        amountPaid,
+        currency,
+      });
+      
       const subscription = await paymentTransactionService.createSubscriptionWithLock(
         userId,
         planId,
         orderId,
-        paymentId
+        paymentId,
+        amountPaid,
+        currency
       );
+
+      logger.info('Subscription created/updated successfully', {
+        userId,
+        orderId,
+        paymentId,
+        planId,
+        subscriptionId: subscription.id,
+        amountPaid,
+        currency,
+      });
 
       return this.sendSuccess(res, {
         subscription,
         paymentId,
       });
     } catch (error) {
+      logger.error('Payment verification error', {
+        error,
+        userId: req.user?.id,
+        orderId: req.body.orderId,
+        paymentId: req.body.paymentId,
+        planId: req.body.planId,
+      });
       return this.handleError(res, error, 'PaymentController.verifyPayment');
     }
   }
@@ -173,9 +277,11 @@ export class PaymentController extends BaseController {
    */
   async handleWebhook(req: Request, res: Response) {
     try {
+      logger.info('Webhook received from Razorpay');
+
       // Verify we received raw body (Buffer) for signature verification
       if (!Buffer.isBuffer(req.body)) {
-        console.error('❌ Webhook received parsed body instead of raw Buffer');
+        logger.error('Webhook received parsed body instead of raw Buffer');
         return res.status(400).json({
           error: 'Webhook must receive raw body for signature verification. Check middleware order in server/index.ts'
         });
@@ -184,6 +290,7 @@ export class PaymentController extends BaseController {
       const signature = req.headers['x-razorpay-signature'] as string;
       
       if (!signature) {
+        logger.error('Webhook missing signature header');
         return res.status(400).json({
           success: false,
           message: 'Missing webhook signature'
@@ -308,12 +415,65 @@ export class PaymentController extends BaseController {
   }
 
   private async handlePaymentFailed(payment: any) {
-    console.log('Payment failed:', payment.id);
-    // Send notification to user, update subscription status
+    logger.warn('Payment failed webhook received', {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      amount: payment.amount,
+      currency: payment.currency,
+      errorCode: payment.error_code,
+      errorDescription: payment.error_description,
+    });
+
+    try {
+      // Extract metadata from payment if available
+      const userId = payment.notes?.userId;
+      const planId = payment.notes?.planId;
+
+      if (!userId) {
+        logger.error('Payment failed webhook missing userId', {
+          paymentId: payment.id,
+          orderId: payment.order_id,
+        });
+        return;
+      }
+
+      // Log the failed payment
+      await paymentFailureService.logFailedPayment({
+        userId,
+        planId,
+        orderId: payment.order_id,
+        paymentId: payment.id,
+        amount: payment.amount ? payment.amount / 100 : undefined,
+        currency: payment.currency || 'INR',
+        failureReason: 'payment_failed',
+        razorpayErrorCode: payment.error_code,
+        razorpayErrorDescription: payment.error_description,
+      });
+
+      logger.info('Failed payment logged successfully', {
+        userId,
+        planId,
+        paymentId: payment.id,
+        orderId: payment.order_id,
+      });
+
+      // TODO: Send notification to user about payment failure
+      // This would typically integrate with a notification service
+    } catch (error) {
+      logger.error('Error handling payment failed webhook', {
+        error,
+        paymentId: payment.id,
+        orderId: payment.order_id,
+      });
+    }
   }
 
   private async handleOrderPaid(order: any) {
-    console.log('Order paid:', order.id);
+    logger.info('Order paid webhook received', {
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    });
     
     try {
       // Extract metadata from order
@@ -322,7 +482,11 @@ export class PaymentController extends BaseController {
       const orderId = order.id;
 
       if (!userId || !planId) {
-        console.error('Order paid webhook missing required metadata:', { userId, planId, orderId });
+        logger.error('Order paid webhook missing required metadata', {
+          userId,
+          planId,
+          orderId,
+        });
         return;
       }
 
@@ -333,18 +497,42 @@ export class PaymentController extends BaseController {
         paymentId = order.payments[0].id;
       }
 
+      // Extract payment amount and currency
+      const amountPaid = (order.amount || 0) / 100; // Convert paise to rupees
+      const currency = order.currency || 'INR';
+
+      logger.info('Processing order.paid webhook', {
+        userId,
+        planId,
+        orderId,
+        paymentId,
+        amountPaid,
+        currency,
+      });
+
       // Activate subscription with transaction isolation - prevents race conditions
       // between webhook and manual verification using SERIALIZABLE isolation + row-level locking
       const subscription = await paymentTransactionService.createSubscriptionWithLock(
         userId,
         planId,
         orderId,
-        paymentId
+        paymentId,
+        amountPaid,
+        currency
       );
 
-      console.log('Subscription activated via webhook:', subscription.id);
+      logger.info('Subscription activated via webhook', {
+        userId,
+        planId,
+        orderId,
+        paymentId,
+        subscriptionId: subscription.id,
+      });
     } catch (error) {
-      console.error('Error handling order.paid webhook:', error);
+      logger.error('Error handling order.paid webhook', {
+        error,
+        orderId: order.id,
+      });
     }
   }
 }

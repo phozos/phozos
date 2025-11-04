@@ -863,6 +863,9 @@ export const userSubscriptions = pgTable("user_subscriptions", {
   autoRenew: boolean("auto_renew"),
   universitiesUsed: integer("universities_used").default(0),
   countriesUsed: integer("countries_used").default(0),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("INR"),
+  paidAt: timestamp("paid_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -896,11 +899,42 @@ export const webhookEvents = pgTable("webhook_events", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Subscription Events table (for audit trail)
+export const subscriptionEvents = pgTable("subscription_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  eventType: text("event_type").notNull(),
+  oldStatus: text("old_status"),
+  newStatus: text("new_status"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Failed Payments table (for tracking payment failures)
+export const failedPayments = pgTable("failed_payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'set null' }),
+  orderId: text("order_id"),
+  paymentId: text("payment_id"),
+  amount: decimal("amount", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("INR"),
+  failureReason: text("failure_reason"),
+  razorpayErrorCode: text("razorpay_error_code"),
+  razorpayErrorDescription: text("razorpay_error_description"),
+  failedAt: timestamp("failed_at").notNull().defaultNow(),
+  notifiedAt: timestamp("notified_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSettingsSchema = createInsertSchema(paymentSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({ id: true, createdAt: true });
+export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEvents).omit({ id: true, createdAt: true });
+export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -921,4 +955,8 @@ export type PaymentSettings = typeof paymentSettings.$inferSelect;
 export type InsertPaymentSettings = z.infer<typeof insertPaymentSettingsSchema>;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
+export type SubscriptionEvent = typeof subscriptionEvents.$inferSelect;
+export type InsertSubscriptionEvent = z.infer<typeof insertSubscriptionEventSchema>;
+export type FailedPayment = typeof failedPayments.$inferSelect;
+export type InsertFailedPayment = z.infer<typeof insertFailedPaymentSchema>;
 

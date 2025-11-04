@@ -6,13 +6,16 @@ import { eq, and } from 'drizzle-orm';
 import { InvalidOperationError, ValidationServiceError } from '../errors';
 import { NotFoundError } from '../../repositories/errors';
 import { CommonValidators } from '../validation';
+import { subscriptionAuditService } from '../infrastructure/subscription-audit.service';
 
 export interface IPaymentTransactionService {
   createSubscriptionWithLock(
     userId: string,
     planId: string,
     orderId: string,
-    paymentId: string
+    paymentId: string,
+    amountPaid: number,
+    currency: string
   ): Promise<UserSubscription>;
 }
 
@@ -24,7 +27,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
     userId: string,
     planId: string,
     orderId: string,
-    paymentId: string
+    paymentId: string,
+    amountPaid: number,
+    currency: string
   ): Promise<UserSubscription> {
     const errors: Record<string, string> = {};
 
@@ -42,7 +47,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
       throw new ValidationServiceError('Payment Transaction', errors);
     }
 
-    return this.executeWithRetry(userId, planId, orderId, paymentId);
+    return this.executeWithRetry(userId, planId, orderId, paymentId, amountPaid, currency);
   }
 
   private async executeWithRetry(
@@ -50,10 +55,12 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
     planId: string,
     orderId: string,
     paymentId: string,
+    amountPaid: number,
+    currency: string,
     attempt: number = 1
   ): Promise<UserSubscription> {
     try {
-      return await this.executeTransaction(userId, planId, orderId, paymentId);
+      return await this.executeTransaction(userId, planId, orderId, paymentId, amountPaid, currency);
     } catch (error: any) {
       const isDeadlock = error?.code === '40P01' || error?.message?.includes('deadlock');
       const isSerializationFailure = error?.code === '40001';
@@ -61,7 +68,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
       if ((isDeadlock || isSerializationFailure) && attempt < this.MAX_RETRY_ATTEMPTS) {
         const delay = this.RETRY_DELAY_MS * Math.pow(2, attempt - 1);
         await new Promise(resolve => setTimeout(resolve, delay));
-        return this.executeWithRetry(userId, planId, orderId, paymentId, attempt + 1);
+        return this.executeWithRetry(userId, planId, orderId, paymentId, amountPaid, currency, attempt + 1);
       }
       
       if (isDeadlock) {
@@ -86,7 +93,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
     userId: string,
     planId: string,
     orderId: string,
-    paymentId: string
+    paymentId: string,
+    amountPaid: number,
+    currency: string
   ): Promise<UserSubscription> {
     return await db.transaction(
       async (tx) => {
@@ -167,6 +176,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
               expiresAt: null,
               autoRenew: null,
               lifetimeActivatedAt: activeSubscription.lifetimeActivatedAt || new Date(),
+              amountPaid: amountPaid.toString(),
+              currency,
+              paidAt: new Date(),
               updatedAt: new Date(),
             })
             .where(eq(userSubscriptions.id, activeSubscription.id))
@@ -176,7 +188,28 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
             throw new Error('Failed to update subscription');
           }
 
-          return updated[0] as UserSubscription;
+          const updatedSubscription = updated[0] as UserSubscription;
+
+          // Log subscription upgrade event
+          await subscriptionAuditService.logEvent(
+            updatedSubscription.id,
+            userId,
+            'subscription_upgraded',
+            currentPlan.name,
+            targetPlan.name,
+            {
+              oldPlanId: currentPlan.id,
+              newPlanId: targetPlan.id,
+              oldTierLevel: currentPlan.tierLevel,
+              newTierLevel: targetPlan.tierLevel,
+              orderId,
+              paymentId,
+              amountPaid,
+              currency,
+            }
+          );
+
+          return updatedSubscription;
         }
 
         const startDate = new Date();
@@ -198,6 +231,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
             autoRenew: null,
             universitiesUsed: 0,
             countriesUsed: 0,
+            amountPaid: amountPaid.toString(),
+            currency,
+            paidAt: new Date(),
           })
           .returning();
 
@@ -205,7 +241,28 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
           throw new Error('Failed to create subscription');
         }
 
-        return created[0] as UserSubscription;
+        const newSubscription = created[0] as UserSubscription;
+
+        // Log subscription creation event
+        await subscriptionAuditService.logEvent(
+          newSubscription.id,
+          userId,
+          'subscription_created',
+          undefined,
+          'active',
+          {
+            planId: targetPlan.id,
+            planName: targetPlan.name,
+            tierLevel: targetPlan.tierLevel,
+            orderId,
+            paymentId,
+            amountPaid,
+            currency,
+            isLifetime: true,
+          }
+        );
+
+        return newSubscription;
       },
       {
         isolationLevel: 'serializable',
