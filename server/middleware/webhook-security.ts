@@ -112,10 +112,8 @@ export const webhookRateLimit = rateLimit({
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   
-  // Use req.ip for key generation (set by Express trust proxy)
-  keyGenerator: (req: Request) => {
-    return req.ip || 'unknown';
-  },
+  // Note: Using default keyGenerator which handles IPv6 correctly via req.ip
+  // Express's trust proxy setting ensures req.ip reflects the true client IP
   
   // Custom handler for rate limit exceeded
   handler: (req: Request, res: Response) => {

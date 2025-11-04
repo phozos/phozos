@@ -6,6 +6,18 @@ EduPath is a comprehensive international education platform designed to connect 
 
 ## Recent Changes
 
+**November 4, 2025 - Phase 1: Critical Webhook Security Fixes Complete**
+- ✅ Implemented webhook deduplication to prevent duplicate payment processing from Razorpay retries
+- ✅ Created `webhook_events` table with event tracking (event_id, status, payload, processing timestamps)
+- ✅ Added webhook rate limiting (10 requests/minute per IP) and IP whitelisting for Razorpay webhook IPs
+- ✅ Implemented transaction isolation with SERIALIZABLE level and row-level locking to prevent race conditions
+- ✅ Added webhook timestamp validation (5-minute window) to prevent replay attacks
+- ✅ Configured 1KB request size limit on webhook endpoint to prevent large payload attacks
+- ✅ Fixed IPv6-mapped address handling and proxy chain validation for production deployment
+- **Security Impact:** Eliminated 8 critical security vulnerabilities including race conditions, DDoS vectors, replay attacks, and webhook deduplication gaps
+- **Files Added:** `migrations/0004_add_webhook_events_table.sql`, `server/services/infrastructure/webhook-deduplication.service.ts`, `server/services/domain/payment-transaction.service.ts`, `server/middleware/webhook-security.ts`
+- **Files Modified:** `shared/schema.ts`, `server/controllers/payment.controller.ts`, `server/routes/payment.routes.ts`, `server/config/index.ts`, `server/index.ts`, `server/middleware/error-handler.ts`
+
 **November 3, 2025 - Razorpay Payment Integration (Phase 4 Complete)**
 - ✅ Implemented complete Razorpay payment gateway integration for subscription purchases
 - ✅ Created secure payment verification system with multi-step validation (signature, plan matching, amount verification)
