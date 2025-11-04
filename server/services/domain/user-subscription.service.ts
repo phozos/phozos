@@ -15,7 +15,8 @@ export interface IUserSubscriptionService {
   cancelSubscription(subscriptionId: string): Promise<boolean>;
   validateUpgrade(currentSubscription: UserSubscription, targetPlanId: string): Promise<{ allowed: boolean; reason?: string }>;
   upgradeSubscription(userId: string, newPlanId: string): Promise<UserSubscription>;
-  subscribeUserToPlan(userId: string, planId: string): Promise<UserSubscription>;
+  subscribeUserToPlan(userId: string, planId: string, orderId?: string): Promise<UserSubscription>;
+  canPurchasePlan(userId: string, planId: string): Promise<{ allowed: boolean; reason?: string; requiresUpgrade?: boolean; currentPlan?: any }>;
 }
 
 export class UserSubscriptionService extends BaseService implements IUserSubscriptionService {
@@ -222,7 +223,51 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
     }
   }
 
-  async subscribeUserToPlan(userId: string, planId: string): Promise<UserSubscription> {
+  async canPurchasePlan(userId: string, planId: string): Promise<{ allowed: boolean; reason?: string; requiresUpgrade?: boolean; currentPlan?: any }> {
+    try {
+      const activeSubscription = await this.userSubscriptionRepo.findActiveByUserId(userId);
+      
+      if (!activeSubscription) {
+        return { allowed: true };
+      }
+      
+      const targetPlan = await this.subscriptionPlanRepo.findById(planId);
+      if (!targetPlan) {
+        throw new NotFoundError('Subscription Plan', planId);
+      }
+      
+      const currentPlan = await this.subscriptionPlanRepo.findById(activeSubscription.planId);
+      if (!currentPlan) {
+        throw new NotFoundError('Subscription Plan', activeSubscription.planId);
+      }
+      
+      if (targetPlan.id === currentPlan.id) {
+        return {
+          allowed: false,
+          reason: 'You already have this plan',
+          currentPlan
+        };
+      }
+      
+      if (targetPlan.tierLevel <= currentPlan.tierLevel) {
+        return {
+          allowed: false,
+          reason: `You cannot ${targetPlan.tierLevel < currentPlan.tierLevel ? 'downgrade to a lower tier' : 'switch to the same tier'}. Only upgrades to higher tiers are allowed.`,
+          currentPlan
+        };
+      }
+      
+      return {
+        allowed: true,
+        requiresUpgrade: true,
+        currentPlan
+      };
+    } catch (error) {
+      return this.handleError(error, 'UserSubscriptionService.canPurchasePlan');
+    }
+  }
+
+  async subscribeUserToPlan(userId: string, planId: string, orderId?: string): Promise<UserSubscription> {
     try {
       const errors: Record<string, string> = {};
 
@@ -240,6 +285,20 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
         throw new ValidationServiceError('Subscription', errors);
       }
 
+      // Idempotency: Check if subscription already exists for this order
+      if (orderId) {
+        const existingSubscription = await this.userSubscriptionRepo.findByOrderId(orderId);
+        if (existingSubscription) {
+          return existingSubscription;
+        }
+      }
+
+      // Check if user can purchase this plan
+      const validation = await this.canPurchasePlan(userId, planId);
+      if (!validation.allowed) {
+        throw new InvalidOperationError('purchase plan', validation.reason || 'Plan purchase not allowed');
+      }
+
       // Fetch the plan to get tierLevel
       const plan = await this.subscriptionPlanRepo.findById(planId);
       if (!plan) {
@@ -248,9 +307,29 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
 
       const startDate = new Date();
 
+      // If this is an upgrade, update existing subscription
+      if (validation.requiresUpgrade) {
+        const currentSubscription = await this.userSubscriptionRepo.findActiveByUserId(userId);
+        if (currentSubscription) {
+          return await this.userSubscriptionRepo.update(currentSubscription.id, {
+            planId,
+            orderId,
+            status: 'active',
+            isLifetime: true,
+            tierLevel: plan.tierLevel,
+            highestTierReached: plan.tierLevel,
+            expiresAt: null,
+            autoRenew: null,
+            lifetimeActivatedAt: currentSubscription.lifetimeActivatedAt || new Date()
+          });
+        }
+      }
+
+      // Create new subscription
       return await this.createSubscription({
         userId,
         planId,
+        orderId,
         status: 'active',
         startedAt: startDate,
         isLifetime: true,

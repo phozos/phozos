@@ -23,6 +23,14 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 401, 'AUTH_REQUIRED', 'User not authenticated');
       }
 
+      // Check if user can purchase this plan
+      const validation = await userSubscriptionService.canPurchasePlan(userId, planId);
+      if (!validation.allowed) {
+        return this.sendError(res, 409, 'ALREADY_SUBSCRIBED', validation.reason || 'You already have an active subscription', {
+          currentPlan: validation.currentPlan
+        });
+      }
+
       // Fetch plan details
       const plan = await subscriptionPlanRepository.findById(planId);
       if (!plan) {
@@ -51,6 +59,7 @@ export class PaymentController extends BaseController {
           planId,
           planName: plan.name,
           isLifetime: true,
+          isUpgrade: validation.requiresUpgrade || false,
         },
       });
 
@@ -59,6 +68,7 @@ export class PaymentController extends BaseController {
         amount: order.amount,
         currency: order.currency,
         keyId: config.razorpay.keyId,
+        isUpgrade: validation.requiresUpgrade || false,
       });
     } catch (error) {
       return this.handleError(res, error, 'PaymentController.createOrder');
@@ -130,18 +140,21 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 400, 'PAYMENT_NOT_CAPTURED', 'Payment not captured');
       }
 
-      // Step 9: All validations passed - activate subscription
+      // Step 9: All validations passed - activate subscription with idempotency
       const subscription = await userSubscriptionService.subscribeUserToPlan(
         userId,
-        planId
+        planId,
+        orderId  // Idempotency key - prevents duplicate subscriptions on webhook retries
       );
 
-      // Step 10: Update subscription with payment reference
-      await userSubscriptionService.updateSubscription(subscription.id, {
-        paymentReference: paymentId,
-        paymentGateway: 'razorpay',
-        status: 'active',
-      });
+      // Step 10: Update subscription with payment reference if not already set
+      if (!subscription.paymentReference) {
+        await userSubscriptionService.updateSubscription(subscription.id, {
+          paymentReference: paymentId,
+          paymentGateway: 'razorpay',
+          status: 'active',
+        });
+      }
 
       return this.sendSuccess(res, {
         subscription,
@@ -241,7 +254,29 @@ export class PaymentController extends BaseController {
 
   private async handleOrderPaid(order: any) {
     console.log('Order paid:', order.id);
-    // Update order status in database if tracked separately
+    
+    try {
+      // Extract metadata from order
+      const userId = order.notes?.userId;
+      const planId = order.notes?.planId;
+      const orderId = order.id;
+
+      if (!userId || !planId) {
+        console.error('Order paid webhook missing required metadata:', { userId, planId, orderId });
+        return;
+      }
+
+      // Activate subscription with idempotency - prevents duplicate subscriptions on webhook retries
+      const subscription = await userSubscriptionService.subscribeUserToPlan(
+        userId,
+        planId,
+        orderId  // Idempotency key
+      );
+
+      console.log('Subscription activated via webhook:', subscription.id);
+    } catch (error) {
+      console.error('Error handling order.paid webhook:', error);
+    }
   }
 }
 

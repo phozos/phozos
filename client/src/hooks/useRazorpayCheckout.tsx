@@ -105,9 +105,18 @@ export function useRazorpayCheckout() {
         console.error('Payment failed:', response.error);
         window.location.href = '/dashboard?payment=failed';
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Payment initiation failed:', error);
-      throw error;
+      
+      // Handle 409 Conflict - User already has active subscription
+      if (error?.status === 409 || error?.code === 'ALREADY_SUBSCRIBED') {
+        const message = error?.message || 'You already have an active subscription. You can only upgrade to higher tier plans.';
+        alert(message);
+        // Reload the page to refresh subscription status
+        window.location.reload();
+      } else {
+        throw error;
+      }
     } finally {
       setIsProcessing(false);
     }

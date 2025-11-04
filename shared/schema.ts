@@ -857,6 +857,7 @@ export const userSubscriptions = pgTable("user_subscriptions", {
   highestTierReached: integer("highest_tier_reached"),
   startedAt: timestamp("started_at"),
   expiresAt: timestamp("expires_at"),
+  orderId: text("order_id"), // Razorpay order ID for idempotency
   paymentReference: text("payment_reference"),
   paymentGateway: text("payment_gateway"), // stripe, razorpay, etc.
   autoRenew: boolean("auto_renew"),

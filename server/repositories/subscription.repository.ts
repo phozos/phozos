@@ -32,6 +32,9 @@ export interface IUserSubscriptionRepository {
   create(data: InsertUserSubscription): Promise<UserSubscription>;
   update(id: string, data: Partial<UserSubscription>): Promise<UserSubscription>;
   delete(id: string): Promise<boolean>;
+  findActiveByUserId(userId: string): Promise<UserSubscription | undefined>;
+  findByOrderId(orderId: string): Promise<UserSubscription | undefined>;
+  hasActiveSubscription(userId: string): Promise<boolean>;
 }
 
 export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan, InsertSubscriptionPlan> implements ISubscriptionPlanRepository {
@@ -231,6 +234,51 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription,
       return results[0] as UserSubscription;
     } catch (error) {
       handleDatabaseError(error, 'UserSubscriptionRepository.update');
+    }
+  }
+
+  async findActiveByUserId(userId: string): Promise<UserSubscription | undefined> {
+    try {
+      const results = await db
+        .select()
+        .from(userSubscriptions)
+        .where(and(
+          eq(userSubscriptions.userId, userId),
+          eq(userSubscriptions.status, "active")
+        ))
+        .limit(1);
+      return results[0] as UserSubscription | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.findActiveByUserId');
+    }
+  }
+
+  async findByOrderId(orderId: string): Promise<UserSubscription | undefined> {
+    try {
+      const results = await db
+        .select()
+        .from(userSubscriptions)
+        .where(eq(userSubscriptions.orderId, orderId))
+        .limit(1);
+      return results[0] as UserSubscription | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.findByOrderId');
+    }
+  }
+
+  async hasActiveSubscription(userId: string): Promise<boolean> {
+    try {
+      const results = await db
+        .select({ id: userSubscriptions.id })
+        .from(userSubscriptions)
+        .where(and(
+          eq(userSubscriptions.userId, userId),
+          eq(userSubscriptions.status, "active")
+        ))
+        .limit(1);
+      return results.length > 0;
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.hasActiveSubscription');
     }
   }
 }

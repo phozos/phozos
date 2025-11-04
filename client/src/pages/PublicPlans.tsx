@@ -5,7 +5,7 @@ import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Crown, Zap, Award, Sparkles, Globe, Users, Heart, Rocket, TrendingUp } from "lucide-react";
+import { Check, Star, Crown, Zap, Award, Sparkles, Globe, Users, Heart, Rocket, TrendingUp, CheckCircle2, ArrowUp } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -14,6 +14,7 @@ import { SEO } from "@/components/SEO";
 import { FAQSchema } from "@/components/StructuredData";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserSubscription } from "@/hooks/useUserSubscription";
 
 interface SubscriptionPlan {
   id: string;
@@ -41,6 +42,7 @@ export default function PublicPlans() {
 
   const { initiatePayment, isProcessing } = useRazorpayCheckout();
   const { user } = useAuth();
+  const { data: userSubscription } = useUserSubscription();
 
   const handlePurchasePlan = async (plan: SubscriptionPlan) => {
     if (!user) {
@@ -238,6 +240,13 @@ export default function PublicPlans() {
                 const isPopular = index === 1; // Make second plan (Achiever) most popular
                 const isFree = parseFloat(plan.price) === 0;
                 
+                // Determine subscription status
+                const currentPlanId = userSubscription?.subscription?.planId;
+                const currentTierLevel = userSubscription?.plan?.tierLevel || 0;
+                const isCurrentPlan = currentPlanId === plan.id;
+                const canUpgrade = user && currentPlanId && plan.tierLevel && plan.tierLevel > currentTierLevel;
+                const isLowerTier = user && currentPlanId && plan.tierLevel && plan.tierLevel <= currentTierLevel && !isCurrentPlan;
+                
                 return (
                   <Card 
                     key={plan.id} 
@@ -262,8 +271,16 @@ export default function PublicPlans() {
                       </div>
                     )}
                     
+                    {/* Current Plan Badge */}
+                    {isCurrentPlan && (
+                      <Badge className="absolute top-4 left-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2 shadow-lg z-20 flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Current Plan
+                      </Badge>
+                    )}
+                    
                     {/* Lifetime Access Badge */}
-                    {plan.isLifetime && (
+                    {plan.isLifetime && !isCurrentPlan && (
                       <Badge className="absolute top-4 right-4 bg-green-600 text-white px-3 py-1">
                         Lifetime Access
                       </Badge>
@@ -360,23 +377,45 @@ export default function PublicPlans() {
                       {/* CTA Button */}
                       <Button 
                         onClick={() => handlePurchasePlan(plan)}
-                        disabled={isProcessing}
+                        disabled={isProcessing || isCurrentPlan || !!isLowerTier}
                         className={`
                           w-full mt-8 text-base font-semibold py-6 relative overflow-hidden group
-                          ${isPopular 
+                          ${isCurrentPlan || isLowerTier 
+                            ? 'opacity-60 cursor-not-allowed' 
+                            : isPopular || canUpgrade
                             ? 'bg-gradient-to-r from-primary to-amber-500 hover:from-primary/90 hover:to-amber-500/90 text-white shadow-lg' 
                             : 'border-2 hover:border-primary/50'
                           }
                         `}
-                        variant={isPopular ? 'default' : 'outline'}
+                        variant={isPopular || canUpgrade ? 'default' : 'outline'}
                         size="lg"
                         data-testid={`button-choose-plan-${plan.name.toLowerCase()}`}
+                        title={isLowerTier ? 'Cannot downgrade to lower tier' : isCurrentPlan ? 'This is your current plan' : ''}
                       >
                         <div className="flex items-center justify-center space-x-2">
-                          <Rocket className="w-5 h-5" />
-                          <span>{isProcessing ? 'Processing...' : (isFree ? 'Get Started Free' : 'Purchase Lifetime Access')}</span>
+                          {isCurrentPlan ? (
+                            <>
+                              <CheckCircle2 className="w-5 h-5" />
+                              <span>Current Plan</span>
+                            </>
+                          ) : isLowerTier ? (
+                            <>
+                              <Rocket className="w-5 h-5" />
+                              <span>Lower Tier</span>
+                            </>
+                          ) : canUpgrade ? (
+                            <>
+                              <ArrowUp className="w-5 h-5" />
+                              <span>Upgrade Now</span>
+                            </>
+                          ) : (
+                            <>
+                              <Rocket className="w-5 h-5" />
+                              <span>{isProcessing ? 'Processing...' : (isFree ? 'Get Started Free' : 'Purchase Lifetime Access')}</span>
+                            </>
+                          )}
                         </div>
-                        {isPopular && (
+                        {(isPopular || canUpgrade) && !isCurrentPlan && !isLowerTier && (
                           <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
                         )}
                       </Button>
