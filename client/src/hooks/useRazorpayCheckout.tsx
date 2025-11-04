@@ -27,21 +27,15 @@ interface RazorpayOptions {
 }
 
 interface CreateOrderResponse {
-  success: boolean;
-  data: {
-    orderId: string;
-    amount: number;
-    currency: string;
-    keyId: string;
-  };
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
 }
 
 interface VerifyPaymentResponse {
-  success: boolean;
-  data: {
-    subscription: any;
-    paymentId: string;
-  };
+  subscription: any;
+  paymentId: string;
 }
 
 export function useRazorpayCheckout() {
@@ -71,7 +65,7 @@ export function useRazorpayCheckout() {
 
       // Step 1: Create Razorpay order
       const orderResponse = await createOrderMutation.mutateAsync({ planId });
-      const { orderId, amount, currency, keyId } = orderResponse.data;
+      const { orderId, amount, currency, keyId } = orderResponse;
 
       // Step 2: Open Razorpay checkout
       const options: RazorpayOptions = {

@@ -20,19 +20,13 @@ export class PaymentController extends BaseController {
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not authenticated'
-        });
+        return this.sendError(res, 401, 'AUTH_REQUIRED', 'User not authenticated');
       }
 
       // Fetch plan details
       const plan = await subscriptionPlanRepository.findById(planId);
       if (!plan) {
-        return res.status(404).json({
-          success: false,
-          message: 'Plan not found'
-        });
+        return this.sendError(res, 404, 'PLAN_NOT_FOUND', 'Plan not found');
       }
 
       // Convert price to paise (Razorpay uses smallest currency unit)
@@ -60,14 +54,11 @@ export class PaymentController extends BaseController {
         },
       });
 
-      return res.status(200).json({
-        success: true,
-        data: {
-          orderId: order.id,
-          amount: order.amount,
-          currency: order.currency,
-          keyId: config.razorpay.keyId,
-        }
+      return this.sendSuccess(res, {
+        orderId: order.id,
+        amount: order.amount,
+        currency: order.currency,
+        keyId: config.razorpay.keyId,
       });
     } catch (error) {
       return this.handleError(res, error, 'PaymentController.createOrder');
@@ -92,10 +83,7 @@ export class PaymentController extends BaseController {
       const userId = req.user?.id;
 
       if (!userId) {
-        return res.status(401).json({
-          success: false,
-          message: 'User not authenticated'
-        });
+        return this.sendError(res, 401, 'AUTH_REQUIRED', 'User not authenticated');
       }
 
       // Step 1: Verify payment signature
@@ -106,10 +94,7 @@ export class PaymentController extends BaseController {
       );
 
       if (!isValid) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid payment signature'
-        });
+        return this.sendError(res, 400, 'INVALID_SIGNATURE', 'Invalid payment signature');
       }
 
       // Step 2: Fetch order details from Razorpay to get original metadata
@@ -117,36 +102,24 @@ export class PaymentController extends BaseController {
 
       // Step 3: Validate planId matches the order metadata (CRITICAL SECURITY CHECK)
       if (!order.notes?.planId || order.notes.planId !== planId) {
-        return res.status(400).json({
-          success: false,
-          message: 'Plan ID mismatch - payment verification failed'
-        });
+        return this.sendError(res, 400, 'PLAN_MISMATCH', 'Plan ID mismatch - payment verification failed');
       }
 
       // Step 4: Validate userId matches the order metadata
       if (order.notes.userId !== userId) {
-        return res.status(400).json({
-          success: false,
-          message: 'User ID mismatch - payment verification failed'
-        });
+        return this.sendError(res, 400, 'USER_MISMATCH', 'User ID mismatch - payment verification failed');
       }
 
       // Step 5: Fetch plan details to validate amount
       const plan = await subscriptionPlanRepository.findById(planId);
       if (!plan) {
-        return res.status(404).json({
-          success: false,
-          message: 'Plan not found'
-        });
+        return this.sendError(res, 404, 'PLAN_NOT_FOUND', 'Plan not found');
       }
 
       // Step 6: Validate payment amount matches plan price (CRITICAL SECURITY CHECK)
       const expectedAmountInPaise = Math.round(parseFloat(plan.price) * 100);
       if (order.amount !== expectedAmountInPaise) {
-        return res.status(400).json({
-          success: false,
-          message: 'Payment amount mismatch - verification failed'
-        });
+        return this.sendError(res, 400, 'AMOUNT_MISMATCH', 'Payment amount mismatch - verification failed');
       }
 
       // Step 7: Fetch payment details from Razorpay
@@ -154,10 +127,7 @@ export class PaymentController extends BaseController {
 
       // Step 8: Check if payment was successful
       if (paymentDetails.status !== 'captured') {
-        return res.status(400).json({
-          success: false,
-          message: 'Payment not captured'
-        });
+        return this.sendError(res, 400, 'PAYMENT_NOT_CAPTURED', 'Payment not captured');
       }
 
       // Step 9: All validations passed - activate subscription
@@ -173,12 +143,9 @@ export class PaymentController extends BaseController {
         status: 'active',
       });
 
-      return res.status(200).json({
-        success: true,
-        data: {
-          subscription,
-          paymentId,
-        }
+      return this.sendSuccess(res, {
+        subscription,
+        paymentId,
       });
     } catch (error) {
       return this.handleError(res, error, 'PaymentController.verifyPayment');
