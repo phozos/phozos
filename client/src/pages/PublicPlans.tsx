@@ -15,6 +15,7 @@ import { FAQSchema } from "@/components/StructuredData";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
+import { UpgradeConfirmationDialog } from "@/components/UpgradeConfirmationDialog";
 
 interface SubscriptionPlan {
   id: string;
@@ -40,7 +41,14 @@ export default function PublicPlans() {
     '/api/subscription/plans'
   );
 
-  const { initiatePayment, isProcessing } = useRazorpayCheckout();
+  const { 
+    initiatePayment, 
+    isProcessing, 
+    upgradeData, 
+    showUpgradeDialog, 
+    handleUpgradeConfirm, 
+    cancelUpgrade 
+  } = useRazorpayCheckout();
   const { user } = useAuth();
   const { data: userSubscription } = useUserSubscription();
 
@@ -582,6 +590,15 @@ export default function PublicPlans() {
 
       <Footer />
       </div>
+
+      {/* Upgrade Confirmation Dialog */}
+      <UpgradeConfirmationDialog
+        open={showUpgradeDialog}
+        onOpenChange={cancelUpgrade}
+        onConfirm={handleUpgradeConfirm}
+        upgradeData={upgradeData}
+        isProcessing={isProcessing}
+      />
     </>
   );
 }

@@ -7,6 +7,7 @@ import { paymentTransactionService } from '../services/domain/payment-transactio
 import { subscriptionPlanRepository } from '../repositories/subscription.repository';
 import { webhookDeduplicationService } from '../services/infrastructure/webhook-deduplication.service';
 import { paymentFailureService } from '../services/domain/payment-failure.service';
+import { prorationService } from '../services/domain/proration.service';
 import config from '../config';
 import crypto from 'crypto';
 import logger from '../utils/logger';
@@ -55,8 +56,95 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 404, 'PLAN_NOT_FOUND', 'Plan not found');
       }
 
-      // Convert price to paise (Razorpay uses smallest currency unit)
-      const amountInPaise = Math.round(parseFloat(plan.price) * 100);
+      // Calculate proration amount for upgrades
+      let amountInPaise: number;
+      let isUpgrade = false;
+      let prorationAmount = 0;
+      let alreadyPaid = 0;
+      let originalPrice = parseFloat(plan.price);
+
+      if (validation.requiresUpgrade) {
+        // This is an upgrade - calculate proration
+        logger.info('Calculating proration for upgrade', {
+          userId,
+          planId,
+          planName: plan.name,
+        });
+
+        const prorationResult = await prorationService.calculate(userId, planId);
+
+        if (!prorationResult.allowed) {
+          // Proration not allowed (e.g., downgrade, same plan, currency mismatch)
+          logger.warn('Proration calculation rejected', {
+            userId,
+            planId,
+            reason: prorationResult.reason,
+          });
+          return this.sendError(
+            res, 
+            400, 
+            'PRORATION_NOT_ALLOWED', 
+            prorationResult.reason || 'This upgrade is not allowed'
+          );
+        }
+
+        if (!prorationResult.requiresPayment) {
+          // Zero-cost upgrade: User already paid full amount
+          logger.info('Zero-cost upgrade detected - upgrading without payment', {
+            userId,
+            planId,
+            planName: plan.name,
+            alreadyPaid: prorationResult.alreadyPaid,
+            newPlanPrice: prorationResult.newPlanPrice,
+            reason: prorationResult.reason,
+          });
+
+          // Directly upgrade the user's subscription without creating Razorpay order
+          const upgradedSubscription = await userSubscriptionService.upgradeSubscription(userId, planId);
+
+          logger.info('Zero-cost upgrade completed successfully', {
+            userId,
+            planId,
+            subscriptionId: upgradedSubscription.id,
+            status: upgradedSubscription.status,
+          });
+
+          return this.sendSuccess(res, {
+            subscription: upgradedSubscription,
+            message: 'Upgraded successfully without additional payment',
+            isZeroCostUpgrade: true,
+            alreadyPaid: prorationResult.alreadyPaid,
+            newPlanPrice: prorationResult.newPlanPrice,
+          });
+        }
+
+        // Use prorated amount for upgrade
+        isUpgrade = true;
+        prorationAmount = prorationResult.prorationAmount;
+        alreadyPaid = prorationResult.alreadyPaid;
+        originalPrice = prorationResult.newPlanPrice;
+        amountInPaise = Math.round(prorationAmount * 100);
+
+        logger.info('Proration calculated successfully', {
+          userId,
+          planId,
+          originalPrice,
+          alreadyPaid,
+          prorationAmount,
+          amountInPaise,
+        });
+      } else {
+        // New subscription - charge full price
+        amountInPaise = Math.round(originalPrice * 100);
+        
+        logger.info('New subscription - charging full price', {
+          userId,
+          planId,
+          planName: plan.name,
+          amount: originalPrice,
+          amountInPaise,
+        });
+      }
 
       // Generate unique receipt ID (max 40 chars for Razorpay)
       // Format: timestamp_hash (e.g., 1730668192000_a1b2c3d4e5f6g7h8i9)
@@ -67,7 +155,7 @@ export class PaymentController extends BaseController {
         .substring(0, 18);
       const receiptId = `${Date.now()}_${receiptHash}`;
 
-      // Create Razorpay order
+      // Create Razorpay order with proration metadata
       const order = await razorpayService.createOrder({
         amount: amountInPaise,
         currency: plan.currency || 'INR',
@@ -77,7 +165,10 @@ export class PaymentController extends BaseController {
           planId,
           planName: plan.name,
           isLifetime: true,
-          isUpgrade: validation.requiresUpgrade || false,
+          isUpgrade,
+          originalPrice: originalPrice.toString(),
+          prorationAmount: prorationAmount.toString(),
+          alreadyPaid: alreadyPaid.toString(),
         },
       });
 
@@ -87,7 +178,10 @@ export class PaymentController extends BaseController {
         orderId: order.id,
         amount: amountInPaise,
         currency: order.currency,
-        isUpgrade: validation.requiresUpgrade || false,
+        isUpgrade,
+        originalPrice,
+        prorationAmount,
+        alreadyPaid,
       });
 
       return this.sendSuccess(res, {
@@ -95,7 +189,10 @@ export class PaymentController extends BaseController {
         amount: order.amount,
         currency: order.currency,
         keyId: config.razorpay.keyId,
-        isUpgrade: validation.requiresUpgrade || false,
+        isUpgrade,
+        originalPrice,
+        prorationAmount,
+        alreadyPaid,
       });
     } catch (error) {
       logger.error('Payment order creation error', {
@@ -178,18 +275,82 @@ export class PaymentController extends BaseController {
         return this.sendError(res, 404, 'PLAN_NOT_FOUND', 'Plan not found');
       }
 
-      // Step 6: Validate payment amount matches plan price (CRITICAL SECURITY CHECK)
-      const expectedAmountInPaise = Math.round(parseFloat(plan.price) * 100);
+      // Step 6: Validate payment amount (CRITICAL SECURITY CHECK)
+      // For upgrades: validate against prorated amount from order notes
+      // For new subscriptions: validate against full plan price
+      const isUpgrade = order.notes?.isUpgrade === true || order.notes?.isUpgrade === 'true';
+      let expectedAmountInPaise: number;
+
+      if (isUpgrade) {
+        // Upgrade: Validate against prorated amount from order notes
+        const prorationAmount = parseFloat(order.notes?.prorationAmount || '0');
+        const alreadyPaid = parseFloat(order.notes?.alreadyPaid || '0');
+        const originalPrice = parseFloat(order.notes?.originalPrice || plan.price);
+
+        if (!prorationAmount || prorationAmount <= 0) {
+          logger.error('Upgrade payment missing proration metadata', {
+            userId,
+            orderId,
+            paymentId,
+            planId,
+            orderNotes: order.notes,
+          });
+          return this.sendError(
+            res, 
+            400, 
+            'PAYMENT_METADATA_INVALID', 
+            'Payment metadata is invalid. Please restart the payment process or contact support.'
+          );
+        }
+
+        expectedAmountInPaise = Math.round(prorationAmount * 100);
+
+        logger.info('Validating upgrade payment amount', {
+          userId,
+          orderId,
+          paymentId,
+          planId,
+          isUpgrade: true,
+          originalPrice,
+          alreadyPaid,
+          prorationAmount,
+          expectedAmountInPaise,
+          actualAmount: order.amount,
+        });
+      } else {
+        // New subscription: Validate against full plan price
+        expectedAmountInPaise = Math.round(parseFloat(plan.price) * 100);
+
+        logger.info('Validating new subscription payment amount', {
+          userId,
+          orderId,
+          paymentId,
+          planId,
+          isUpgrade: false,
+          planPrice: plan.price,
+          expectedAmountInPaise,
+          actualAmount: order.amount,
+        });
+      }
+
+      // Validate the amount matches expected amount
       if (order.amount !== expectedAmountInPaise) {
         logger.error('Payment amount mismatch', {
           userId,
           orderId,
           paymentId,
           planId,
+          isUpgrade,
           expectedAmount: expectedAmountInPaise,
           actualAmount: order.amount,
+          orderNotes: order.notes,
         });
-        return this.sendError(res, 400, 'PAYMENT_AMOUNT_MISMATCH', 'The payment amount does not match the subscription plan price. Please try again or contact support.');
+        return this.sendError(
+          res, 
+          400, 
+          'PAYMENT_AMOUNT_MISMATCH', 
+          `The payment amount does not match the expected ${isUpgrade ? 'upgrade' : 'subscription'} price. Please try again or contact support.`
+        );
       }
 
       logger.info('Payment amount validated successfully', {
@@ -197,7 +358,9 @@ export class PaymentController extends BaseController {
         orderId,
         paymentId,
         planId,
+        isUpgrade,
         amount: order.amount,
+        amountInRupees: order.amount / 100,
       });
 
       // Step 7: Fetch payment details from Razorpay
