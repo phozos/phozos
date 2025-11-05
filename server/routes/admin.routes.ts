@@ -87,11 +87,17 @@ router.post('/forum/posts/:id/restore', csrfProtection, asyncHandler((req: Authe
 router.delete('/forum/posts/:id/permanent', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.permanentlyDeletePost(req, res)));
 
 // Force Logout
-router.post('/force-logout-all', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceLogoutAll(req, res)));
+// TODO: Implement forceLogoutAll method in AdminController
+// router.post('/force-logout-all', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceLogoutAll(req, res)));
 
 // Staff Invitation Links
 router.post('/staff-invitation-links', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createStaffInvitationLink(req, res)));
 router.get('/staff-invitation-links', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getStaffInvitationLinks(req, res)));
 router.put('/staff-invitation-links/:id/refresh', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.refreshStaffInvitationLink(req, res)));
+
+// Subscription Analytics
+router.get('/analytics/subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionAnalytics(req, res)));
+router.get('/analytics/revenue', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRevenueAnalytics(req, res)));
+router.get('/analytics/growth', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionGrowth(req, res)));
 
 export default router;

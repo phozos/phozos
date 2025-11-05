@@ -81,12 +81,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   apiRouter.use(checkMaintenanceMode);
 
   // Initialize WebSocket service and handlers via DI container (Phase 5.4)
-  const wsService = new WebSocketService(httpServer, forumService);
-  const wsHandlers = new WebSocketEventHandlers(wsService, forumService);
-  
-  // Bind to DI container for centralized access
-  container.bind(TYPES.WebSocketService, wsService);
-  container.bind(TYPES.WebSocketEventHandlers, wsHandlers);
+  try {
+    const wsService = new WebSocketService(httpServer, forumService);
+    const wsHandlers = new WebSocketEventHandlers(wsService, forumService);
+    
+    // Bind to DI container for centralized access
+    container.bind(TYPES.WebSocketService, wsService);
+    container.bind(TYPES.WebSocketEventHandlers, wsHandlers);
+  } catch (error) {
+    console.error('WebSocket server error:', error instanceof Error ? error.message : 'Unknown error');
+    console.log('⚠️ Server continuing without WebSocket support');
+  }
 
   // Mount domain routes
   apiRouter.use('/auth', authRoutes);

@@ -123,6 +123,7 @@ export const TYPES = {
   IAdminTestimonialService: Symbol.for('IAdminTestimonialService'),
   IAdminUniversityService: Symbol.for('IAdminUniversityService'),
   IAdminUserService: Symbol.for('IAdminUserService'),
+  ISubscriptionAnalyticsService: Symbol.for('ISubscriptionAnalyticsService'),
   
   // Integration Service Tokens (Phase 3)
   IAIMatchingService: Symbol.for('IAIMatchingService'),
@@ -272,6 +273,7 @@ class Container implements IContainer {
     const { adminTestimonialService } = await import('./domain/admin/testimonial-admin.service');
     const { adminUniversityService } = await import('./domain/admin/university-admin.service');
     const { adminUserService } = await import('./domain/admin/user-admin.service');
+    const { subscriptionAnalyticsService } = await import('./domain/subscription-analytics.service');
     
     const { aiMatchingService } = await import('./integration/ai-matching.service');
     
@@ -305,6 +307,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IAdminTestimonialService, adminTestimonialService);
     this.bindings.set(TYPES.IAdminUniversityService, adminUniversityService);
     this.bindings.set(TYPES.IAdminUserService, adminUserService);
+    this.bindings.set(TYPES.ISubscriptionAnalyticsService, subscriptionAnalyticsService);
     
     // Bind integration services
     this.bindings.set(TYPES.IAIMatchingService, aiMatchingService);

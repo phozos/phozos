@@ -10,6 +10,7 @@ import { IAdminTestimonialService } from '../services/domain/admin/testimonial-a
 import { IAdminForumModerationService } from '../services/domain/admin/forum-moderation.service';
 import { IAdminStaffInvitationService } from '../services/domain/admin/staff-invitation.service';
 import { IAdminAnalyticsService } from '../services/domain/admin/analytics-admin.service';
+import { ISubscriptionAnalyticsService } from '../services/domain/subscription-analytics.service';
 import { IUserProfileService } from '../services/domain/user-profile.service';
 import { IRegistrationService } from '../services/domain/registration.service';
 import { ICompanyProfileService } from '../services/domain/company-profile.service';
@@ -1692,6 +1693,52 @@ export class AdminController extends BaseController {
       return this.sendFileDownload(res, csvContent, 'universities-sample.csv', 'text/csv');
     } catch (error) {
       return this.handleError(res, error, 'AdminController.getSampleCSV');
+    }
+  }
+
+  async getSubscriptionAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const [subscriptionMetrics, churnMetrics, paymentMetrics, upgradeDowngradeMetrics] = await Promise.all([
+        analyticsService.getSubscriptionMetrics(),
+        analyticsService.getChurnMetrics(),
+        analyticsService.getPaymentMetrics(),
+        analyticsService.getUpgradeDowngradeMetrics()
+      ]);
+
+      return this.sendSuccess(res, {
+        subscriptions: subscriptionMetrics,
+        churn: churnMetrics,
+        payments: paymentMetrics,
+        upgradesDowngrades: upgradeDowngradeMetrics
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getSubscriptionAnalytics');
+    }
+  }
+
+  async getRevenueAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const revenueMetrics = await analyticsService.getRevenueMetrics();
+
+      return this.sendSuccess(res, revenueMetrics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getRevenueAnalytics');
+    }
+  }
+
+  async getSubscriptionGrowth(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const growthData = await analyticsService.getSubscriptionGrowth();
+
+      return this.sendSuccess(res, growthData);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getSubscriptionGrowth');
     }
   }
 }
