@@ -110,6 +110,7 @@ const securityConfigSchema = z.object({
  */
 const emailConfigSchema = z.object({
   SENDGRID_API_KEY: z.string().optional(),
+  SENDGRID_FROM_EMAIL: z.string().email().optional(),
 });
 
 /**
@@ -118,6 +119,7 @@ const emailConfigSchema = z.object({
 const adminConfigSchema = z.object({
   ADMIN_PASSWORD: z.string().optional(),
   ADMIN_IPS: commaSeparatedSchema,
+  ADMIN_ALERT_EMAIL: z.string().email().optional(),
 });
 
 /**
@@ -206,6 +208,14 @@ const razorpayConfigSchema = z.object({
 });
 
 /**
+ * Alerting configuration schema
+ */
+const alertingConfigSchema = z.object({
+  ENABLE_FAILED_PAYMENT_ALERTS: booleanSchema,
+  SLACK_WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
+});
+
+/**
  * Complete configuration schema combining all sections
  */
 const configSchema = z.object({
@@ -220,6 +230,7 @@ const configSchema = z.object({
   cookies: cookiesConfigSchema,
   build: buildConfigSchema,
   razorpay: razorpayConfigSchema,
+  alerting: alertingConfigSchema,
 });
 
 /**
@@ -243,10 +254,12 @@ function validateConfiguration() {
       },
       email: {
         SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+        SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL,
       },
       admin: {
         ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
         ADMIN_IPS: process.env.ADMIN_IPS,
+        ADMIN_ALERT_EMAIL: process.env.ADMIN_ALERT_EMAIL,
       },
       features: {
         SEO_META_ENABLED: process.env.SEO_META_ENABLED,
@@ -282,6 +295,10 @@ function validateConfiguration() {
         keySecret: process.env.RAZORPAY_KEY_SECRET,
         webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
         webhookIps: process.env.RAZORPAY_WEBHOOK_IPS,
+      },
+      alerting: {
+        ENABLE_FAILED_PAYMENT_ALERTS: process.env.ENABLE_FAILED_PAYMENT_ALERTS,
+        SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
       },
     };
 
@@ -341,6 +358,7 @@ export type CorsConfig = z.infer<typeof corsConfigSchema>;
 export type CookiesConfig = z.infer<typeof cookiesConfigSchema>;
 export type BuildConfig = z.infer<typeof buildConfigSchema>;
 export type RazorpayConfig = z.infer<typeof razorpayConfigSchema>;
+export type AlertingConfig = z.infer<typeof alertingConfigSchema>;
 
 /**
  * Main configuration object with all sections
@@ -361,6 +379,7 @@ export const corsConfig: CorsConfig = config.cors;
 export const cookiesConfig: CookiesConfig = config.cookies;
 export const buildConfig: BuildConfig = config.build;
 export const razorpayConfig: RazorpayConfig = config.razorpay;
+export const alertingConfig: AlertingConfig = config.alerting;
 
 /**
  * Helper function to check if running in development mode

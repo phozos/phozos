@@ -21,6 +21,7 @@ import { errorHandler } from "./middleware/error-handler";
 import { sendError } from "./utils/response";
 import { requireAdmin } from "./middleware/authentication";
 import { injectSEOMeta } from "./middleware/seo-meta";
+import { paymentAlertsScheduler } from "./services/infrastructure/payment-alerts-scheduler";
 
 // Phase 1: Centralized configuration module (replaces scattered process.env usage)
 import config, { isDev, isProd, featuresConfig, corsConfig, securityConfig } from "./config/index";
@@ -331,5 +332,16 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
     host: "0.0.0.0",
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Start payment alerts scheduler for daily digest
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      paymentAlertsScheduler.start();
+      console.log('✅ Payment alerts scheduler started');
+    } catch (error) {
+      console.error('❌ Failed to start payment alerts scheduler:', error);
+      console.error('   Daily digest will not be sent automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
   });
 })();

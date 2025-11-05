@@ -925,6 +925,7 @@ export const failedPayments = pgTable("failed_payments", {
   razorpayErrorDescription: text("razorpay_error_description"),
   failedAt: timestamp("failed_at").notNull().defaultNow(),
   notifiedAt: timestamp("notified_at"),
+  digestSentAt: timestamp("digest_sent_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

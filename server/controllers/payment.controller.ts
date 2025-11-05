@@ -5,8 +5,10 @@ import { razorpayService } from '../services/integration/razorpay.service';
 import { userSubscriptionService } from '../services/domain/user-subscription.service';
 import { paymentTransactionService } from '../services/domain/payment-transaction.service';
 import { subscriptionPlanRepository } from '../repositories/subscription.repository';
+import { userRepository } from '../repositories';
 import { webhookDeduplicationService } from '../services/infrastructure/webhook-deduplication.service';
 import { paymentFailureService } from '../services/domain/payment-failure.service';
+import { paymentAlertingService } from '../services/domain/payment-alerting.service';
 import { prorationService } from '../services/domain/proration.service';
 import config from '../config';
 import crypto from 'crypto';
@@ -620,8 +622,57 @@ export class PaymentController extends BaseController {
         orderId: payment.order_id,
       });
 
-      // TODO: Send notification to user about payment failure
-      // This would typically integrate with a notification service
+      // Send alerting notifications (email + Slack if configured)
+      await paymentAlertingService.sendFailedPaymentEmail({
+        userId,
+        planId,
+        orderId: payment.order_id,
+        paymentId: payment.id,
+        amount: payment.amount ? payment.amount / 100 : undefined,
+        currency: payment.currency || 'INR',
+        failureReason: 'payment_failed',
+        razorpayErrorCode: payment.error_code,
+        razorpayErrorDescription: payment.error_description,
+      });
+
+      // If Slack webhook is configured, send alert
+      if (payment.error_code) {
+        try {
+          const user = await userRepository.findById(userId);
+          const userName = user.firstName && user.lastName 
+            ? `${user.firstName} ${user.lastName}` 
+            : user.email;
+          
+          let planName = 'Unknown Plan';
+          if (planId) {
+            try {
+              const plan = await subscriptionPlanRepository.findById(planId);
+              planName = plan.name;
+            } catch (err) {
+              logger.warn('Failed to fetch plan for Slack alert', { planId, err });
+            }
+          }
+
+          await paymentAlertingService.sendSlackAlert({
+            userId,
+            userEmail: user.email,
+            userName,
+            planName,
+            amount: payment.amount ? payment.amount / 100 : undefined,
+            currency: payment.currency || 'INR',
+            failureReason: 'payment_failed',
+            razorpayErrorCode: payment.error_code,
+            paymentId: payment.id,
+            orderId: payment.order_id,
+          });
+        } catch (alertError) {
+          logger.error('Failed to send Slack alert for payment failure', {
+            error: alertError,
+            userId,
+            paymentId: payment.id,
+          });
+        }
+      }
     } catch (error) {
       logger.error('Error handling payment failed webhook', {
         error,

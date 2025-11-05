@@ -105,6 +105,7 @@ export const TYPES = {
   IForumService: Symbol.for('IForumService'),
   INotificationService: Symbol.for('INotificationService'),
   IPaymentService: Symbol.for('IPaymentService'),
+  IPaymentAlertingService: Symbol.for('IPaymentAlertingService'),
   IRegistrationService: Symbol.for('IRegistrationService'),
   ISubscriptionService: Symbol.for('ISubscriptionService'),
   ITemporaryPasswordService: Symbol.for('ITemporaryPasswordService'),
@@ -256,6 +257,7 @@ class Container implements IContainer {
     const { forumService } = await import('./domain/forum.service');
     const { notificationService } = await import('./domain/notification.service');
     const { paymentService } = await import('./domain/payment.service');
+    const { paymentAlertingService } = await import('./domain/payment-alerting.service');
     const { registrationService } = await import('./domain/registration.service');
     const { subscriptionService } = await import('./domain/subscription.service');
     const { temporaryPasswordService } = await import('./domain/temporaryPassword.service');
@@ -289,6 +291,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IForumService, forumService);
     this.bindings.set(TYPES.INotificationService, notificationService);
     this.bindings.set(TYPES.IPaymentService, paymentService);
+    this.bindings.set(TYPES.IPaymentAlertingService, paymentAlertingService);
     this.bindings.set(TYPES.IRegistrationService, registrationService);
     this.bindings.set(TYPES.ISubscriptionService, subscriptionService);
     this.bindings.set(TYPES.ITemporaryPasswordService, temporaryPasswordService);
