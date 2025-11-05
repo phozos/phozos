@@ -22,10 +22,13 @@ export interface IProrationService {
 
 export class ProrationService extends BaseService implements IProrationService {
   constructor(
-    private userSubscriptionService: IUserSubscriptionService = container.get<IUserSubscriptionService>(TYPES.IUserSubscriptionService),
     private subscriptionPlanRepo: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository)
   ) {
     super();
+  }
+
+  private get userSubscriptionService(): IUserSubscriptionService {
+    return container.get<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
   }
 
   async calculate(userId: string, targetPlanId: string): Promise<ProrationCalculationResult> {
