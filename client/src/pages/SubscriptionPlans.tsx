@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
 import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Edit, Trash2, DollarSign, Users, Settings, Crown } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { PremiumBadgeSelector, PremiumBadgeDisplay, BadgeKey, premiumBadges } from "@/components/PremiumBadges";
@@ -55,9 +56,13 @@ interface UserSubscription {
     planId: string;
     status: string;
     startedAt: string;
-    expiresAt: string;
+    expiresAt: string | null;
+    orderId?: string;
     paymentReference?: string;
     paymentGateway?: string;
+    amountPaid?: string;
+    currency?: string;
+    paidAt?: string;
     autoRenew: boolean;
     universitiesUsed: number;
     countriesUsed: number;
@@ -67,8 +72,8 @@ interface UserSubscription {
   user: {
     id: string;
     email: string;
-    firstName: string;
-    lastName: string;
+    firstName: string | null;
+    lastName: string | null;
   };
   plan: {
     id: string;
@@ -78,19 +83,76 @@ interface UserSubscription {
   };
 }
 
+interface PaymentHistory {
+  subscriptionId: string;
+  planId: string;
+  planName: string;
+  orderId: string | null;
+  paymentReference: string | null;
+  paymentGateway: string | null;
+  amountPaid: string | null;
+  currency: string | null;
+  paidAt: string | null;
+  status: string;
+  startedAt: string;
+  expiresAt: string | null;
+}
+
+interface SubscriptionEvent {
+  id: string;
+  subscriptionId: string;
+  userId: string;
+  eventType: string;
+  oldStatus: string | null;
+  newStatus: string | null;
+  metadata: any;
+  createdAt: string;
+}
+
+interface FailedPayment {
+  id: string;
+  userId: string;
+  planId: string | null;
+  orderId: string | null;
+  paymentId: string | null;
+  amount: string | null;
+  currency: string | null;
+  failureReason: string | null;
+  razorpayErrorCode: string | null;
+  razorpayErrorDescription: string | null;
+  failedAt: string;
+  notifiedAt: string | null;
+  createdAt: string;
+  userEmail: string | null;
+  userFirstName: string | null;
+  userLastName: string | null;
+  planName: string | null;
+  planPrice: string | null;
+}
+
 export default function SubscriptionPlans() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [selectedBadge, setSelectedBadge] = useState<BadgeKey>("platinum");
   const [editSelectedBadge, setEditSelectedBadge] = useState<BadgeKey>("platinum");
+  
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [planFilter, setPlanFilter] = useState<string>("all");
+  const [searchText, setSearchText] = useState("");
+  const [sortBy, setSortBy] = useState<"date" | "email" | "plan">("date");
+  
+  const [paymentHistoryDialog, setPaymentHistoryDialog] = useState<{ open: boolean; userId: string | null }>({ open: false, userId: null });
+  const [eventsDialog, setEventsDialog] = useState<{ open: boolean; userId: string | null }>({ open: false, userId: null });
+  const [cancelDialog, setCancelDialog] = useState<{ open: boolean; subscriptionId: string | null; userEmail: string | null }>({ open: false, subscriptionId: null, userEmail: null });
+  const [upgradeDialog, setUpgradeDialog] = useState<{ open: boolean; subscription: UserSubscription | null }>({ open: false, subscription: null });
+  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string>("");
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, loading } = useAuth();
   
-  // Check if user is authenticated and is admin
   const isAdmin = user?.userType === 'team_member' && user?.teamRole === 'admin';
 
-  // Fetch subscription plans (only when authenticated as admin)
   const { data: plans = [], isLoading: plansLoading } = useApiQuery<SubscriptionPlan[]>(
     ["/api/admin/subscription-plans"],
     '/api/admin/subscription-plans',
@@ -98,7 +160,6 @@ export default function SubscriptionPlans() {
     { enabled: !loading && isAdmin }
   );
 
-  // Fetch user subscriptions (only when authenticated as admin)
   const { data: subscriptions = [], isLoading: subscriptionsLoading } = useApiQuery<UserSubscription[]>(
     ["/api/admin/user-subscriptions"],
     '/api/admin/user-subscriptions',
@@ -106,7 +167,27 @@ export default function SubscriptionPlans() {
     { enabled: !loading && isAdmin }
   );
 
-  // Create plan mutation
+  const { data: failedPayments = [], isLoading: failedPaymentsLoading } = useApiQuery<FailedPayment[]>(
+    ["/api/admin/failed-payments"],
+    '/api/admin/failed-payments',
+    undefined,
+    { enabled: !loading && isAdmin }
+  );
+
+  const { data: paymentHistory = [], isLoading: paymentHistoryLoading } = useApiQuery<PaymentHistory[]>(
+    [`/api/admin/user-subscriptions/${paymentHistoryDialog.userId}/payment-history`],
+    `/api/admin/user-subscriptions/${paymentHistoryDialog.userId}/payment-history`,
+    undefined,
+    { enabled: !loading && isAdmin && !!paymentHistoryDialog.userId }
+  );
+
+  const { data: subscriptionEvents = [], isLoading: eventsLoading } = useApiQuery<SubscriptionEvent[]>(
+    [`/api/admin/user-subscriptions/${eventsDialog.userId}/events`],
+    `/api/admin/user-subscriptions/${eventsDialog.userId}/events`,
+    undefined,
+    { enabled: !loading && isAdmin && !!eventsDialog.userId }
+  );
+
   const createPlanMutation = useApiMutation(
     (data: Partial<SubscriptionPlan>) => 
       api.post("/api/admin/subscription-plans", data),
@@ -122,7 +203,6 @@ export default function SubscriptionPlans() {
     }
   );
 
-  // Update plan mutation
   const updatePlanMutation = useApiMutation(
     (data: { id: string; updates: Partial<SubscriptionPlan> }) =>
       api.put(`/api/admin/subscription-plans/${data.id}`, data.updates),
@@ -138,7 +218,6 @@ export default function SubscriptionPlans() {
     }
   );
 
-  // Delete plan mutation
   const deletePlanMutation = useApiMutation(
     (id: string) => api.delete(`/api/admin/subscription-plans/${id}`),
     {
@@ -151,6 +230,45 @@ export default function SubscriptionPlans() {
       },
     }
   );
+
+  const cancelSubscriptionMutation = useApiMutation(
+    (subscriptionId: string) => api.delete(`/api/admin/user-subscriptions/${subscriptionId}`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/user-subscriptions"] });
+        setCancelDialog({ open: false, subscriptionId: null, userEmail: null });
+        toast({ title: "Success", description: "Subscription cancelled successfully" });
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to cancel subscription", variant: "destructive" });
+      },
+    }
+  );
+
+  const filteredAndSortedSubscriptions = useMemo(() => {
+    let filtered = subscriptions.filter(sub => {
+      const matchesStatus = statusFilter === "all" || sub.subscription.status === statusFilter;
+      const matchesPlan = planFilter === "all" || sub.plan.id === planFilter;
+      const matchesSearch = !searchText || 
+        sub.user.email.toLowerCase().includes(searchText.toLowerCase()) ||
+        (sub.user.firstName && sub.user.firstName.toLowerCase().includes(searchText.toLowerCase())) ||
+        (sub.user.lastName && sub.user.lastName.toLowerCase().includes(searchText.toLowerCase()));
+      
+      return matchesStatus && matchesPlan && matchesSearch;
+    });
+
+    filtered.sort((a, b) => {
+      if (sortBy === "date") {
+        return new Date(b.subscription.startedAt).getTime() - new Date(a.subscription.startedAt).getTime();
+      } else if (sortBy === "email") {
+        return a.user.email.localeCompare(b.user.email);
+      } else {
+        return a.plan.name.localeCompare(b.plan.name);
+      }
+    });
+
+    return filtered;
+  }, [subscriptions, statusFilter, planFilter, searchText, sortBy]);
 
   const handleCreatePlan = (formData: FormData) => {
     const data = {
@@ -214,7 +332,6 @@ export default function SubscriptionPlans() {
     updatePlanMutation.mutate({ id: plan.id, updates });
   };
 
-  // Helper function to safely cast string to BadgeKey with fallback
   const safeBadgeKey = (badge: string | undefined | null): BadgeKey => {
     if (!badge) return 'platinum';
     if (badge in premiumBadges) return badge as BadgeKey;
@@ -239,11 +356,36 @@ export default function SubscriptionPlans() {
     }
   };
 
-  // Calculate next available tier level
+  const getStatusBadgeColor = (status: string) => {
+    switch (status) {
+      case "active": return "bg-green-100 text-green-800";
+      case "expired": return "bg-gray-100 text-gray-800";
+      case "cancelled": return "bg-red-100 text-red-800";
+      case "pending": return "bg-yellow-100 text-yellow-800";
+      default: return "bg-blue-100 text-blue-800";
+    }
+  };
+
   const getNextTierLevel = () => {
     if (plans.length === 0) return 1;
     const maxTierLevel = Math.max(...plans.map(plan => plan.tierLevel || 0));
     return maxTierLevel + 1;
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  const formatDateTime = (dateString: string | null | undefined) => {
+    if (!dateString) return "N/A";
+    return new Date(dateString).toLocaleString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   if (plansLoading || subscriptionsLoading) {
@@ -306,7 +448,7 @@ export default function SubscriptionPlans() {
                     required 
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Unique hierarchical level for this plan (e.g., 1 for basic, 2 for standard, 3 for premium)
+                    Unique hierarchical level for this plan
                   </p>
                 </div>
                 <div>
@@ -415,7 +557,8 @@ export default function SubscriptionPlans() {
       <Tabs defaultValue="plans" className="space-y-4">
         <TabsList>
           <TabsTrigger value="plans">Subscription Plans</TabsTrigger>
-          <TabsTrigger value="subscriptions">User Subscriptions</TabsTrigger>
+          <TabsTrigger value="subscriptions">User Subscriptions ({subscriptions.length})</TabsTrigger>
+          <TabsTrigger value="failed-payments">Failed Payments ({failedPayments.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="plans">
@@ -503,81 +646,447 @@ export default function SubscriptionPlans() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <Users className="h-5 w-5 mr-2" />
-                User Subscriptions ({subscriptions.length})
+                User Subscriptions ({filteredAndSortedSubscriptions.length})
               </CardTitle>
+              <CardDescription>
+                Manage and monitor all user subscriptions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="search">Search User</Label>
+                  <Input
+                    id="search"
+                    placeholder="Email or name..."
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="status-filter">Status</Label>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger id="status-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="plan-filter">Plan</Label>
+                  <Select value={planFilter} onValueChange={setPlanFilter}>
+                    <SelectTrigger id="plan-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Plans</SelectItem>
+                      {plans.map(plan => (
+                        <SelectItem key={plan.id} value={plan.id}>{plan.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="sort-by">Sort By</Label>
+                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                    <SelectTrigger id="sort-by">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date">Date (Newest)</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="plan">Plan Name</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Amount Paid</TableHead>
+                      <TableHead>Payment Date</TableHead>
+                      <TableHead>Started</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAndSortedSubscriptions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          No subscriptions found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filteredAndSortedSubscriptions.map((sub) => (
+                        <TableRow key={sub.subscription.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">
+                                {sub.user.firstName} {sub.user.lastName}
+                              </div>
+                              <div className="text-sm text-gray-500">{sub.user.email}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{sub.plan.name}</div>
+                              <div className="text-sm text-gray-500">
+                                ${sub.plan.price} {sub.plan.currency}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusBadgeColor(sub.subscription.status)}>
+                              {sub.subscription.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {sub.subscription.amountPaid ? (
+                              <span className="font-medium">
+                                ${sub.subscription.amountPaid} {sub.subscription.currency}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {formatDate(sub.subscription.paidAt)}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {formatDate(sub.subscription.startedAt)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setPaymentHistoryDialog({ open: true, userId: sub.user.id })}
+                                title="View Payment History"
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEventsDialog({ open: true, userId: sub.user.id })}
+                                title="View Subscription Events"
+                              >
+                                <Clock className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setUpgradeDialog({ open: true, subscription: sub })}
+                                title="Manually Upgrade"
+                              >
+                                <TrendingUp className="h-4 w-4" />
+                              </Button>
+                              {sub.subscription.status === "active" && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => setCancelDialog({ 
+                                    open: true, 
+                                    subscriptionId: sub.subscription.id,
+                                    userEmail: sub.user.email 
+                                  })}
+                                  title="Cancel Subscription"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="failed-payments">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <AlertTriangle className="h-5 w-5 mr-2 text-red-600" />
+                Failed Payments ({failedPayments.length})
+              </CardTitle>
+              <CardDescription>
+                Monitor and manage failed payment attempts
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-2">User</th>
-                      <th className="text-left py-2">Plan</th>
-                      <th className="text-left py-2">Status</th>
-                      <th className="text-left py-2">Started</th>
-                      <th className="text-left py-2">Expires</th>
-                      <th className="text-left py-2">Usage</th>
-                      <th className="text-left py-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {subscriptions.map((sub) => (
-                      <tr key={sub.subscription.id} className="border-b">
-                        <td className="py-3">
-                          <div>
-                            <div className="font-medium">
-                              {sub.user.firstName} {sub.user.lastName}
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Failure Reason</TableHead>
+                      <TableHead>Error Code</TableHead>
+                      <TableHead>Failed Date</TableHead>
+                      <TableHead>Notified</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {failedPaymentsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading failed payments...
+                        </TableCell>
+                      </TableRow>
+                    ) : failedPayments.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                          No failed payments found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      failedPayments.map((payment) => (
+                        <TableRow key={payment.id}>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">
+                                {payment.userFirstName} {payment.userLastName}
+                              </div>
+                              <div className="text-sm text-gray-500">{payment.userEmail}</div>
                             </div>
-                            <div className="text-sm text-gray-500">{sub.user.email}</div>
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          <div>
-                            <div className="font-medium">{sub.plan.name}</div>
-                            <div className="text-sm text-gray-500">
-                              ${sub.plan.price} {sub.plan.currency}
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <div className="font-medium">{payment.planName || "N/A"}</div>
+                              {payment.planPrice && (
+                                <div className="text-sm text-gray-500">
+                                  ${payment.planPrice}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          <Badge 
-                            className={
-                              sub.subscription.status === 'active' ? 'bg-green-100 text-green-800' :
-                              sub.subscription.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }
-                          >
-                            {sub.subscription.status}
-                          </Badge>
-                        </td>
-                        <td className="py-3 text-sm">
-                          {sub.subscription.startedAt ? new Date(sub.subscription.startedAt).toLocaleDateString() : '-'}
-                        </td>
-                        <td className="py-3 text-sm">
-                          {sub.subscription.expiresAt ? new Date(sub.subscription.expiresAt).toLocaleDateString() : '-'}
-                        </td>
-                        <td className="py-3 text-sm">
-                          <div>Unis: {sub.subscription.universitiesUsed}</div>
-                          <div>Countries: {sub.subscription.countriesUsed}</div>
-                        </td>
-                        <td className="py-3">
-                          <Button size="sm" variant="outline">
-                            <Settings className="h-3 w-3" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </TableCell>
+                          <TableCell>
+                            {payment.amount ? (
+                              <span className="font-medium">
+                                ${payment.amount} {payment.currency}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">N/A</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="max-w-xs truncate" title={payment.failureReason || "Unknown"}>
+                              {payment.failureReason || "Unknown"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                              {payment.razorpayErrorCode || "N/A"}
+                            </code>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {formatDateTime(payment.failedAt)}
+                          </TableCell>
+                          <TableCell>
+                            {payment.notifiedAt ? (
+                              <Badge className="bg-green-100 text-green-800">Yes</Badge>
+                            ) : (
+                              <Badge className="bg-gray-100 text-gray-800">No</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Edit Plan Dialog */}
+      <Dialog open={paymentHistoryDialog.open} onOpenChange={(open) => !open && setPaymentHistoryDialog({ open: false, userId: null })}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Payment History</DialogTitle>
+            <DialogDescription>View all payment transactions for this user</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {paymentHistoryLoading ? (
+              <div className="py-8 text-center">Loading payment history...</div>
+            ) : paymentHistory.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">No payment history found</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Payment Date</TableHead>
+                    <TableHead>Gateway</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paymentHistory.map((payment) => (
+                    <TableRow key={payment.subscriptionId}>
+                      <TableCell className="font-medium">{payment.planName}</TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                          {payment.orderId || "N/A"}
+                        </code>
+                      </TableCell>
+                      <TableCell>
+                        ${payment.amountPaid} {payment.currency}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {formatDateTime(payment.paidAt)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{payment.paymentGateway || "N/A"}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={eventsDialog.open} onOpenChange={(open) => !open && setEventsDialog({ open: false, userId: null })}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Subscription Events</DialogTitle>
+            <DialogDescription>Timeline of subscription lifecycle events</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {eventsLoading ? (
+              <div className="py-8 text-center">Loading subscription events...</div>
+            ) : subscriptionEvents.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">No subscription events found</div>
+            ) : (
+              <div className="space-y-4">
+                {subscriptionEvents.map((event) => (
+                  <div key={event.id} className="border-l-4 border-blue-500 pl-4 py-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-sm">{event.eventType}</div>
+                        {event.oldStatus && event.newStatus && (
+                          <div className="text-sm text-gray-600">
+                            Status: <Badge className="mr-1">{event.oldStatus}</Badge> → <Badge>{event.newStatus}</Badge>
+                          </div>
+                        )}
+                        {event.metadata && Object.keys(event.metadata).length > 0 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            <code className="bg-gray-100 px-2 py-1 rounded">
+                              {JSON.stringify(event.metadata, null, 2)}
+                            </code>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {formatDateTime(event.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={cancelDialog.open} onOpenChange={(open) => !open && setCancelDialog({ open: false, subscriptionId: null, userEmail: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel the subscription for <strong>{cancelDialog.userEmail}</strong>? 
+              This action will immediately cancel the subscription and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No, Keep Subscription</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (cancelDialog.subscriptionId) {
+                  cancelSubscriptionMutation.mutate(cancelDialog.subscriptionId);
+                }
+              }}
+            >
+              Yes, Cancel Subscription
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={upgradeDialog.open} onOpenChange={(open) => !open && setUpgradeDialog({ open: false, subscription: null })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manually Upgrade User</DialogTitle>
+            <DialogDescription>
+              Upgrade {upgradeDialog.subscription?.user.email} to a new subscription plan
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Current Plan</Label>
+              <div className="text-sm font-medium">{upgradeDialog.subscription?.plan.name}</div>
+            </div>
+            <div>
+              <Label htmlFor="upgrade-plan">New Plan</Label>
+              <Select value={selectedUpgradePlan} onValueChange={setSelectedUpgradePlan}>
+                <SelectTrigger id="upgrade-plan">
+                  <SelectValue placeholder="Select a plan..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {plans
+                    .filter(plan => plan.isActive && plan.id !== upgradeDialog.subscription?.plan.id)
+                    .map(plan => (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.name} - ${plan.price} {plan.currency}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpgradeDialog({ open: false, subscription: null })}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                toast({ 
+                  title: "Feature Coming Soon", 
+                  description: "Manual upgrade functionality will be implemented in the next phase.",
+                  variant: "default"
+                });
+              }}
+              disabled={!selectedUpgradePlan}
+            >
+              Create Upgrade Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {editingPlan && (
-        <Dialog open={!!editingPlan} onOpenChange={() => setEditingPlan(null)}>
+        <Dialog open={!!editingPlan} onOpenChange={(open) => !open && setEditingPlan(null)}>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Subscription Plan</DialogTitle>
@@ -619,9 +1128,6 @@ export default function SubscriptionPlans() {
                     defaultValue={editingPlan.tierLevel} 
                     required 
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Unique hierarchical level for this plan (e.g., 1 for basic, 2 for standard, 3 for premium)
-                  </p>
                 </div>
                 <div>
                   <Label htmlFor="edit-displayOrder">Display Order</Label>
@@ -641,7 +1147,12 @@ export default function SubscriptionPlans() {
 
               <div>
                 <Label htmlFor="edit-features">Features (one per line)</Label>
-                <Textarea id="edit-features" name="features" rows={6} defaultValue={editingPlan.features.join('\n')} />
+                <Textarea 
+                  id="edit-features" 
+                  name="features" 
+                  rows={6} 
+                  defaultValue={editingPlan.features.join("\n")} 
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -693,21 +1204,26 @@ export default function SubscriptionPlans() {
 
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { key: "includeLoanAssistance", label: "Loan Assistance", value: editingPlan.includeLoanAssistance },
-                  { key: "includeVisaSupport", label: "Visa Support", value: editingPlan.includeVisaSupport },
-                  { key: "includeCounselorSession", label: "Counselor Session", value: editingPlan.includeCounselorSession },
-                  { key: "includeScholarshipPlanning", label: "Scholarship Planning", value: editingPlan.includeScholarshipPlanning },
-                  { key: "includeMockInterview", label: "Mock Interview", value: editingPlan.includeMockInterview },
-                  { key: "includeExpertEditing", label: "Expert Editing", value: editingPlan.includeExpertEditing },
-                  { key: "includePostAdmitSupport", label: "Post-Admit Support", value: editingPlan.includePostAdmitSupport },
-                  { key: "includeDedicatedManager", label: "Dedicated Manager", value: editingPlan.includeDedicatedManager },
-                  { key: "includeNetworkingEvents", label: "Networking Events", value: editingPlan.includeNetworkingEvents },
-                  { key: "includeFlightAccommodation", label: "Flight & Accommodation", value: editingPlan.includeFlightAccommodation },
-                  { key: "isBusinessFocused", label: "Business Focused", value: editingPlan.isBusinessFocused },
-                  { key: "isActive", label: "Active", value: editingPlan.isActive },
+                  { key: "includeLoanAssistance", label: "Loan Assistance" },
+                  { key: "includeVisaSupport", label: "Visa Support" },
+                  { key: "includeCounselorSession", label: "Counselor Session" },
+                  { key: "includeScholarshipPlanning", label: "Scholarship Planning" },
+                  { key: "includeMockInterview", label: "Mock Interview" },
+                  { key: "includeExpertEditing", label: "Expert Editing" },
+                  { key: "includePostAdmitSupport", label: "Post-Admit Support" },
+                  { key: "includeDedicatedManager", label: "Dedicated Manager" },
+                  { key: "includeNetworkingEvents", label: "Networking Events" },
+                  { key: "includeFlightAccommodation", label: "Flight & Accommodation" },
+                  { key: "isBusinessFocused", label: "Business Focused" },
+                  { key: "isActive", label: "Active" },
                 ].map((item) => (
                   <div key={item.key} className="flex items-center space-x-2">
-                    <input type="checkbox" id={`edit-${item.key}`} name={item.key} defaultChecked={item.value} />
+                    <input 
+                      type="checkbox" 
+                      id={`edit-${item.key}`} 
+                      name={item.key} 
+                      defaultChecked={editingPlan[item.key as keyof SubscriptionPlan] as boolean}
+                    />
                     <Label htmlFor={`edit-${item.key}`}>{item.label}</Label>
                   </div>
                 ))}

@@ -1305,10 +1305,11 @@ export default function AdminDashboard() {
           description: "The security setting has been successfully updated.",
         });
       },
-      onError: (error: any, newData, context) => {
+      onError: (error: any, newData, context: unknown) => {
         // If the mutation fails, use the context returned from onMutate to roll back
-        if (context?.previousSettings) {
-          queryClient.setQueryData(['/api/admin/security/settings'], context.previousSettings);
+        const ctx = context as { previousSettings?: any } | undefined;
+        if (ctx?.previousSettings) {
+          queryClient.setQueryData(['/api/admin/security/settings'], ctx.previousSettings);
         }
         
         console.error('Security setting update error:', error);
@@ -2165,6 +2166,12 @@ export default function AdminDashboard() {
             <p className="text-muted-foreground">Platform statistics and key metrics</p>
           </div>
           <div className="flex items-center space-x-4">
+            <Link href="/admin/analytics">
+              <Button variant="default">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Subscription Analytics
+              </Button>
+            </Link>
             <Link href="/test/conversions">
               <Button variant="outline" data-testid="button-test-conversions">
                 <TestTube className="w-4 h-4 mr-2" />

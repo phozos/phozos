@@ -1741,6 +1741,161 @@ export class AdminController extends BaseController {
       return this.handleError(res, error, 'AdminController.getSubscriptionGrowth');
     }
   }
+
+  /**
+   * Cancel a user's subscription
+   * 
+   * @route DELETE /api/admin/user-subscriptions/:subscriptionId
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with subscription ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success message
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   * @throws {404} Subscription not found
+   */
+  async cancelUserSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { subscriptionId } = req.params;
+
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const cancelled = await userSubscriptionService.cancelSubscription(subscriptionId);
+
+      if (!cancelled) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Subscription not found');
+      }
+
+      return this.sendSuccess(res, { message: 'Subscription cancelled successfully', subscriptionId });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.cancelUserSubscription');
+    }
+  }
+
+  /**
+   * Get all failed payments
+   * 
+   * @route GET /api/admin/failed-payments
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of failed payments with user and plan details
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getFailedPayments(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { db } = await import('../db');
+      const { failedPayments, users, subscriptionPlans } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const failedPaymentsData = await db
+        .select({
+          id: failedPayments.id,
+          userId: failedPayments.userId,
+          planId: failedPayments.planId,
+          orderId: failedPayments.orderId,
+          paymentId: failedPayments.paymentId,
+          amount: failedPayments.amount,
+          currency: failedPayments.currency,
+          failureReason: failedPayments.failureReason,
+          razorpayErrorCode: failedPayments.razorpayErrorCode,
+          razorpayErrorDescription: failedPayments.razorpayErrorDescription,
+          failedAt: failedPayments.failedAt,
+          notifiedAt: failedPayments.notifiedAt,
+          createdAt: failedPayments.createdAt,
+          userEmail: users.email,
+          userFirstName: users.firstName,
+          userLastName: users.lastName,
+          planName: subscriptionPlans.name,
+          planPrice: subscriptionPlans.price,
+        })
+        .from(failedPayments)
+        .leftJoin(users, eq(failedPayments.userId, users.id))
+        .leftJoin(subscriptionPlans, eq(failedPayments.planId, subscriptionPlans.id))
+        .orderBy(failedPayments.failedAt);
+
+      return this.sendSuccess(res, failedPaymentsData);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFailedPayments');
+    }
+  }
+
+  /**
+   * Get payment history for a user
+   * 
+   * @route GET /api/admin/user-subscriptions/:userId/payment-history
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with user ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns payment history for the user
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getUserPaymentHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { userId } = req.params;
+      const { db } = await import('../db');
+      const { userSubscriptions, subscriptionPlans } = await import('@shared/schema');
+      const { eq, and, isNotNull } = await import('drizzle-orm');
+
+      const paymentHistory = await db
+        .select({
+          subscriptionId: userSubscriptions.id,
+          planId: userSubscriptions.planId,
+          planName: subscriptionPlans.name,
+          orderId: userSubscriptions.orderId,
+          paymentReference: userSubscriptions.paymentReference,
+          paymentGateway: userSubscriptions.paymentGateway,
+          amountPaid: userSubscriptions.amountPaid,
+          currency: userSubscriptions.currency,
+          paidAt: userSubscriptions.paidAt,
+          status: userSubscriptions.status,
+          startedAt: userSubscriptions.startedAt,
+          expiresAt: userSubscriptions.expiresAt,
+        })
+        .from(userSubscriptions)
+        .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+        .where(
+          and(
+            eq(userSubscriptions.userId, userId),
+            isNotNull(userSubscriptions.paidAt)
+          )
+        )
+        .orderBy(userSubscriptions.paidAt);
+
+      return this.sendSuccess(res, paymentHistory);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getUserPaymentHistory');
+    }
+  }
+
+  /**
+   * Get subscription events for a user
+   * 
+   * @route GET /api/admin/user-subscriptions/:userId/events
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with user ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns subscription lifecycle events for the user
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getUserSubscriptionEvents(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { userId } = req.params;
+      const { subscriptionAuditService } = await import('../services/infrastructure/subscription-audit.service');
+      
+      const events = await subscriptionAuditService.getUserSubscriptionEvents(userId);
+
+      return this.sendSuccess(res, events);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getUserSubscriptionEvents');
+    }
+  }
 }
 
 export const adminController = new AdminController();

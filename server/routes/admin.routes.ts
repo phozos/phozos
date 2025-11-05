@@ -79,6 +79,12 @@ router.delete('/subscription-plans/:id', csrfProtection, asyncHandler((req: Auth
 router.get('/user-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptions(req, res)));
 router.post('/student-subscription/:studentId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateStudentSubscription(req, res)));
 router.get('/students-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getStudentsWithSubscriptions(req, res)));
+router.delete('/user-subscriptions/:subscriptionId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelUserSubscription(req, res)));
+router.get('/user-subscriptions/:userId/payment-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserPaymentHistory(req, res)));
+router.get('/user-subscriptions/:userId/events', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptionEvents(req, res)));
+
+// Failed Payments
+router.get('/failed-payments', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFailedPayments(req, res)));
 
 // Forum Moderation
 router.get('/forum/reported-posts', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getReportedPosts(req, res)));
