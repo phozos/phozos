@@ -106,4 +106,10 @@ router.get('/analytics/subscriptions', asyncHandler((req: AuthenticatedRequest, 
 router.get('/analytics/revenue', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRevenueAnalytics(req, res)));
 router.get('/analytics/growth', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionGrowth(req, res)));
 
+// Outbox Monitoring
+router.get('/outbox/metrics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getOutboxMetrics(req, res)));
+router.get('/outbox/events', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getOutboxEvents(req, res)));
+router.post('/outbox/events/:id/retry', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.retryOutboxEvent(req, res)));
+router.delete('/outbox/events/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deleteOutboxEvent(req, res)));
+
 export default router;

@@ -1896,6 +1896,176 @@ export class AdminController extends BaseController {
       return this.handleError(res, error, 'AdminController.getUserSubscriptionEvents');
     }
   }
+
+  async getOutboxMetrics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq, and, gte, sql } = await import('drizzle-orm');
+      const { subscriptionAuditOutboxProcessor } = await import('../services/infrastructure/subscription-audit-outbox-processor');
+
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const allEvents = await db.select().from(subscriptionAuditOutbox);
+
+      const pendingEvents = allEvents.filter(e => e.status === 'pending');
+      const failedEvents = allEvents.filter(e => e.status === 'failed');
+      const completedInLastHour = allEvents.filter(
+        e => e.status === 'completed' && e.processedAt && new Date(e.processedAt) >= oneHourAgo
+      );
+      const retriesInLastHour = allEvents.filter(
+        e => e.createdAt >= oneHourAgo && e.retries > 0
+      ).reduce((sum, e) => sum + e.retries, 0);
+
+      const oldestPending = pendingEvents.length > 0
+        ? pendingEvents.reduce((oldest, event) => 
+            new Date(event.createdAt) < new Date(oldest.createdAt) ? event : oldest
+          )
+        : null;
+
+      const processingLagSeconds = oldestPending
+        ? Math.floor((now.getTime() - new Date(oldestPending.createdAt).getTime()) / 1000)
+        : 0;
+
+      const throughputPerMinute = completedInLastHour.length / 60;
+
+      const metrics = {
+        outbox_pending_events: pendingEvents.length,
+        outbox_processing_lag: processingLagSeconds,
+        outbox_dlq_count: failedEvents.length,
+        outbox_retry_count: retriesInLastHour,
+        outbox_throughput: parseFloat(throughputPerMinute.toFixed(2)),
+        worker_health: subscriptionAuditOutboxProcessor['isRunning'] || false,
+      };
+
+      return this.sendSuccess(res, metrics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getOutboxMetrics');
+    }
+  }
+
+  async getOutboxEvents(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq, desc, and, or, like } = await import('drizzle-orm');
+
+      const { 
+        status, 
+        page = '1', 
+        limit = '50',
+        search 
+      } = req.query;
+
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereConditions: any[] = [];
+
+      if (status) {
+        whereConditions.push(eq(subscriptionAuditOutbox.status, status as string));
+      }
+
+      if (search) {
+        whereConditions.push(
+          or(
+            like(subscriptionAuditOutbox.subscriptionId, `%${search}%`),
+            like(subscriptionAuditOutbox.userId, `%${search}%`)
+          )
+        );
+      }
+
+      const query = db
+        .select()
+        .from(subscriptionAuditOutbox)
+        .orderBy(desc(subscriptionAuditOutbox.createdAt))
+        .limit(limitNum)
+        .offset(offset);
+
+      const events = whereConditions.length > 0
+        ? await query.where(and(...whereConditions))
+        : await query;
+
+      const totalQuery = whereConditions.length > 0
+        ? db.select({ count: sql`count(*)` }).from(subscriptionAuditOutbox).where(and(...whereConditions))
+        : db.select({ count: sql`count(*)` }).from(subscriptionAuditOutbox);
+
+      const totalResult = await totalQuery;
+      const total = Number(totalResult[0].count);
+
+      return this.sendSuccess(res, {
+        events,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getOutboxEvents');
+    }
+  }
+
+  async retryOutboxEvent(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const event = await db.query.subscriptionAuditOutbox.findFirst({
+        where: eq(subscriptionAuditOutbox.id, id),
+      });
+
+      if (!event) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Outbox event not found');
+      }
+
+      if (event.status !== 'failed') {
+        return this.sendError(res, 400, 'INVALID_STATUS', 'Only failed events can be retried');
+      }
+
+      await db
+        .update(subscriptionAuditOutbox)
+        .set({
+          status: 'pending',
+          retries: 0,
+          nextRetryAt: null,
+          errorMessage: null,
+        })
+        .where(eq(subscriptionAuditOutbox.id, id));
+
+      return this.sendSuccess(res, { message: 'Event queued for retry' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.retryOutboxEvent');
+    }
+  }
+
+  async deleteOutboxEvent(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const event = await db.query.subscriptionAuditOutbox.findFirst({
+        where: eq(subscriptionAuditOutbox.id, id),
+      });
+
+      if (!event) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Outbox event not found');
+      }
+
+      await db.delete(subscriptionAuditOutbox).where(eq(subscriptionAuditOutbox.id, id));
+
+      return this.sendSuccess(res, { message: 'Event deleted successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.deleteOutboxEvent');
+    }
+  }
 }
 
 export const adminController = new AdminController();

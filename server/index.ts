@@ -22,6 +22,8 @@ import { sendError } from "./utils/response";
 import { requireAdmin } from "./middleware/authentication";
 import { injectSEOMeta } from "./middleware/seo-meta";
 import { paymentAlertsScheduler } from "./services/infrastructure/payment-alerts-scheduler";
+import { subscriptionAuditOutboxProcessor } from "./services/infrastructure/subscription-audit-outbox-processor";
+import { archiveOutboxEventsJob } from "./jobs/archive-completed-outbox-events";
 
 // Phase 1: Centralized configuration module (replaces scattered process.env usage)
 import config, { isDev, isProd, featuresConfig, corsConfig, securityConfig } from "./config/index";
@@ -343,5 +345,66 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
       console.error('   Daily digest will not be sent automatically.');
       console.error('   This is not a critical error - the server will continue running.');
     }
+
+    // Start subscription audit outbox processor for event processing
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      subscriptionAuditOutboxProcessor.start();
+      console.log('✅ Subscription audit outbox processor started');
+    } catch (error) {
+      console.error('❌ Failed to start subscription audit outbox processor:', error);
+      console.error('   Event processing will not occur automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
+
+    // Start archive outbox events job for cleanup
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      archiveOutboxEventsJob.start();
+      console.log('✅ Archive outbox events job started');
+    } catch (error) {
+      console.error('❌ Failed to start archive outbox events job:', error);
+      console.error('   Archival will not occur automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
   });
+
+  // Graceful shutdown handlers
+  const gracefulShutdown = (signal: string) => {
+    console.log(`\n${signal} received, shutting down gracefully...`);
+    
+    try {
+      paymentAlertsScheduler.stop();
+      console.log('✅ Payment alerts scheduler stopped');
+    } catch (error) {
+      console.error('❌ Error stopping payment alerts scheduler:', error);
+    }
+
+    try {
+      subscriptionAuditOutboxProcessor.stop();
+      console.log('✅ Subscription audit outbox processor stopped');
+    } catch (error) {
+      console.error('❌ Error stopping subscription audit outbox processor:', error);
+    }
+
+    try {
+      archiveOutboxEventsJob.stop();
+      console.log('✅ Archive outbox events job stopped');
+    } catch (error) {
+      console.error('❌ Error stopping archive outbox events job:', error);
+    }
+
+    httpServer.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      console.error('Forcefully shutting down');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();
