@@ -30,6 +30,7 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "
 export const supportTypeEnum = pgEnum("support_type", ["email", "whatsapp", "phone", "premium"]);
 export const universityTierEnum = pgEnum("university_tier", ["general", "top500", "top200", "top100", "ivy_league"]);
 export const reportReasonEnum = pgEnum("report_reason", ["spam", "inappropriate", "harassment", "misinformation", "off_topic", "other"]);
+export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "completed", "failed"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -911,6 +912,23 @@ export const subscriptionEvents = pgTable("subscription_events", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Subscription Audit Outbox table (for event outbox pattern)
+export const subscriptionAuditOutbox = pgTable("subscription_audit_outbox", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: uuid("subscription_id").notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  oldStatus: varchar("old_status", { length: 50 }),
+  newStatus: varchar("new_status", { length: 50 }),
+  metadata: jsonb("metadata"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  retries: integer("retries").default(0).notNull(),
+  nextRetryAt: timestamp("next_retry_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
 // Failed Payments table (for tracking payment failures)
 export const failedPayments = pgTable("failed_payments", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -935,6 +953,7 @@ export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions
 export const insertPaymentSettingsSchema = createInsertSchema(paymentSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({ id: true, createdAt: true });
 export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEvents).omit({ id: true, createdAt: true });
+export const insertSubscriptionAuditOutboxSchema = createInsertSchema(subscriptionAuditOutbox).omit({ id: true, createdAt: true });
 export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
@@ -958,6 +977,8 @@ export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
 export type SubscriptionEvent = typeof subscriptionEvents.$inferSelect;
 export type InsertSubscriptionEvent = z.infer<typeof insertSubscriptionEventSchema>;
+export type SubscriptionAuditOutbox = typeof subscriptionAuditOutbox.$inferSelect;
+export type InsertSubscriptionAuditOutbox = z.infer<typeof insertSubscriptionAuditOutboxSchema>;
 export type FailedPayment = typeof failedPayments.$inferSelect;
 export type InsertFailedPayment = z.infer<typeof insertFailedPaymentSchema>;
 

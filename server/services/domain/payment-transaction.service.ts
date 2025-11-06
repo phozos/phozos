@@ -6,7 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { InvalidOperationError, ValidationServiceError } from '../errors';
 import { NotFoundError } from '../../repositories/errors';
 import { CommonValidators } from '../validation';
-import { subscriptionAuditService } from '../infrastructure/subscription-audit.service';
+import { subscriptionAuditOutboxService } from '../infrastructure/subscription-audit-outbox.service';
 
 export interface IPaymentTransactionService {
   createSubscriptionWithLock(
@@ -190,8 +190,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
 
           const updatedSubscription = updated[0] as UserSubscription;
 
-          // Log subscription upgrade event
-          await subscriptionAuditService.logEvent(
+          // Log subscription upgrade event to outbox
+          await subscriptionAuditOutboxService.enqueueEvent(
+            tx,
             updatedSubscription.id,
             userId,
             'subscription_upgraded',
@@ -243,8 +244,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
 
         const newSubscription = created[0] as UserSubscription;
 
-        // Log subscription creation event
-        await subscriptionAuditService.logEvent(
+        // Log subscription creation event to outbox
+        await subscriptionAuditOutboxService.enqueueEvent(
+          tx,
           newSubscription.id,
           userId,
           'subscription_created',
