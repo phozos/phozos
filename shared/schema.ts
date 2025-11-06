@@ -947,6 +947,19 @@ export const failedPayments = pgTable("failed_payments", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Subscription Plan Changes table (for audit trail)
+export const subscriptionPlanChanges = pgTable("subscription_plan_changes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  changedBy: uuid("changed_by").references(() => users.id).notNull(),
+  changeType: varchar("change_type", { length: 50 }).notNull(),
+  fieldChanges: jsonb("field_changes").$type<Record<string, { old: any; new: any }>>().notNull(),
+  changeReason: text("change_reason"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -955,6 +968,7 @@ export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({
 export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEvents).omit({ id: true, createdAt: true });
 export const insertSubscriptionAuditOutboxSchema = createInsertSchema(subscriptionAuditOutbox).omit({ id: true, createdAt: true });
 export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
+export const insertSubscriptionPlanChangeSchema = createInsertSchema(subscriptionPlanChanges).omit({ id: true, createdAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -981,4 +995,6 @@ export type SubscriptionAuditOutbox = typeof subscriptionAuditOutbox.$inferSelec
 export type InsertSubscriptionAuditOutbox = z.infer<typeof insertSubscriptionAuditOutboxSchema>;
 export type FailedPayment = typeof failedPayments.$inferSelect;
 export type InsertFailedPayment = z.infer<typeof insertFailedPaymentSchema>;
+export type SubscriptionPlanChange = typeof subscriptionPlanChanges.$inferSelect;
+export type InsertSubscriptionPlanChange = z.infer<typeof insertSubscriptionPlanChangeSchema>;
 

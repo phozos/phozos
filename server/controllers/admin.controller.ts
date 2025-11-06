@@ -104,7 +104,8 @@ const updateSubscriptionPlanBodySchema = z.object({
   description: z.string().optional(),
   price: z.number().transform(val => val.toString()).optional(),
   features: z.array(z.string()).optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  changeReason: z.string().optional()
 });
 
 const updateStudentSubscriptionSchema = z.object({
@@ -1160,7 +1161,12 @@ export class AdminController extends BaseController {
     try {
       const validatedData = insertSubscriptionPlanSchema.parse(req.body);
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
-      const plan = await subscriptionService.createSubscriptionPlan(validatedData);
+      const plan = await subscriptionService.createSubscriptionPlan(
+        validatedData,
+        req.user!.id,
+        req.ip,
+        req.get('user-agent')
+      );
       
       res.status(201);
       return this.sendSuccess(res, plan);
@@ -1190,8 +1196,16 @@ export class AdminController extends BaseController {
     try {
       const { id } = req.params;
       const validatedData = updateSubscriptionPlanBodySchema.parse(req.body);
+      const { changeReason, ...updateData } = validatedData;
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
-      const updated = await subscriptionService.updateSubscriptionPlan(id, validatedData);
+      const updated = await subscriptionService.updateSubscriptionPlan(
+        id,
+        updateData,
+        req.user!.id,
+        changeReason,
+        req.ip,
+        req.get('user-agent')
+      );
       return this.sendSuccess(res, updated);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -1218,7 +1232,12 @@ export class AdminController extends BaseController {
     try {
       const { id } = req.params;
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
-      const success = await subscriptionService.deleteSubscriptionPlan(id);
+      const success = await subscriptionService.deleteSubscriptionPlan(
+        id,
+        req.user!.id,
+        req.ip,
+        req.get('user-agent')
+      );
       
       if (!success) {
         return this.sendError(res, 404, 'NOT_FOUND', 'Subscription plan not found');
@@ -1227,6 +1246,30 @@ export class AdminController extends BaseController {
       return this.sendEmptySuccess(res);
     } catch (error) {
       return this.handleError(res, error, 'AdminController.deleteSubscriptionPlan');
+    }
+  }
+
+  async getPlanChangeHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { ISubscriptionPlanAuditRepository } = await import('../repositories');
+      const auditRepository = getService<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository);
+      const history = await auditRepository.getChangeHistory(id);
+      return this.sendSuccess(res, history);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanChangeHistory');
+    }
+  }
+
+  async getRecentPlanChanges(req: AuthenticatedRequest, res: Response) {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+      const { ISubscriptionPlanAuditRepository } = await import('../repositories');
+      const auditRepository = getService<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository);
+      const changes = await auditRepository.getRecentChanges(limit);
+      return this.sendSuccess(res, changes);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getRecentPlanChanges');
     }
   }
 

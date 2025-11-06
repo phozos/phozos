@@ -75,6 +75,10 @@ router.post('/subscription-plans', csrfProtection, asyncHandler((req: Authentica
 router.put('/subscription-plans/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateSubscriptionPlan(req, res)));
 router.delete('/subscription-plans/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deleteSubscriptionPlan(req, res)));
 
+// Subscription Plan Change History
+router.get('/subscription-plans/recent-changes', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRecentPlanChanges(req, res)));
+router.get('/subscription-plans/:id/change-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanChangeHistory(req, res)));
+
 // User Subscriptions
 router.get('/user-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptions(req, res)));
 router.post('/student-subscription/:studentId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateStudentSubscription(req, res)));

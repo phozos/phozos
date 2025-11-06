@@ -40,6 +40,8 @@ import {
   subscriptionPlanRepository,
   IUserSubscriptionRepository,
   userSubscriptionRepository,
+  ISubscriptionPlanAuditRepository,
+  subscriptionPlanAuditRepository,
   ISecuritySettingsRepository,
   securitySettingsRepository,
   ITestimonialRepository,
@@ -84,6 +86,7 @@ export const TYPES = {
   IPaymentRepository: Symbol.for('IPaymentRepository'),
   ISubscriptionPlanRepository: Symbol.for('ISubscriptionPlanRepository'),
   IUserSubscriptionRepository: Symbol.for('IUserSubscriptionRepository'),
+  ISubscriptionPlanAuditRepository: Symbol.for('ISubscriptionPlanAuditRepository'),
   ISecuritySettingsRepository: Symbol.for('ISecuritySettingsRepository'),
   ITestimonialRepository: Symbol.for('ITestimonialRepository'),
   IStudentTimelineRepository: Symbol.for('IStudentTimelineRepository'),
@@ -162,6 +165,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPaymentRepository, paymentRepository);
     this.bindings.set(TYPES.ISubscriptionPlanRepository, subscriptionPlanRepository);
     this.bindings.set(TYPES.IUserSubscriptionRepository, userSubscriptionRepository);
+    this.bindings.set(TYPES.ISubscriptionPlanAuditRepository, subscriptionPlanAuditRepository);
     this.bindings.set(TYPES.ISecuritySettingsRepository, securitySettingsRepository);
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
@@ -233,6 +237,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPaymentRepository, paymentRepository);
     this.bindings.set(TYPES.ISubscriptionPlanRepository, subscriptionPlanRepository);
     this.bindings.set(TYPES.IUserSubscriptionRepository, userSubscriptionRepository);
+    this.bindings.set(TYPES.ISubscriptionPlanAuditRepository, subscriptionPlanAuditRepository);
     this.bindings.set(TYPES.ISecuritySettingsRepository, securitySettingsRepository);
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);

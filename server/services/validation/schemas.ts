@@ -85,6 +85,10 @@ export const subscriptionPlanSchema = z.object({
   tierLevel: z.number().int().positive('Tier level must be positive')
 });
 
+export const updateSubscriptionPlanBodySchema = subscriptionPlanSchema.partial().extend({
+  changeReason: z.string().optional()
+});
+
 export const userSubscriptionSchema = z.object({
   userId: uuidSchema,
   planId: uuidSchema,

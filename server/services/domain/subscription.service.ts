@@ -1,5 +1,5 @@
 import { BaseService } from '../base.service';
-import { ISubscriptionPlanRepository, IStudentRepository } from '../../repositories';
+import { ISubscriptionPlanRepository, IStudentRepository, ISubscriptionPlanAuditRepository } from '../../repositories';
 import { container, TYPES } from '../container';
 import { 
   SubscriptionPlan, InsertSubscriptionPlan
@@ -12,9 +12,9 @@ export interface ISubscriptionService {
   getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
   getAllSubscriptionPlans(): Promise<SubscriptionPlan[]>;
   getSubscriptionPlan(id: string): Promise<SubscriptionPlan | undefined>;
-  createSubscriptionPlan(plan: InsertSubscriptionPlan): Promise<SubscriptionPlan>;
-  updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>): Promise<SubscriptionPlan | undefined>;
-  deleteSubscriptionPlan(id: string): Promise<boolean>;
+  createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan>;
+  updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined>;
+  deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean>;
   // Helper Methods (temporary - should be moved to appropriate service)
   getCounselorStudentAssignment(counselorId: string, studentId: string): Promise<boolean>;
 }
@@ -22,9 +22,27 @@ export interface ISubscriptionService {
 export class SubscriptionService extends BaseService implements ISubscriptionService {
   constructor(
     private subscriptionPlanRepository: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository),
-    private studentRepository: IStudentRepository = container.get<IStudentRepository>(TYPES.IStudentRepository)
+    private studentRepository: IStudentRepository = container.get<IStudentRepository>(TYPES.IStudentRepository),
+    private planAuditRepository: ISubscriptionPlanAuditRepository = container.get<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository)
   ) {
     super();
+  }
+
+  private calculateFieldChanges(oldPlan: SubscriptionPlan, newPlan: Partial<SubscriptionPlan>): Record<string, { old: any; new: any }> {
+    const changes: Record<string, { old: any; new: any }> = {};
+    
+    for (const key in newPlan) {
+      if (newPlan.hasOwnProperty(key) && key !== 'updatedAt') {
+        const oldValue = (oldPlan as any)[key];
+        const newValue = (newPlan as any)[key];
+        
+        if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+          changes[key] = { old: oldValue, new: newValue };
+        }
+      }
+    }
+    
+    return changes;
   }
 
   // Subscription Plans
@@ -52,7 +70,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
     }
   }
 
-  async createSubscriptionPlan(plan: InsertSubscriptionPlan): Promise<SubscriptionPlan> {
+  async createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan> {
     try {
       this.validateRequired(plan, ['name', 'price', 'features', 'maxUniversities', 'maxCountries', 'turnaroundDays']);
 
@@ -78,13 +96,24 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         throw new ValidationServiceError('Subscription Plan', errors);
       }
 
-      return await this.subscriptionPlanRepository.create(plan);
+      const createdPlan = await this.subscriptionPlanRepository.create(plan);
+
+      await this.planAuditRepository.logChange({
+        planId: createdPlan.id,
+        changedBy: adminId,
+        changeType: 'created',
+        fieldChanges: { created: { old: null, new: createdPlan } },
+        ipAddress,
+        userAgent
+      });
+
+      return createdPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.createSubscriptionPlan');
     }
   }
 
-  async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>): Promise<SubscriptionPlan | undefined> {
+  async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined> {
     try {
       const errors: Record<string, string> = {};
 
@@ -110,14 +139,47 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         throw new ValidationServiceError('Subscription Plan', errors);
       }
 
-      return await this.subscriptionPlanRepository.update(id, updates);
+      const oldPlan = await this.subscriptionPlanRepository.findById(id);
+      if (!oldPlan) {
+        return undefined;
+      }
+
+      const fieldChanges = this.calculateFieldChanges(oldPlan, updates);
+
+      const updatedPlan = await this.subscriptionPlanRepository.update(id, updates);
+
+      if (Object.keys(fieldChanges).length > 0) {
+        await this.planAuditRepository.logChange({
+          planId: id,
+          changedBy: adminId,
+          changeType: 'updated',
+          fieldChanges,
+          changeReason,
+          ipAddress,
+          userAgent
+        });
+      }
+
+      return updatedPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.updateSubscriptionPlan');
     }
   }
 
-  async deleteSubscriptionPlan(id: string): Promise<boolean> {
+  async deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean> {
     try {
+      const plan = await this.subscriptionPlanRepository.findById(id);
+      if (plan) {
+        await this.planAuditRepository.logChange({
+          planId: id,
+          changedBy: adminId,
+          changeType: 'archived',
+          fieldChanges: { archived: { old: plan, new: null } },
+          ipAddress,
+          userAgent
+        });
+      }
+
       return await this.subscriptionPlanRepository.delete(id);
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.deleteSubscriptionPlan');

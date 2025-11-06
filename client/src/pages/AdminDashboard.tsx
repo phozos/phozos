@@ -19,7 +19,7 @@ import BulkImportUniversities from "@/components/BulkImportUniversities";
 import UniversityExport from "@/components/UniversityExport";
 import UniversityAnalytics from "@/components/UniversityAnalytics";
 import SubscriptionManagement from "@/components/admin/SubscriptionManagement";
-import { CompanyProfileManagement } from "@/components/admin";
+import { CompanyProfileManagement, PlanChangeHistory } from "@/components/admin";
 import { PasswordResetDialog } from "@/components/admin/PasswordResetDialog";
 import { 
   Settings,
@@ -68,7 +68,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  TestTube
+  TestTube,
+  History
 } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1981,6 +1982,18 @@ export default function AdminDashboard() {
             >
               <CreditCard className="w-4 h-4 mr-3" />
               Subscriptions
+            </button>
+            
+            <button
+              onClick={() => setSelectedTab("plan-change-history")}
+              className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors ${
+                selectedTab === "plan-change-history"
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-r-2 border-blue-500"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              <History className="w-4 h-4 mr-3" />
+              Plan Change History
             </button>
             
             <button
@@ -4234,6 +4247,7 @@ export default function AdminDashboard() {
             {selectedTab === "analytics" && renderAnalyticsContent()}
             {selectedTab === "security" && renderSecurityContent()}
             {selectedTab === "settings" && renderSettingsContent()}
+            {selectedTab === "plan-change-history" && <PlanChangeHistory />}
           </div>
         </div>
       </div>
