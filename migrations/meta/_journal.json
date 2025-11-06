@@ -71,6 +71,13 @@
       "when": 1762405235507,
       "tag": "0009_add_subscription_audit_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1762408102811,
+      "tag": "0010_lowly_gabe_jones",
+      "breakpoints": true
     }
   ]
 }
