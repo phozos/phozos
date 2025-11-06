@@ -21,6 +21,7 @@ import {
 import {
   BarChart,
   Bar,
+  Cell,
   LineChart,
   Line,
   XAxis,
@@ -124,8 +125,8 @@ export default function OutboxMonitoring() {
 
   const retryMutation = useApiMutation<{ message: string }, string>(
     async (eventId: string) => {
-      const response = await api.post(`/api/admin/outbox/events/${eventId}/retry`);
-      return response.data;
+      const response = await api.post<{ message: string }>(`/api/admin/outbox/events/${eventId}/retry`);
+      return response;
     },
     {
       onSuccess: () => {
@@ -141,8 +142,8 @@ export default function OutboxMonitoring() {
 
   const deleteMutation = useApiMutation<{ message: string }, string>(
     async (eventId: string) => {
-      const response = await api.delete(`/api/admin/outbox/events/${eventId}`);
-      return response.data;
+      const response = await api.delete<{ message: string }>(`/api/admin/outbox/events/${eventId}`);
+      return response;
     },
     {
       onSuccess: () => {
@@ -367,7 +368,7 @@ export default function OutboxMonitoring() {
                       <Tooltip />
                       <Bar dataKey="value" fill="#3b82f6">
                         {statusChartData.map((entry, index) => (
-                          <cell key={`cell-${index}`} fill={entry.color} />
+                          <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Bar>
                     </BarChart>
