@@ -1949,7 +1949,7 @@ export class AdminController extends BaseController {
     try {
       const { db } = await import('../db');
       const { subscriptionAuditOutbox } = await import('@shared/schema');
-      const { eq, desc, and, or, like } = await import('drizzle-orm');
+      const { eq, desc, and, or, like, sql } = await import('drizzle-orm');
 
       const { 
         status, 
