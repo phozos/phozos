@@ -2363,6 +2363,16 @@ export class AdminController extends BaseController {
       return this.handleError(res, error, 'AdminController.getMigrationStats');
     }
   }
+
+  async getComprehensivePlanAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const subscriptionAnalyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      const analytics = await subscriptionAnalyticsService.getComprehensiveAnalytics();
+      return this.sendSuccess(res, analytics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getComprehensivePlanAnalytics');
+    }
+  }
 }
 
 export const adminController = new AdminController();

@@ -84,6 +84,51 @@ export interface UpgradeDowngradeMetrics {
   }>;
 }
 
+export interface PlanVersionBreakdown {
+  basePlanId: string;
+  planName: string;
+  version: number;
+  isLatestVersion: boolean;
+  isDeprecated: boolean;
+  subscribers: number;
+  mrr: number;
+  avgPrice: number;
+  status: string;
+}
+
+export interface GrandfatheringImpact {
+  totalGrandfatheredUsers: number;
+  totalGrandfatheredMRR: number;
+  totalCurrentPriceMRR: number;
+  revenueGap: number;
+  percentageImpact: number;
+}
+
+export interface RecentPlanChange {
+  id: string;
+  planId: string;
+  planName: string;
+  changeType: string;
+  fieldChanges: Record<string, { old: any; new: any }>;
+  changeReason: string | null;
+  changedBy: string;
+  changedByName: string | null;
+  createdAt: Date;
+}
+
+export interface ComprehensiveAnalytics {
+  overview: {
+    totalMRR: number;
+    totalActiveSubscribers: number;
+    grandfatheredCount: number;
+    arpu: number;
+    activeMigrationsCount: number;
+  };
+  planVersions: PlanVersionBreakdown[];
+  grandfatheringImpact: GrandfatheringImpact;
+  recentChanges: RecentPlanChange[];
+}
+
 export interface ISubscriptionAnalyticsService {
   getSubscriptionMetrics(): Promise<SubscriptionMetrics>;
   getRevenueMetrics(): Promise<RevenueMetrics>;
@@ -91,6 +136,7 @@ export interface ISubscriptionAnalyticsService {
   getPaymentMetrics(): Promise<PaymentMetrics>;
   getSubscriptionGrowth(): Promise<SubscriptionGrowthData>;
   getUpgradeDowngradeMetrics(): Promise<UpgradeDowngradeMetrics>;
+  getComprehensiveAnalytics(): Promise<ComprehensiveAnalytics>;
 }
 
 export class SubscriptionAnalyticsService extends BaseService implements ISubscriptionAnalyticsService {
@@ -536,6 +582,163 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
       };
     } catch (error) {
       return this.handleError(error, 'SubscriptionAnalyticsService.getUpgradeDowngradeMetrics');
+    }
+  }
+
+  async getComprehensiveAnalytics(): Promise<ComprehensiveAnalytics> {
+    try {
+      const { subscriptionPlanChanges, planMigrations, users } = await import('@shared/schema');
+
+      const activeSubscriptions = await db
+        .select({
+          subscriptionId: userSubscriptions.id,
+          planId: userSubscriptions.planId,
+          isGrandfathered: userSubscriptions.isGrandfathered,
+          grandfatheredPrice: userSubscriptions.grandfatheredPrice,
+          amountPaid: userSubscriptions.amountPaid,
+          planPrice: subscriptionPlans.price,
+          planName: subscriptionPlans.name,
+          basePlanId: subscriptionPlans.basePlanId,
+          version: subscriptionPlans.version,
+          isLatestVersion: subscriptionPlans.isLatestVersion,
+          isActive: subscriptionPlans.isActive,
+          deprecatedAt: subscriptionPlans.deprecatedAt,
+          isLifetime: userSubscriptions.isLifetime
+        })
+        .from(userSubscriptions)
+        .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+        .where(eq(userSubscriptions.status, 'active'));
+
+      let totalMRR = 0;
+      let totalGrandfatheredUsers = 0;
+      let totalGrandfatheredMRR = 0;
+      let totalCurrentPriceMRR = 0;
+      const planVersionMap = new Map<string, {
+        basePlanId: string;
+        planName: string;
+        version: number;
+        isLatestVersion: boolean;
+        isDeprecated: boolean;
+        subscribers: number;
+        mrr: number;
+        totalPrice: number;
+        status: string;
+      }>();
+
+      for (const sub of activeSubscriptions) {
+        if (!sub.planId || sub.isLifetime) continue;
+
+        const planPrice = parseFloat(sub.planPrice || '0');
+        const grandfatheredPrice = sub.grandfatheredPrice ? parseFloat(sub.grandfatheredPrice) : null;
+        const actualPrice = sub.isGrandfathered && grandfatheredPrice ? grandfatheredPrice : planPrice;
+
+        totalMRR += actualPrice;
+
+        if (sub.isGrandfathered) {
+          totalGrandfatheredUsers++;
+          totalGrandfatheredMRR += actualPrice;
+          totalCurrentPriceMRR += planPrice;
+        }
+
+        const key = `${sub.basePlanId || sub.planId}-v${sub.version || 1}`;
+        const existing = planVersionMap.get(key) || {
+          basePlanId: sub.basePlanId || sub.planId,
+          planName: sub.planName || 'Unknown Plan',
+          version: sub.version || 1,
+          isLatestVersion: sub.isLatestVersion || false,
+          isDeprecated: !!sub.deprecatedAt,
+          subscribers: 0,
+          mrr: 0,
+          totalPrice: 0,
+          status: sub.isActive ? 'active' : 'inactive'
+        };
+
+        existing.subscribers += 1;
+        existing.mrr += actualPrice;
+        existing.totalPrice += actualPrice;
+        planVersionMap.set(key, existing);
+      }
+
+      const totalActiveSubscribers = activeSubscriptions.filter(s => !s.isLifetime).length;
+      const arpu = totalActiveSubscribers > 0 ? totalMRR / totalActiveSubscribers : 0;
+      const revenueGap = totalCurrentPriceMRR - totalGrandfatheredMRR;
+      const percentageImpact = totalCurrentPriceMRR > 0 
+        ? (revenueGap / totalCurrentPriceMRR) * 100 
+        : 0;
+
+      const planVersions: PlanVersionBreakdown[] = Array.from(planVersionMap.values()).map(item => ({
+        basePlanId: item.basePlanId,
+        planName: item.planName,
+        version: item.version,
+        isLatestVersion: item.isLatestVersion,
+        isDeprecated: item.isDeprecated,
+        subscribers: item.subscribers,
+        mrr: Math.round(item.mrr * 100) / 100,
+        avgPrice: item.subscribers > 0 ? Math.round((item.totalPrice / item.subscribers) * 100) / 100 : 0,
+        status: item.isDeprecated ? 'deprecated' : item.status
+      })).sort((a, b) => {
+        if (a.planName !== b.planName) return a.planName.localeCompare(b.planName);
+        return b.version - a.version;
+      });
+
+      const activeMigrations = await db
+        .select({ count: sql<number>`cast(count(*) as int)` })
+        .from(planMigrations)
+        .where(eq(planMigrations.status, 'active'));
+
+      const recentChangesData = await db
+        .select({
+          id: subscriptionPlanChanges.id,
+          planId: subscriptionPlanChanges.planId,
+          planName: subscriptionPlans.name,
+          changeType: subscriptionPlanChanges.changeType,
+          fieldChanges: subscriptionPlanChanges.fieldChanges,
+          changeReason: subscriptionPlanChanges.changeReason,
+          changedBy: subscriptionPlanChanges.changedBy,
+          changedByFirstName: users.firstName,
+          changedByLastName: users.lastName,
+          createdAt: subscriptionPlanChanges.createdAt
+        })
+        .from(subscriptionPlanChanges)
+        .leftJoin(subscriptionPlans, eq(subscriptionPlanChanges.planId, subscriptionPlans.id))
+        .leftJoin(users, eq(subscriptionPlanChanges.changedBy, users.id))
+        .orderBy(desc(subscriptionPlanChanges.createdAt))
+        .limit(20);
+
+      const recentChanges: RecentPlanChange[] = recentChangesData.map(change => ({
+        id: change.id,
+        planId: change.planId,
+        planName: change.planName || 'Unknown Plan',
+        changeType: change.changeType,
+        fieldChanges: change.fieldChanges as Record<string, { old: any; new: any }>,
+        changeReason: change.changeReason,
+        changedBy: change.changedBy,
+        changedByName: change.changedByFirstName && change.changedByLastName 
+          ? `${change.changedByFirstName} ${change.changedByLastName}`
+          : null,
+        createdAt: change.createdAt
+      }));
+
+      return {
+        overview: {
+          totalMRR: Math.round(totalMRR * 100) / 100,
+          totalActiveSubscribers,
+          grandfatheredCount: totalGrandfatheredUsers,
+          arpu: Math.round(arpu * 100) / 100,
+          activeMigrationsCount: activeMigrations[0]?.count || 0
+        },
+        planVersions,
+        grandfatheringImpact: {
+          totalGrandfatheredUsers,
+          totalGrandfatheredMRR: Math.round(totalGrandfatheredMRR * 100) / 100,
+          totalCurrentPriceMRR: Math.round(totalCurrentPriceMRR * 100) / 100,
+          revenueGap: Math.round(revenueGap * 100) / 100,
+          percentageImpact: Math.round(percentageImpact * 100) / 100
+        },
+        recentChanges
+      };
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionAnalyticsService.getComprehensiveAnalytics');
     }
   }
 }

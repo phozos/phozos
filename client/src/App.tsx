@@ -38,6 +38,7 @@ import { CookieBanner } from "@/components/CookieConsent";
 const Community = lazy(() => import("@/pages/Community"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const SubscriptionAnalytics = lazy(() => import("@/pages/admin/SubscriptionAnalytics"));
+const PlanAnalytics = lazy(() => import("@/pages/admin/PlanAnalytics"));
 const StudentChat = lazy(() => import("@/pages/StudentChat"));
 const CompanyDashboard = lazy(() => import("@/pages/CompanyDashboard"));
 // Feature-heavy pages that aren't critical for initial render
@@ -119,6 +120,14 @@ function AppContent() {
           <ProtectedRoute {...adminOnly}>
             <Suspense fallback={<LoadingFallback />}>
               <SubscriptionAnalytics />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/plan-analytics">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PlanAnalytics />
             </Suspense>
           </ProtectedRoute>
         </Route>

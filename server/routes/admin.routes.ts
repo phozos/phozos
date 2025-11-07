@@ -132,4 +132,7 @@ router.post('/migrations/:id/start', csrfProtection, asyncHandler((req: Authenti
 router.post('/migrations/:id/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelMigration(req, res)));
 router.get('/migrations/:id/stats', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrationStats(req, res)));
 
+// Comprehensive Plan Analytics
+router.get('/subscription-plans/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getComprehensivePlanAnalytics(req, res)));
+
 export default router;
