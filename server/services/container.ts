@@ -62,6 +62,7 @@ import {
 import { jwtService } from '../security/jwtService';
 import { validationService } from './infrastructure/validation.service';
 import { temporaryPasswordService } from './domain/temporaryPassword.service';
+import { featureEntitlementService } from './domain/feature-entitlement.service';
 
 /**
  * DI Container Interface
@@ -130,6 +131,7 @@ export const TYPES = {
   IUniversityService: Symbol.for('IUniversityService'),
   IUserProfileService: Symbol.for('IUserProfileService'),
   IUserSubscriptionService: Symbol.for('IUserSubscriptionService'),
+  IFeatureEntitlementService: Symbol.for('IFeatureEntitlementService'),
   
   // Admin Service Tokens (Phase 3)
   IAdminAnalyticsService: Symbol.for('IAdminAnalyticsService'),
@@ -195,6 +197,9 @@ class Container implements IContainer {
     // Bind infrastructure services (no dependencies - can be bound immediately)
     this.bindings.set(TYPES.IValidationService, validationService);
     this.bindings.set(TYPES.ITemporaryPasswordService, temporaryPasswordService);
+    
+    // Bind feature services
+    this.bindings.set(TYPES.IFeatureEntitlementService, featureEntitlementService);
     
     // Note: Service bindings are registered lazily to avoid circular dependencies
     // Services will be bound when they are first requested

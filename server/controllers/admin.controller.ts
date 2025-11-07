@@ -21,6 +21,7 @@ import { ISubscriptionService } from '../services/domain/subscription.service';
 import { IUserSubscriptionService } from '../services/domain/user-subscription.service';
 import { IPaymentService } from '../services/domain/payment.service';
 import { IPlanMigrationService } from '../services/domain/plan-migration.service';
+import { ISubscriptionPlanRepository } from '../repositories';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
 import { 
@@ -114,7 +115,23 @@ const updateSubscriptionPlanBodySchema = z.object({
   price: z.number().transform(val => val.toString()).optional(),
   features: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
-  changeReason: z.string().optional()
+  changeReason: z.string().optional(),
+  forceUpdate: z.boolean().optional(),
+  includeLoanAssistance: z.boolean().optional(),
+  includeVisaSupport: z.boolean().optional(),
+  includeCounselorSession: z.boolean().optional(),
+  includeScholarshipPlanning: z.boolean().optional(),
+  includeMockInterview: z.boolean().optional(),
+  includeExpertEditing: z.boolean().optional(),
+  includePostAdmitSupport: z.boolean().optional(),
+  includeDedicatedManager: z.boolean().optional(),
+  includeNetworkingEvents: z.boolean().optional(),
+  includeFlightAccommodation: z.boolean().optional(),
+  maxUniversities: z.number().optional(),
+  maxCountries: z.number().optional(),
+  universityTier: z.enum(['general', 'top500', 'top200', 'top100', 'ivy_league']).optional(),
+  supportType: z.enum(['email', 'whatsapp', 'phone', 'premium']).optional(),
+  turnaroundDays: z.number().optional()
 });
 
 const updateStudentSubscriptionSchema = z.object({
@@ -1205,8 +1222,90 @@ export class AdminController extends BaseController {
     try {
       const { id } = req.params;
       const validatedData = updateSubscriptionPlanBodySchema.parse(req.body);
-      const { changeReason, ...updateData } = validatedData;
+      const { changeReason, forceUpdate, ...updateData } = validatedData;
+      
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const subscriptionPlanRepo = getService<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository);
+      
+      // Get current plan to detect feature changes
+      const currentPlan = await subscriptionPlanRepo.findById(id);
+      
+      // Check subscriber count
+      const subscriberCount = await subscriptionPlanRepo.getSubscriberCount(id);
+      
+      // Protected feature fields that affect user entitlements
+      const PROTECTED_FEATURE_FIELDS = [
+        'features',
+        'includeLoanAssistance',
+        'includeVisaSupport',
+        'includeCounselorSession',
+        'includeScholarshipPlanning',
+        'includeMockInterview',
+        'includeExpertEditing',
+        'includePostAdmitSupport',
+        'includeDedicatedManager',
+        'includeNetworkingEvents',
+        'includeFlightAccommodation',
+        'maxUniversities',
+        'maxCountries',
+        'universityTier',
+        'supportType',
+        'turnaroundDays'
+      ];
+      
+      // Detect if any protected features are being changed
+      const featureChanges: { field: string; oldValue: any; newValue: any }[] = [];
+      
+      for (const field of PROTECTED_FEATURE_FIELDS) {
+        if (field in updateData) {
+          const oldValue = (currentPlan as any)[field];
+          const newValue = (updateData as any)[field];
+          
+          if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+            featureChanges.push({
+              field,
+              oldValue,
+              newValue
+            });
+          }
+        }
+      }
+      
+      // If there are feature changes and plan has active subscribers
+      if (featureChanges.length > 0 && subscriberCount > 0) {
+        if (!forceUpdate) {
+          // Return warning instead of updating
+          return res.status(400).json({
+            success: false,
+            error: 'FEATURE_CHANGE_WARNING',
+            message: 'Cannot modify features on plans with active subscribers. Use forceUpdate=true with changeReason if you must proceed.',
+            code: 400,
+            data: {
+              subscriberCount,
+              featureChanges,
+              recommendation: 'Use createPlanVersion() to preserve grandfathering for existing users',
+              requiresForceUpdate: true
+            }
+          });
+        }
+        
+        // Force update enabled - require change reason
+        if (!changeReason) {
+          return this.sendError(
+            res,
+            400,
+            'CHANGE_REASON_REQUIRED',
+            'Change reason is required when forcing feature updates on plans with active subscribers'
+          );
+        }
+        
+        // Log warning about forced feature changes
+        console.warn(`⚠️ FORCED FEATURE UPDATE: Plan ${id} (${currentPlan.name}) with ${subscriberCount} subscribers`);
+        console.warn(`Changed fields:`, featureChanges.map(c => c.field).join(', '));
+        console.warn(`Reason: ${changeReason}`);
+        console.warn(`Admin: ${req.user!.id}`);
+      }
+      
       const updated = await subscriptionService.updateSubscriptionPlan(
         id,
         updateData,
@@ -1215,6 +1314,7 @@ export class AdminController extends BaseController {
         req.ip,
         req.get('user-agent')
       );
+      
       return this.sendSuccess(res, updated);
     } catch (error: any) {
       if (error instanceof z.ZodError) {

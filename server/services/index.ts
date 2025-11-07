@@ -19,6 +19,7 @@ export * from './domain/subscription.service';
 export * from './domain/payment.service';
 export * from './domain/testimonial.service';
 export * from './domain/proration.service';
+export * from './domain/feature-entitlement.service';
 
 // Integration Services
 export * from './integration/ai-matching.service';
