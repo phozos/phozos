@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 5px 5px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      background-color: #f9fafb;
+      padding: 30px 20px;
+      border: 1px solid #e5e7eb;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 25px;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      border-left: 4px solid #f59e0b;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #d97706;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .feature-name {
+      font-size: 22px;
+      font-weight: bold;
+      color: #f59e0b;
+      margin-bottom: 15px;
+    }
+    .warning-box {
+      background-color: #fef3c7;
+      border: 2px solid #f59e0b;
+      padding: 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .warning-box strong {
+      color: #d97706;
+      font-size: 16px;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .success-box {
+      background-color: #d1fae5;
+      border: 2px solid #10b981;
+      padding: 20px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .success-box strong {
+      color: #059669;
+      font-size: 16px;
+      display: block;
+      margin-bottom: 10px;
+    }
+    .options-list {
+      margin: 15px 0;
+      padding-left: 0;
+      list-style: none;
+    }
+    .options-list li {
+      padding: 12px 0;
+      padding-left: 35px;
+      position: relative;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .options-list li:last-child {
+      border-bottom: none;
+    }
+    .options-list li:before {
+      content: "→";
+      position: absolute;
+      left: 0;
+      color: #f59e0b;
+      font-weight: bold;
+      font-size: 20px;
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 15px 30px;
+      background-color: #f59e0b;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .cta-button:hover {
+      background-color: #d97706;
+    }
+    .detail-row {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #f9fafb;
+      border-radius: 3px;
+    }
+    .label {
+      font-weight: 600;
+      color: #4b5563;
+    }
+    .value {
+      color: #1f2937;
+      margin-left: 10px;
+    }
+    .footer {
+      background-color: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 5px 5px;
+    }
+    .footer a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">⚠️</div>
+      <h1>Important Plan Update</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">
+        Hello,
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Upcoming Change to Your {{planName}} Plan</div>
+        <p>We're writing to inform you about an important change affecting one of your plan features.</p>
+        <div class="feature-name">{{featureName}}</div>
+      </div>
+      
+      <div class="warning-box">
+        <strong>⏰ What's Changing:</strong>
+        <p style="margin: 5px 0;">This feature will be deprecated on <strong>{{effectiveDate}}</strong></p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Your Status:</div>
+        {{#if grandfathered}}
+        <div class="success-box">
+          <strong>✓ You're Grandfathered!</strong>
+          <p style="margin: 5px 0;">Great news! You can keep using this feature {{#if grandfatherExpiryDate}}until {{grandfatherExpiryDate}}{{else}}indefinitely{{/if}}.</p>
+          <p style="margin: 5px 0;">No action is required on your part.</p>
+        </div>
+        {{else}}
+        <div class="warning-box">
+          <strong>⚠️ This Change Applies to You</strong>
+          <p style="margin: 5px 0;">Please review your options below and take action before the deadline.</p>
+        </div>
+        <div class="section">
+          <div class="section-title">Your Options:</div>
+          <ul class="options-list">
+            <li><strong>Continue with current plan:</strong> Feature will be removed on the effective date</li>
+            <li><strong>Upgrade to a new plan:</strong> Access to enhanced features and benefits</li>
+            <li><strong>Explore alternatives:</strong> Review other plans that may better suit your needs</li>
+          </ul>
+        </div>
+        {{/if}}
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Important Dates</div>
+        <div class="detail-row">
+          <span class="label">Effective Date:</span>
+          <span class="value">{{effectiveDate}}</span>
+        </div>
+        {{#if grandfatherExpiryDate}}
+        <div class="detail-row">
+          <span class="label">Grandfather Expiry:</span>
+          <span class="value">{{grandfatherExpiryDate}}</span>
+        </div>
+        {{/if}}
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="{{migrationGuideUrl}}" class="cta-button">View Migration Guide</a>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Have questions or need assistance? <a href="#">Contact our support team</a></p>
+      <p style="margin-top: 15px; font-size: 12px;">This is an automated notification from your subscription management system.</p>
+    </div>
+  </div>
+</body>
+</html>

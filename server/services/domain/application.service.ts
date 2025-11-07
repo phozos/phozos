@@ -4,6 +4,7 @@ import { container, TYPES } from '../container';
 import { Application, InsertApplication } from '@shared/schema';
 import { DuplicateResourceError, ValidationServiceError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
+import { IFeatureEntitlementService, QuotaType } from '../../types/feature-types';
 
 export interface IApplicationService {
   getApplicationById(id: string): Promise<Application>;
@@ -18,7 +19,8 @@ export interface IApplicationService {
 
 export class ApplicationService extends BaseService implements IApplicationService {
   constructor(
-    private applicationRepository: IApplicationRepository = container.get<IApplicationRepository>(TYPES.IApplicationRepository)
+    private applicationRepository: IApplicationRepository = container.get<IApplicationRepository>(TYPES.IApplicationRepository),
+    private featureEntitlementService: IFeatureEntitlementService = container.get<IFeatureEntitlementService>(TYPES.IFeatureEntitlementService)
   ) {
     super();
   }
@@ -51,6 +53,30 @@ export class ApplicationService extends BaseService implements IApplicationServi
   async createApplication(data: InsertApplication): Promise<Application> {
     try {
       this.validateRequired(data, ['userId', 'universityId']);
+
+      // FEATURE GUARD: Check if user has access to counselor session feature
+      const canCreateApplication = await this.featureEntitlementService.canUseFeature(
+        data.userId,
+        'includeCounselorSession'
+      );
+
+      if (!canCreateApplication.allowed) {
+        throw new ValidationServiceError('Application', {
+          featureAccess: canCreateApplication.reason || 'This feature requires a plan with counselor sessions. Please upgrade your plan.'
+        });
+      }
+
+      // QUOTA GUARD: Check university quota
+      const universityQuota = await this.featureEntitlementService.getQuotaInfo(
+        data.userId,
+        'universities' as QuotaType
+      );
+
+      if (universityQuota.remaining <= 0 && !universityQuota.isUnlimited) {
+        throw new ValidationServiceError('Application', {
+          quotaExceeded: `You have reached your university limit (${universityQuota.used}/${universityQuota.limit}). Please upgrade your plan to add more universities.`
+        });
+      }
 
       const errors: Record<string, string> = {};
 

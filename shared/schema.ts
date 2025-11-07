@@ -20,7 +20,7 @@ export const teamRoleEnum = pgEnum("team_role", ["admin", "counselor"]);
 export const accountStatusEnum = pgEnum("account_status", ["active", "inactive", "pending_approval", "suspended", "rejected"]);
 export const applicationStatusEnum = pgEnum("application_status", ["draft", "submitted", "under_review", "accepted", "rejected", "waitlisted"]);
 export const documentTypeEnum = pgEnum("document_type", ["transcript", "test_score", "essay", "recommendation", "resume", "certificate", "other"]);
-export const notificationTypeEnum = pgEnum("notification_type", ["application_update", "document_reminder", "message", "system", "deadline"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["application_update", "document_reminder", "message", "system", "deadline", "feature_addition", "feature_deprecation", "feature_modification"]);
 export const subscriptionTierEnum = pgEnum("subscription_tier", ["free", "premium", "elite"]);
 export const studentStatusEnum = pgEnum("student_status", ["inquiry", "converted", "visa_applied", "visa_approved", "departed"]);
 export const fieldTypeEnum = pgEnum("field_type", ["text", "textarea", "number", "date", "dropdown", "checkbox", "file"]);
@@ -849,6 +849,7 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   deprecatedAt: timestamp("deprecated_at"),
   archivedAt: timestamp("archived_at"),
   successorPlanId: uuid("successor_plan_id").references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
+  feature_version_metadata: jsonb("feature_version_metadata"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1051,6 +1052,20 @@ export const planMigrationUsers = pgTable("plan_migration_users", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Quota Usage table (Phase 3.2: Quota Management System)
+export const quotaUsage = pgTable("quota_usage", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  quotaType: varchar("quota_type", { length: 50 }).notNull(),
+  usedCount: integer("used_count").default(0).notNull(),
+  allocatedCount: integer("allocated_count").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  resetAt: timestamp("reset_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1064,6 +1079,7 @@ export const insertSubscriptionPlanNotificationSchema = createInsertSchema(subsc
 export const insertUserPlanNotificationSchema = createInsertSchema(userPlanNotifications).omit({ id: true, createdAt: true });
 export const insertPlanMigrationSchema = createInsertSchema(planMigrations).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPlanMigrationUserSchema = createInsertSchema(planMigrationUsers).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertQuotaUsageSchema = createInsertSchema(quotaUsage).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -1100,4 +1116,6 @@ export type PlanMigration = typeof planMigrations.$inferSelect;
 export type InsertPlanMigration = z.infer<typeof insertPlanMigrationSchema>;
 export type PlanMigrationUser = typeof planMigrationUsers.$inferSelect;
 export type InsertPlanMigrationUser = z.infer<typeof insertPlanMigrationUserSchema>;
+export type QuotaUsage = typeof quotaUsage.$inferSelect;
+export type InsertQuotaUsage = z.infer<typeof insertQuotaUsageSchema>;
 

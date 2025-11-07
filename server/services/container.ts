@@ -58,11 +58,16 @@ import {
   studentTimelineRepository,
   IStaffInvitationRepository,
   staffInvitationRepository,
+  IQuotaUsageRepository,
+  quotaUsageRepository,
 } from '../repositories';
 import { jwtService } from '../security/jwtService';
 import { validationService } from './infrastructure/validation.service';
 import { temporaryPasswordService } from './domain/temporaryPassword.service';
 import { featureEntitlementService } from './domain/feature-entitlement.service';
+import { featureVersioningService } from './domain/feature-versioning.service';
+import { featureChangeNotificationService } from './domain/feature-change-notification.service';
+import { quotaManagementService } from './domain/quota-management.service';
 
 /**
  * DI Container Interface
@@ -104,6 +109,7 @@ export const TYPES = {
   ITestimonialRepository: Symbol.for('ITestimonialRepository'),
   IStudentTimelineRepository: Symbol.for('IStudentTimelineRepository'),
   IStaffInvitationRepository: Symbol.for('IStaffInvitationRepository'),
+  IQuotaUsageRepository: Symbol.for('IQuotaUsageRepository'),
   
   // Infrastructure Service Tokens (Phase 5.4)
   WebSocketService: Symbol.for('WebSocketService'),
@@ -132,6 +138,9 @@ export const TYPES = {
   IUserProfileService: Symbol.for('IUserProfileService'),
   IUserSubscriptionService: Symbol.for('IUserSubscriptionService'),
   IFeatureEntitlementService: Symbol.for('IFeatureEntitlementService'),
+  IFeatureVersioningService: Symbol.for('IFeatureVersioningService'),
+  IFeatureChangeNotificationService: Symbol.for('IFeatureChangeNotificationService'),
+  IQuotaManagementService: Symbol.for('IQuotaManagementService'),
   
   // Admin Service Tokens (Phase 3)
   IAdminAnalyticsService: Symbol.for('IAdminAnalyticsService'),
@@ -190,6 +199,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
     this.bindings.set(TYPES.IStaffInvitationRepository, staffInvitationRepository);
+    this.bindings.set(TYPES.IQuotaUsageRepository, quotaUsageRepository);
     
     // Bind security services
     this.bindings.set(TYPES.JwtService, jwtService);
@@ -200,6 +210,9 @@ class Container implements IContainer {
     
     // Bind feature services
     this.bindings.set(TYPES.IFeatureEntitlementService, featureEntitlementService);
+    this.bindings.set(TYPES.IFeatureVersioningService, featureVersioningService);
+    this.bindings.set(TYPES.IFeatureChangeNotificationService, featureChangeNotificationService);
+    this.bindings.set(TYPES.IQuotaManagementService, quotaManagementService);
     
     // Note: Service bindings are registered lazily to avoid circular dependencies
     // Services will be bound when they are first requested
@@ -269,6 +282,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
     this.bindings.set(TYPES.IStaffInvitationRepository, staffInvitationRepository);
+    this.bindings.set(TYPES.IQuotaUsageRepository, quotaUsageRepository);
     this.bindings.set(TYPES.JwtService, jwtService);
   }
   

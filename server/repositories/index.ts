@@ -25,6 +25,7 @@ export * from './testimonial.repository';
 export * from './student-timeline.repository';
 export * from './forum-reports.repository';
 export * from './staff-invitation.repository';
+export * from './quota-usage.repository';
 
 import { userRepository } from './user.repository';
 import { studentRepository } from './student.repository';
@@ -51,6 +52,7 @@ import { testimonialRepository } from './testimonial.repository';
 import { studentTimelineRepository } from './student-timeline.repository';
 import { forumReportsRepository } from './forum-reports.repository';
 import { staffInvitationRepository } from './staff-invitation.repository';
+import { quotaUsageRepository } from './quota-usage.repository';
 
 export const repositories = {
   user: userRepository,
@@ -79,5 +81,6 @@ export const repositories = {
   testimonial: testimonialRepository,
   studentTimeline: studentTimelineRepository,
   forumReports: forumReportsRepository,
-  staffInvitation: staffInvitationRepository
+  staffInvitation: staffInvitationRepository,
+  quotaUsage: quotaUsageRepository
 };

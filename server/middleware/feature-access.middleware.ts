@@ -39,19 +39,29 @@ export function requireFeature(featureName: string) {
       const accessResult = await featureService.canUseFeature(authReq.user.id, featureName);
 
       if (!accessResult.allowed) {
+        const upgradeUrl = `/plans?feature=${encodeURIComponent(featureName)}`;
+        
         return res.status(403).json({
           success: false,
           error: 'FEATURE_NOT_AVAILABLE',
-          message: accessResult.reason || `This feature requires ${featureName}. Please upgrade your plan.`,
+          message: accessResult.reason || `This feature requires ${featureName}. Please upgrade your plan to access this feature.`,
           code: 403,
           data: {
             requiredFeature: featureName,
             currentPlan: accessResult.currentPlan || 'Free',
             requiresUpgrade: accessResult.requiresUpgrade,
-            upgradeOptions: accessResult.upgradeOptions || []
+            upgradeOptions: accessResult.upgradeOptions || [],
+            upgradeUrl,
+            helpText: `Visit ${upgradeUrl} to see plans that include this feature.`
           }
         });
       }
+
+      // Attach feature entitlement to request for downstream use
+      (authReq as any).featureEntitlement = {
+        ...(authReq as any).featureEntitlement,
+        [featureName]: true
+      };
 
       // Feature access granted, continue
       next();
@@ -97,10 +107,12 @@ export function requireQuota(quotaType: QuotaType, minimumRequired: number = 1) 
       const quotaInfo = await featureService.getQuotaInfo(authReq.user.id, quotaType);
 
       if (quotaInfo.remaining < minimumRequired) {
+        const upgradeUrl = `/plans?quota=${quotaType}`;
+        
         return res.status(403).json({
           success: false,
           error: 'QUOTA_EXCEEDED',
-          message: `You have reached your ${quotaType} limit. Please upgrade your plan.`,
+          message: `You have reached your ${quotaType} limit (${quotaInfo.used}/${quotaInfo.limit}). Please upgrade your plan to add more ${quotaType}.`,
           code: 403,
           data: {
             quotaType,
@@ -108,7 +120,9 @@ export function requireQuota(quotaType: QuotaType, minimumRequired: number = 1) 
             used: quotaInfo.used,
             remaining: quotaInfo.remaining,
             required: minimumRequired,
-            requiresUpgrade: true
+            requiresUpgrade: true,
+            upgradeUrl,
+            helpText: `Upgrade your plan to increase your ${quotaType} limit.`
           }
         });
       }
@@ -192,17 +206,27 @@ export function requireAnyFeature(features: string[]) {
       const hasAnyFeature = Object.values(featureChecks).some(hasAccess => hasAccess);
 
       if (!hasAnyFeature) {
+        const upgradeUrl = `/plans?features=${encodeURIComponent(features.join(','))}`;
+        
         return res.status(403).json({
           success: false,
           error: 'FEATURE_NOT_AVAILABLE',
-          message: `This action requires one of the following features: ${features.join(', ')}. Please upgrade your plan.`,
+          message: `This action requires at least one of the following features: ${features.join(', ')}. Please upgrade your plan.`,
           code: 403,
           data: {
             requiredFeatures: features,
-            requiresUpgrade: true
+            requiresUpgrade: true,
+            upgradeUrl,
+            helpText: 'Visit the plans page to see which plans include these features.'
           }
         });
       }
+      
+      // Attach feature entitlement
+      (authReq as any).featureEntitlement = {
+        ...(authReq as any).featureEntitlement,
+        anyOf: features
+      };
 
       next();
     } catch (error) {
@@ -249,18 +273,28 @@ export function requireAllFeatures(features: string[]) {
         .map(([featureName]) => featureName);
 
       if (missingFeatures.length > 0) {
+        const upgradeUrl = `/plans?features=${encodeURIComponent(features.join(','))}`;
+        
         return res.status(403).json({
           success: false,
           error: 'FEATURE_NOT_AVAILABLE',
-          message: `This action requires all of the following features: ${features.join(', ')}. Missing: ${missingFeatures.join(', ')}.`,
+          message: `This action requires all of the following features: ${features.join(', ')}. You are missing: ${missingFeatures.join(', ')}.`,
           code: 403,
           data: {
             requiredFeatures: features,
             missingFeatures,
-            requiresUpgrade: true
+            requiresUpgrade: true,
+            upgradeUrl,
+            helpText: 'Upgrade to a plan that includes all required features.'
           }
         });
       }
+      
+      // Attach feature entitlement
+      (authReq as any).featureEntitlement = {
+        ...(authReq as any).featureEntitlement,
+        allOf: features
+      };
 
       next();
     } catch (error) {
