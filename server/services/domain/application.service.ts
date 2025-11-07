@@ -5,6 +5,7 @@ import { Application, InsertApplication } from '@shared/schema';
 import { DuplicateResourceError, ValidationServiceError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
 import { IFeatureEntitlementService, QuotaType } from '../../types/feature-types';
+import { IFeatureAnalyticsService } from './feature-analytics.service';
 
 export interface IApplicationService {
   getApplicationById(id: string): Promise<Application>;
@@ -20,7 +21,8 @@ export interface IApplicationService {
 export class ApplicationService extends BaseService implements IApplicationService {
   constructor(
     private applicationRepository: IApplicationRepository = container.get<IApplicationRepository>(TYPES.IApplicationRepository),
-    private featureEntitlementService: IFeatureEntitlementService = container.get<IFeatureEntitlementService>(TYPES.IFeatureEntitlementService)
+    private featureEntitlementService: IFeatureEntitlementService = container.get<IFeatureEntitlementService>(TYPES.IFeatureEntitlementService),
+    private featureAnalyticsService: IFeatureAnalyticsService = container.get<IFeatureAnalyticsService>(TYPES.IFeatureAnalyticsService)
   ) {
     super();
   }
@@ -65,6 +67,13 @@ export class ApplicationService extends BaseService implements IApplicationServi
           featureAccess: canCreateApplication.reason || 'This feature requires a plan with counselor sessions. Please upgrade your plan.'
         });
       }
+
+      await this.featureAnalyticsService.trackFeatureUsage(
+        data.userId,
+        'includeCounselorSession',
+        'accessed',
+        { universityId: data.universityId }
+      );
 
       // QUOTA GUARD: Check university quota
       const universityQuota = await this.featureEntitlementService.getQuotaInfo(

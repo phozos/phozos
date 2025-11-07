@@ -26,6 +26,7 @@ export * from './student-timeline.repository';
 export * from './forum-reports.repository';
 export * from './staff-invitation.repository';
 export * from './quota-usage.repository';
+export * from './feature-usage.repository';
 
 import { userRepository } from './user.repository';
 import { studentRepository } from './student.repository';
@@ -53,6 +54,7 @@ import { studentTimelineRepository } from './student-timeline.repository';
 import { forumReportsRepository } from './forum-reports.repository';
 import { staffInvitationRepository } from './staff-invitation.repository';
 import { quotaUsageRepository } from './quota-usage.repository';
+import { featureUsageRepository } from './feature-usage.repository';
 
 export const repositories = {
   user: userRepository,
@@ -82,5 +84,6 @@ export const repositories = {
   studentTimeline: studentTimelineRepository,
   forumReports: forumReportsRepository,
   staffInvitation: staffInvitationRepository,
-  quotaUsage: quotaUsageRepository
+  quotaUsage: quotaUsageRepository,
+  featureUsage: featureUsageRepository
 };

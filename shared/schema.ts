@@ -1066,6 +1066,32 @@ export const quotaUsage = pgTable("quota_usage", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Feature Usage Events table (Phase 3.3: Feature Usage Analytics)
+export const featureUsageEvents = pgTable("feature_usage_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  featureName: varchar("feature_name", { length: 100 }).notNull(),
+  usageType: varchar("usage_type", { length: 50 }).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Feature Usage Summary table (Phase 3.3: Feature Usage Analytics - Aggregated data)
+export const featureUsageSummary = pgTable("feature_usage_summary", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  featureName: varchar("feature_name", { length: 100 }).notNull(),
+  totalUsers: integer("total_users").default(0),
+  activeUsers: integer("active_users").default(0),
+  usageCount: integer("usage_count").default(0),
+  adoptionRate: decimal("adoption_rate", { precision: 5, scale: 2 }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1080,6 +1106,8 @@ export const insertUserPlanNotificationSchema = createInsertSchema(userPlanNotif
 export const insertPlanMigrationSchema = createInsertSchema(planMigrations).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPlanMigrationUserSchema = createInsertSchema(planMigrationUsers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertQuotaUsageSchema = createInsertSchema(quotaUsage).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFeatureUsageEventSchema = createInsertSchema(featureUsageEvents).omit({ id: true, createdAt: true });
+export const insertFeatureUsageSummarySchema = createInsertSchema(featureUsageSummary).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -1118,4 +1146,8 @@ export type PlanMigrationUser = typeof planMigrationUsers.$inferSelect;
 export type InsertPlanMigrationUser = z.infer<typeof insertPlanMigrationUserSchema>;
 export type QuotaUsage = typeof quotaUsage.$inferSelect;
 export type InsertQuotaUsage = z.infer<typeof insertQuotaUsageSchema>;
+export type FeatureUsageEvent = typeof featureUsageEvents.$inferSelect;
+export type InsertFeatureUsageEvent = z.infer<typeof insertFeatureUsageEventSchema>;
+export type FeatureUsageSummary = typeof featureUsageSummary.$inferSelect;
+export type InsertFeatureUsageSummary = z.infer<typeof insertFeatureUsageSummarySchema>;
 
