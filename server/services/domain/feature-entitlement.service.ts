@@ -33,12 +33,17 @@ export class FeatureEntitlementService extends BaseService implements IFeatureEn
   private cache: Map<string, CachedEntitlement>;
   private readonly CACHE_TTL = 60000; // 1 minute cache
 
-  constructor(
-    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository),
-    private subscriptionPlanRepo: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository)
-  ) {
+  constructor() {
     super();
     this.cache = new Map();
+  }
+
+  private get userSubscriptionRepo(): IUserSubscriptionRepository {
+    return container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository);
+  }
+
+  private get subscriptionPlanRepo(): ISubscriptionPlanRepository {
+    return container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository);
   }
 
   /**
