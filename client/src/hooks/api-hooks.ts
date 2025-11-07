@@ -118,6 +118,131 @@ export function usePaginatedApiQuery<T>(
 }
 
 /**
+ * Feature Management Admin Hooks
+ */
+export function useFeatureManagementDashboard() {
+  return useApiQuery(
+    ['feature-management-dashboard'],
+    '/api/admin/features/dashboard'
+  );
+}
+
+export function useFeatureUsageOverview(startDate?: Date, endDate?: Date) {
+  const params = new URLSearchParams();
+  if (startDate) params.append('startDate', startDate.toISOString());
+  if (endDate) params.append('endDate', endDate.toISOString());
+  const queryString = params.toString();
+  
+  return useApiQuery(
+    ['feature-usage-overview', startDate?.toISOString() || 'none', endDate?.toISOString() || 'none'],
+    `/api/admin/features/usage${queryString ? `?${queryString}` : ''}`
+  );
+}
+
+export function useFeatureHealth(featureName?: string) {
+  return useApiQuery(
+    ['feature-health', featureName || 'all'],
+    featureName 
+      ? `/api/admin/features/${featureName}/health`
+      : '/api/admin/features/health'
+  );
+}
+
+export function useFeatureLifecycle(featureName: string) {
+  return useApiQuery(
+    ['feature-lifecycle', featureName],
+    `/api/admin/features/${featureName}/lifecycle`,
+    undefined,
+    { enabled: !!featureName }
+  );
+}
+
+export function useFeatureImpactPreview(planId: string, changes: any) {
+  return useApiMutation(
+    async (variables: { planId: string; changes: any }) => 
+      apiRequest(`/api/admin/features/preview/${variables.planId}`, {
+        method: 'POST',
+        body: JSON.stringify(variables.changes)
+      })
+  );
+}
+
+export function useBulkFeatureOperation() {
+  return useApiMutation(
+    async (operation: any) => 
+      apiRequest('/api/admin/features/bulk', {
+        method: 'POST',
+        body: JSON.stringify(operation)
+      })
+  );
+}
+
+export function useDeprecationSchedules(status?: string) {
+  const params = status ? `?status=${status}` : '';
+  return useApiQuery(
+    ['deprecation-schedules', status || 'all'],
+    `/api/admin/features/deprecations${params}`
+  );
+}
+
+export function useDeprecationSchedule(scheduleId: string) {
+  return useApiQuery(
+    ['deprecation-schedule', scheduleId],
+    `/api/admin/features/deprecations/${scheduleId}`,
+    undefined,
+    { enabled: !!scheduleId }
+  );
+}
+
+export function useCreateDeprecationSchedule() {
+  return useApiMutation(
+    async (request: any) =>
+      apiRequest('/api/admin/features/deprecations', {
+        method: 'POST',
+        body: JSON.stringify(request)
+      })
+  );
+}
+
+export function useUpdateDeprecationSchedule() {
+  return useApiMutation(
+    async (request: any) =>
+      apiRequest('/api/admin/features/deprecations/update', {
+        method: 'PUT',
+        body: JSON.stringify(request)
+      })
+  );
+}
+
+export function useCancelDeprecationSchedule() {
+  return useApiMutation(
+    async ({ scheduleId, reason }: { scheduleId: string; reason: string }) =>
+      apiRequest(`/api/admin/features/deprecations/${scheduleId}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      })
+  );
+}
+
+export function useDeprecationImpact(scheduleId: string) {
+  return useApiQuery(
+    ['deprecation-impact', scheduleId],
+    `/api/admin/features/deprecations/${scheduleId}/impact`,
+    undefined,
+    { enabled: !!scheduleId }
+  );
+}
+
+export function useDeprecationTimeline(scheduleId: string) {
+  return useApiQuery(
+    ['deprecation-timeline', scheduleId],
+    `/api/admin/features/deprecations/${scheduleId}/timeline`,
+    undefined,
+    { enabled: !!scheduleId }
+  );
+}
+
+/**
  * Convenience hooks for common HTTP methods - simplified from original complex set
  */
 

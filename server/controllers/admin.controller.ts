@@ -2473,6 +2473,174 @@ export class AdminController extends BaseController {
       return this.handleError(res, error, 'AdminController.getComprehensivePlanAnalytics');
     }
   }
+
+  async getFeatureImpactPreview(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+      const changes = req.body;
+      const { FeatureImpactPreviewService } = await import('../services/domain/admin/feature-impact-preview.service');
+      const service = new FeatureImpactPreviewService();
+      const analysis = await service.analyzeFeatureChange(planId, changes);
+      return this.sendSuccess(res, analysis);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureImpactPreview');
+    }
+  }
+
+  async getFeatureManagementDashboard(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const dashboard = await service.getDashboardSummary();
+      return this.sendSuccess(res, dashboard);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureManagementDashboard');
+    }
+  }
+
+  async getFeatureUsageOverview(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { startDate, endDate } = req.query;
+      const dateRange = startDate && endDate ? {
+        start: new Date(startDate as string),
+        end: new Date(endDate as string)
+      } : undefined;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const overview = await service.getFeatureUsageOverview(dateRange);
+      return this.sendSuccess(res, overview);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureUsageOverview');
+    }
+  }
+
+  async getFeatureHealth(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { featureName } = req.params;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const health = await service.getFeatureHealth(featureName);
+      return this.sendSuccess(res, health);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureHealth');
+    }
+  }
+
+  async getFeatureLifecycle(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { featureName } = req.params;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const lifecycle = await service.getFeatureLifecycle(featureName);
+      return this.sendSuccess(res, lifecycle);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureLifecycle');
+    }
+  }
+
+  async executeBulkFeatureOperation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const operation = req.body;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const result = await service.executeBulkOperation(operation, adminId);
+      return this.sendSuccess(res, result);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.executeBulkFeatureOperation');
+    }
+  }
+
+  async createDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const request = req.body;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedule = await service.createDeprecationSchedule(request, adminId);
+      return this.sendSuccess(res, schedule);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.createDeprecationSchedule');
+    }
+  }
+
+  async getDeprecationSchedules(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status } = req.query;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedules = await service.getAllDeprecationSchedules(status as any);
+      return this.sendSuccess(res, schedules);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationSchedules');
+    }
+  }
+
+  async getDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { scheduleId } = req.params;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedule = await service.getDeprecationSchedule(scheduleId);
+      if (!schedule) {
+        return this.sendError(res, 404, 'Deprecation schedule not found');
+      }
+      return this.sendSuccess(res, schedule);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationSchedule');
+    }
+  }
+
+  async updateDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const request = req.body;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedule = await service.updateDeprecationSchedule(request, adminId);
+      return this.sendSuccess(res, schedule);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.updateDeprecationSchedule');
+    }
+  }
+
+  async cancelDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const { scheduleId } = req.params;
+      const { reason } = req.body;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      await service.cancelDeprecationSchedule(scheduleId, reason, adminId);
+      return this.sendSuccess(res, { message: 'Deprecation schedule cancelled successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.cancelDeprecationSchedule');
+    }
+  }
+
+  async getDeprecationImpact(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { scheduleId } = req.params;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const impact = await service.getDeprecationImpact(scheduleId);
+      return this.sendSuccess(res, impact);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationImpact');
+    }
+  }
+
+  async getDeprecationTimeline(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { scheduleId } = req.params;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const timeline = await service.getDeprecationTimeline(scheduleId);
+      return this.sendSuccess(res, timeline);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationTimeline');
+    }
+  }
 }
 
 export const adminController = new AdminController();

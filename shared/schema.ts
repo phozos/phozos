@@ -31,6 +31,8 @@ export const supportTypeEnum = pgEnum("support_type", ["email", "whatsapp", "pho
 export const universityTierEnum = pgEnum("university_tier", ["general", "top500", "top200", "top100", "ivy_league"]);
 export const reportReasonEnum = pgEnum("report_reason", ["spam", "inappropriate", "harassment", "misinformation", "off_topic", "other"]);
 export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "completed", "failed"]);
+export const deprecationPhaseEnum = pgEnum("deprecation_phase", ["announcement", "grace_period", "soft_disable", "hard_removal"]);
+export const deprecationStatusEnum = pgEnum("deprecation_status", ["scheduled", "in_progress", "completed", "cancelled"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -1092,6 +1094,40 @@ export const featureUsageSummary = pgTable("feature_usage_summary", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// Feature Deprecation Schedules table (Phase 4.3: Feature Deprecation Workflow)
+export const featureDeprecationSchedules = pgTable("feature_deprecation_schedules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureName: varchar("feature_name", { length: 100 }).notNull(),
+  planIds: text("plan_ids").array().notNull(),
+  currentPhase: deprecationPhaseEnum("current_phase").notNull().default("announcement"),
+  status: deprecationStatusEnum("status").notNull().default("scheduled"),
+  
+  // Phase dates
+  announcementDate: timestamp("announcement_date").notNull(),
+  gracePeriodStartDate: timestamp("grace_period_start_date").notNull(),
+  softDisableDate: timestamp("soft_disable_date").notNull(),
+  hardRemovalDate: timestamp("hard_removal_date").notNull(),
+  
+  // Metadata
+  reason: text("reason").notNull(),
+  replacementFeature: varchar("replacement_feature", { length: 100 }),
+  migrationGuideUrl: text("migration_guide_url"),
+  affectedUserCount: integer("affected_user_count").default(0),
+  
+  // Tracking
+  notificationsSent: integer("notifications_sent").default(0),
+  usersAcknowledged: integer("users_acknowledged").default(0),
+  usersMigrated: integer("users_migrated").default(0),
+  
+  // Admin details
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancellationReason: text("cancellation_reason"),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1108,6 +1144,7 @@ export const insertPlanMigrationUserSchema = createInsertSchema(planMigrationUse
 export const insertQuotaUsageSchema = createInsertSchema(quotaUsage).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFeatureUsageEventSchema = createInsertSchema(featureUsageEvents).omit({ id: true, createdAt: true });
 export const insertFeatureUsageSummarySchema = createInsertSchema(featureUsageSummary).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFeatureDeprecationScheduleSchema = createInsertSchema(featureDeprecationSchedules).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -1150,4 +1187,6 @@ export type FeatureUsageEvent = typeof featureUsageEvents.$inferSelect;
 export type InsertFeatureUsageEvent = z.infer<typeof insertFeatureUsageEventSchema>;
 export type FeatureUsageSummary = typeof featureUsageSummary.$inferSelect;
 export type InsertFeatureUsageSummary = z.infer<typeof insertFeatureUsageSummarySchema>;
+export type FeatureDeprecationSchedule = typeof featureDeprecationSchedules.$inferSelect;
+export type InsertFeatureDeprecationSchedule = z.infer<typeof insertFeatureDeprecationScheduleSchema>;
 

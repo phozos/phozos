@@ -135,4 +135,27 @@ router.get('/migrations/:id/stats', asyncHandler((req: AuthenticatedRequest, res
 // Comprehensive Plan Analytics
 router.get('/subscription-plans/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getComprehensivePlanAnalytics(req, res)));
 
+// Feature Management (Phase 4)
+// Feature Impact Preview
+router.post('/features/preview/:planId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureImpactPreview(req, res)));
+
+// Feature Management Dashboard
+router.get('/features/dashboard', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureManagementDashboard(req, res)));
+router.get('/features/usage', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureUsageOverview(req, res)));
+router.get('/features/health', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureHealth(req, res)));
+router.get('/features/:featureName/health', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureHealth(req, res)));
+router.get('/features/:featureName/lifecycle', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureLifecycle(req, res)));
+
+// Bulk Operations
+router.post('/features/bulk', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.executeBulkFeatureOperation(req, res)));
+
+// Feature Deprecation Workflow
+router.post('/features/deprecations', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createDeprecationSchedule(req, res)));
+router.get('/features/deprecations', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationSchedules(req, res)));
+router.get('/features/deprecations/:scheduleId', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationSchedule(req, res)));
+router.put('/features/deprecations/update', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateDeprecationSchedule(req, res)));
+router.post('/features/deprecations/:scheduleId/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelDeprecationSchedule(req, res)));
+router.get('/features/deprecations/:scheduleId/impact', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationImpact(req, res)));
+router.get('/features/deprecations/:scheduleId/timeline', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationTimeline(req, res)));
+
 export default router;
