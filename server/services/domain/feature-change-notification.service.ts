@@ -19,6 +19,9 @@ import sgMail from '@sendgrid/mail';
 import config from '../../config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export interface FeatureChangeDetails {
   planId: string;
