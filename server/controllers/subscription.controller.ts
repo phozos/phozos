@@ -3,6 +3,7 @@ import { BaseController } from './base.controller';
 import { getService, TYPES } from '../services/container';
 import { ISubscriptionService } from '../services/domain/subscription.service';
 import { IUserSubscriptionService } from '../services/domain/user-subscription.service';
+import { IPlanMigrationService } from '../services/domain/plan-migration.service';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
 
@@ -358,6 +359,48 @@ export class SubscriptionController extends BaseController {
       return this.sendEmptySuccess(res);
     } catch (error) {
       return this.handleError(res, error, 'SubscriptionController.acknowledgePlanChange');
+    }
+  }
+
+  async getMigrationOffer(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+      
+      const offer = await planMigrationService.getUserMigrationOffer(userId);
+      
+      return this.sendSuccess(res, offer);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getMigrationOffer');
+    }
+  }
+
+  async acceptMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { migrationId } = req.params;
+      
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+      await planMigrationService.processMigrationAcceptance(migrationId, userId);
+      
+      return this.sendSuccess(res, { message: 'Migration accepted successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.acceptMigration');
+    }
+  }
+
+  async declineMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { migrationId } = req.params;
+      const { reason } = req.body;
+      
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+      await planMigrationService.processMigrationDecline(migrationId, userId, reason);
+      
+      return this.sendSuccess(res, { message: 'Migration declined' });
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.declineMigration');
     }
   }
 }

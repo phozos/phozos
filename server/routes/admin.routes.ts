@@ -124,4 +124,12 @@ router.get('/outbox/events', asyncHandler((req: AuthenticatedRequest, res: Respo
 router.post('/outbox/events/:id/retry', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.retryOutboxEvent(req, res)));
 router.delete('/outbox/events/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deleteOutboxEvent(req, res)));
 
+// Plan Migrations
+router.get('/migrations', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrations(req, res)));
+router.post('/migrations', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createMigration(req, res)));
+router.get('/migrations/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigration(req, res)));
+router.post('/migrations/:id/start', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.startMigration(req, res)));
+router.post('/migrations/:id/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelMigration(req, res)));
+router.get('/migrations/:id/stats', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrationStats(req, res)));
+
 export default router;

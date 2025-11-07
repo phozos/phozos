@@ -24,4 +24,9 @@ router.get('/plan-notifications/unread', asyncHandler((req: AuthenticatedRequest
 router.post('/plan-notifications/:notificationId/read', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.markPlanNotificationRead(req, res)));
 router.post('/plan-notifications/:notificationId/acknowledge', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.acknowledgePlanChange(req, res)));
 
+// Plan migration routes
+router.get('/migration-offer', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getMigrationOffer(req, res)));
+router.post('/migrations/:migrationId/accept', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.acceptMigration(req, res)));
+router.post('/migrations/:migrationId/decline', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.declineMigration(req, res)));
+
 export default router;

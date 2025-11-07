@@ -46,6 +46,10 @@ import {
   subscriptionPlanNotificationRepository,
   IUserPlanNotificationRepository,
   userPlanNotificationRepository,
+  IPlanMigrationRepository,
+  planMigrationRepository,
+  IPlanMigrationUserRepository,
+  planMigrationUserRepository,
   ISecuritySettingsRepository,
   securitySettingsRepository,
   ITestimonialRepository,
@@ -93,6 +97,8 @@ export const TYPES = {
   ISubscriptionPlanAuditRepository: Symbol.for('ISubscriptionPlanAuditRepository'),
   ISubscriptionPlanNotificationRepository: Symbol.for('ISubscriptionPlanNotificationRepository'),
   IUserPlanNotificationRepository: Symbol.for('IUserPlanNotificationRepository'),
+  IPlanMigrationRepository: Symbol.for('IPlanMigrationRepository'),
+  IPlanMigrationUserRepository: Symbol.for('IPlanMigrationUserRepository'),
   ISecuritySettingsRepository: Symbol.for('ISecuritySettingsRepository'),
   ITestimonialRepository: Symbol.for('ITestimonialRepository'),
   IStudentTimelineRepository: Symbol.for('IStudentTimelineRepository'),
@@ -116,6 +122,7 @@ export const TYPES = {
   IPaymentService: Symbol.for('IPaymentService'),
   IPaymentAlertingService: Symbol.for('IPaymentAlertingService'),
   IPlanNotificationService: Symbol.for('IPlanNotificationService'),
+  IPlanMigrationService: Symbol.for('IPlanMigrationService'),
   IRegistrationService: Symbol.for('IRegistrationService'),
   ISubscriptionService: Symbol.for('ISubscriptionService'),
   ITemporaryPasswordService: Symbol.for('ITemporaryPasswordService'),
@@ -175,6 +182,8 @@ class Container implements IContainer {
     this.bindings.set(TYPES.ISubscriptionPlanAuditRepository, subscriptionPlanAuditRepository);
     this.bindings.set(TYPES.ISubscriptionPlanNotificationRepository, subscriptionPlanNotificationRepository);
     this.bindings.set(TYPES.IUserPlanNotificationRepository, userPlanNotificationRepository);
+    this.bindings.set(TYPES.IPlanMigrationRepository, planMigrationRepository);
+    this.bindings.set(TYPES.IPlanMigrationUserRepository, planMigrationUserRepository);
     this.bindings.set(TYPES.ISecuritySettingsRepository, securitySettingsRepository);
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
@@ -249,6 +258,8 @@ class Container implements IContainer {
     this.bindings.set(TYPES.ISubscriptionPlanAuditRepository, subscriptionPlanAuditRepository);
     this.bindings.set(TYPES.ISubscriptionPlanNotificationRepository, subscriptionPlanNotificationRepository);
     this.bindings.set(TYPES.IUserPlanNotificationRepository, userPlanNotificationRepository);
+    this.bindings.set(TYPES.IPlanMigrationRepository, planMigrationRepository);
+    this.bindings.set(TYPES.IPlanMigrationUserRepository, planMigrationUserRepository);
     this.bindings.set(TYPES.ISecuritySettingsRepository, securitySettingsRepository);
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
@@ -276,6 +287,7 @@ class Container implements IContainer {
     const { paymentAlertingService } = await import('./domain/payment-alerting.service');
     const { registrationService } = await import('./domain/registration.service');
     const { PlanNotificationService } = await import('./domain/plan-notification.service');
+    const { planMigrationService } = await import('./domain/plan-migration.service');
     const { subscriptionService } = await import('./domain/subscription.service');
     const { temporaryPasswordService } = await import('./domain/temporaryPassword.service');
     const { testimonialService } = await import('./domain/testimonial.service');
@@ -311,6 +323,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPaymentAlertingService, paymentAlertingService);
     this.bindings.set(TYPES.IRegistrationService, registrationService);
     this.bindings.set(TYPES.IPlanNotificationService, new PlanNotificationService());
+    this.bindings.set(TYPES.IPlanMigrationService, planMigrationService);
     this.bindings.set(TYPES.ISubscriptionService, subscriptionService);
     this.bindings.set(TYPES.ITemporaryPasswordService, temporaryPasswordService);
     this.bindings.set(TYPES.ITestimonialService, testimonialService);

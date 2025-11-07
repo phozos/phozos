@@ -115,6 +115,35 @@ export const archivePlanSchema = z.object({
   reason: z.string().min(1, 'Reason is required for archiving').max(1000)
 });
 
+// Plan migration schemas
+export const createMigrationSchema = z.object({
+  name: z.string().min(1).max(255, 'Migration name must not exceed 255 characters'),
+  sourcePlanId: uuidSchema,
+  targetPlanId: uuidSchema,
+  migrationType: z.enum(['voluntary', 'mandatory', 'incentivized']),
+  startDate: z.string().datetime().or(z.date()),
+  endDate: z.string().datetime().or(z.date()).optional(),
+  incentiveType: z.enum(['discount', 'free_months', 'feature_upgrade']).optional(),
+  incentiveValue: z.any().optional()
+});
+
+export const startMigrationSchema = z.object({
+  migrationId: uuidSchema
+});
+
+export const cancelMigrationSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(1000)
+});
+
+export const acceptMigrationSchema = z.object({
+  migrationId: uuidSchema
+});
+
+export const declineMigrationSchema = z.object({
+  migrationId: uuidSchema,
+  reason: z.string().optional()
+});
+
 export const userSubscriptionSchema = z.object({
   userId: uuidSchema,
   planId: uuidSchema,

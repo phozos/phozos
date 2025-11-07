@@ -1010,6 +1010,47 @@ export const userPlanNotifications = pgTable("user_plan_notifications", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Plan Migrations table (for managing plan migration campaigns)
+export const planMigrations = pgTable("plan_migrations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  sourcePlanId: uuid("source_plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  targetPlanId: uuid("target_plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  migrationType: varchar("migration_type", { length: 50 }).notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  incentiveType: varchar("incentive_type", { length: 50 }),
+  incentiveValue: jsonb("incentive_value").$type<{
+    percentage?: number;
+    months?: number;
+    features?: string[];
+    [key: string]: any;
+  }>(),
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  totalEligibleUsers: integer("total_eligible_users").default(0),
+  migratedUsers: integer("migrated_users").default(0),
+  declinedUsers: integer("declined_users").default(0),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Plan Migration Users table (for tracking individual user migration status)
+export const planMigrationUsers = pgTable("plan_migration_users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  migrationId: uuid("migration_id").references(() => planMigrations.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  notifiedAt: timestamp("notified_at"),
+  respondedAt: timestamp("responded_at"),
+  migratedAt: timestamp("migrated_at"),
+  incentiveApplied: boolean("incentive_applied").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -1021,6 +1062,8 @@ export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit
 export const insertSubscriptionPlanChangeSchema = createInsertSchema(subscriptionPlanChanges).omit({ id: true, createdAt: true });
 export const insertSubscriptionPlanNotificationSchema = createInsertSchema(subscriptionPlanNotifications).omit({ id: true, createdAt: true });
 export const insertUserPlanNotificationSchema = createInsertSchema(userPlanNotifications).omit({ id: true, createdAt: true });
+export const insertPlanMigrationSchema = createInsertSchema(planMigrations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPlanMigrationUserSchema = createInsertSchema(planMigrationUsers).omit({ id: true, createdAt: true, updatedAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -1053,4 +1096,8 @@ export type SubscriptionPlanNotification = typeof subscriptionPlanNotifications.
 export type InsertSubscriptionPlanNotification = z.infer<typeof insertSubscriptionPlanNotificationSchema>;
 export type UserPlanNotification = typeof userPlanNotifications.$inferSelect;
 export type InsertUserPlanNotification = z.infer<typeof insertUserPlanNotificationSchema>;
+export type PlanMigration = typeof planMigrations.$inferSelect;
+export type InsertPlanMigration = z.infer<typeof insertPlanMigrationSchema>;
+export type PlanMigrationUser = typeof planMigrationUsers.$inferSelect;
+export type InsertPlanMigrationUser = z.infer<typeof insertPlanMigrationUserSchema>;
 

@@ -20,6 +20,7 @@ import { ICounselorDashboardService } from '../services/domain/counselor-dashboa
 import { ISubscriptionService } from '../services/domain/subscription.service';
 import { IUserSubscriptionService } from '../services/domain/user-subscription.service';
 import { IPaymentService } from '../services/domain/payment.service';
+import { IPlanMigrationService } from '../services/domain/plan-migration.service';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
 import { 
@@ -30,7 +31,10 @@ import {
 import { 
   createPlanVersionSchema,
   deprecatePlanSchema,
-  archivePlanSchema
+  archivePlanSchema,
+  createMigrationSchema,
+  startMigrationSchema,
+  cancelMigrationSchema
 } from '../services/validation/schemas';
 import { CreateStaffRequestSchema } from '@shared/api-contracts';
 import { VALID_ACCOUNT_STATUSES } from '@shared/account-status';
@@ -2275,6 +2279,88 @@ export class AdminController extends BaseController {
       return this.sendSuccess(res, { message: 'Event deleted successfully' });
     } catch (error) {
       return this.handleError(res, error, 'AdminController.deleteOutboxEvent');
+    }
+  }
+
+  async createMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const validatedData = createMigrationSchema.parse(req.body);
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const migrationData = {
+        ...validatedData,
+        startDate: new Date(validatedData.startDate),
+        endDate: validatedData.endDate ? new Date(validatedData.endDate) : undefined
+      };
+
+      const migration = await planMigrationService.createMigration(migrationData, req.user!.id);
+      return this.sendSuccess(res, migration, 201);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.createMigration');
+    }
+  }
+
+  async getMigrations(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status } = req.query;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const migrations = await planMigrationService.getAllMigrations({ 
+        status: status as string | undefined 
+      });
+
+      return this.sendSuccess(res, migrations);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getMigrations');
+    }
+  }
+
+  async getMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const migration = await planMigrationService.getMigration(id);
+      return this.sendSuccess(res, migration);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getMigration');
+    }
+  }
+
+  async startMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      await planMigrationService.startMigration(id, req.user!.id);
+      return this.sendSuccess(res, { message: 'Migration started successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.startMigration');
+    }
+  }
+
+  async cancelMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const validatedData = cancelMigrationSchema.parse(req.body);
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      await planMigrationService.cancelMigration(id, req.user!.id, validatedData.reason);
+      return this.sendSuccess(res, { message: 'Migration cancelled successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.cancelMigration');
+    }
+  }
+
+  async getMigrationStats(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const stats = await planMigrationService.getMigrationStats(id);
+      return this.sendSuccess(res, stats);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getMigrationStats');
     }
   }
 }
