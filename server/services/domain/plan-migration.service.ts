@@ -48,10 +48,13 @@ export class PlanMigrationService extends BaseService implements IPlanMigrationS
     private migrationRepo: IPlanMigrationRepository = container.get<IPlanMigrationRepository>(TYPES.IPlanMigrationRepository),
     private migrationUserRepo: IPlanMigrationUserRepository = container.get<IPlanMigrationUserRepository>(TYPES.IPlanMigrationUserRepository),
     private subscriptionPlanRepo: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository),
-    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository),
-    private notificationService: INotificationService = container.get<INotificationService>(TYPES.INotificationService)
+    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository)
   ) {
     super();
+  }
+
+  private get notificationService(): INotificationService {
+    return container.get<INotificationService>(TYPES.INotificationService);
   }
 
   async createMigration(data: CreateMigrationData, adminId: string): Promise<PlanMigration> {
