@@ -6,6 +6,21 @@ EduPath is a comprehensive international education platform designed to connect 
 
 ## Recent Changes
 
+**November 7, 2025 - Phase 1: Plan Versioning Foundation Complete**
+- ✅ Implemented comprehensive subscription plan versioning system to enable grandfathering
+- ✅ Created `migrations/0012_add_plan_versioning.sql` with 7 new versioning columns: base_plan_id, version, version_name, is_latest_version, deprecated_at, archived_at, successor_plan_id
+- ✅ Added composite UNIQUE constraint on (base_plan_id, version) and performance indexes for version queries
+- ✅ Backfilled 4 existing plans as version 1 with base_plan_id self-reference
+- ✅ Enhanced repository with 7 new versioning methods: findLatestVersion, createNewVersion, deprecatePlan, archivePlan, getSubscriberCount, findAllVersions, findVersion
+- ✅ Added service layer business logic: createPlanVersion, getPlanVersions, deprecatePlan, getPlanAnalytics with full audit logging
+- ✅ Created 6 new admin API endpoints for version management with Zod validation
+- ✅ Implemented plan discovery gating: customers only see latest versions (is_latest_version = true), admins can access version history
+- ✅ Fixed foreign key constraints (ON DELETE RESTRICT) to prevent orphaned version groups
+- **Technical Impact:** Enables grandfathering - existing subscribers stay on old plan versions when prices change, new subscribers get latest version
+- **Business Impact:** Prevents customer confusion from instant price changes, enables revenue optimization through new pricing while honoring legacy rates, provides complete audit trail for compliance
+- **Files Added:** `migrations/0012_add_plan_versioning.sql`
+- **Files Modified:** `shared/schema.ts`, `server/repositories/subscription.repository.ts`, `server/services/domain/subscription.service.ts`, `server/routes/admin.routes.ts`, `server/controllers/admin.controller.ts`, `server/services/validation/schemas.ts`, `server/types/repository-filters.ts`
+
 **November 6, 2025 - Event Outbox Pattern Implementation Complete**
 - ✅ Implemented Transactional Outbox Pattern to solve FK constraint violations in payment audit logging
 - ✅ Created `subscription_audit_outbox` table with status tracking, retry logic, and DLQ support
