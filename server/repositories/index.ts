@@ -17,6 +17,8 @@ export * from './chat.repository';
 export * from './payment.repository';
 export * from './subscription.repository';
 export * from './subscription-plan-audit.repository';
+export * from './subscription-plan-notification.repository';
+export * from './user-plan-notification.repository';
 export * from './security-settings.repository';
 export * from './testimonial.repository';
 export * from './student-timeline.repository';
@@ -40,6 +42,8 @@ import { chatRepository } from './chat.repository';
 import { paymentRepository } from './payment.repository';
 import { subscriptionPlanRepository, userSubscriptionRepository } from './subscription.repository';
 import { subscriptionPlanAuditRepository } from './subscription-plan-audit.repository';
+import { subscriptionPlanNotificationRepository } from './subscription-plan-notification.repository';
+import { userPlanNotificationRepository } from './user-plan-notification.repository';
 import { securitySettingsRepository } from './security-settings.repository';
 import { testimonialRepository } from './testimonial.repository';
 import { studentTimelineRepository } from './student-timeline.repository';
@@ -65,6 +69,8 @@ export const repositories = {
   subscriptionPlan: subscriptionPlanRepository,
   userSubscription: userSubscriptionRepository,
   subscriptionPlanAudit: subscriptionPlanAuditRepository,
+  subscriptionPlanNotification: subscriptionPlanNotificationRepository,
+  userPlanNotification: userPlanNotificationRepository,
   securitySettings: securitySettingsRepository,
   testimonial: testimonialRepository,
   studentTimeline: studentTimelineRepository,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApiQuery } from "@/hooks/api-hooks";
+import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api-client";
 import AppShell from "@/components/AppShell";
@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 import { 
   TrendingUp, 
   Users, 
@@ -26,13 +29,18 @@ import {
   Target,
   BookOpen,
   Globe,
-  Lock
+  Lock,
+  Bell,
+  ArrowRight
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
   
   if (!user) {
     return <LoadingSkeleton type="card" count={3} />;
@@ -93,6 +101,68 @@ export default function Dashboard() {
       enabled: !!user,
     }
   );
+
+  // Fetch plan change notifications
+  const { data: planNotifications = [], isLoading: planNotificationsLoading } = useApiQuery<any[]>(
+    ["/api/subscription/plan-notifications/unread"],
+    '/api/subscription/plan-notifications/unread',
+    undefined,
+    {
+      staleTime: 60 * 1000,
+      enabled: !!user,
+    }
+  );
+
+  // Mark plan notification as read mutation
+  const markAsReadMutation = useApiMutation(
+    (notificationId: string) => api.post(`/api/subscription/plan-notifications/${notificationId}/read`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/plan-notifications/unread"] });
+      },
+      onError: (error) => {
+        console.error("Failed to mark notification as read:", error);
+      },
+    }
+  );
+
+  // Acknowledge plan notification mutation
+  const acknowledgeMutation = useApiMutation(
+    (notificationId: string) => api.post(`/api/subscription/plan-notifications/${notificationId}/acknowledge`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/plan-notifications/unread"] });
+        toast({ title: "Success", description: "Notification acknowledged" });
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to acknowledge notification", variant: "destructive" });
+      },
+    }
+  );
+
+  const handleMarkAsRead = (notificationId: string) => {
+    markAsReadMutation.mutate(notificationId);
+  };
+
+  const handleAcknowledge = (notificationId: string) => {
+    acknowledgeMutation.mutate(notificationId);
+  };
+
+  const handleViewPlanDetails = (planId: string) => {
+    setLocation("/subscription-plans");
+  };
+
+  // Automatically mark notifications as read when they're displayed
+  useEffect(() => {
+    if (planNotifications && planNotifications.length > 0) {
+      planNotifications.forEach((notif: any) => {
+        // Only mark as read if not already read (using camelCase from Drizzle)
+        if (!notif.readAt) {
+          handleMarkAsRead(notif.id);
+        }
+      });
+    }
+  }, [planNotifications?.length]); // Dependency on length to avoid re-marking on every render
 
   const stats = [
     {
@@ -207,6 +277,53 @@ export default function Dashboard() {
             Track your progress and manage your university applications
           </p>
         </div>
+
+        {/* Plan Change Notifications */}
+        {planNotifications && planNotifications.length > 0 && (
+          <div className="mb-8 space-y-4">
+            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Plan Change Notifications
+            </h2>
+            {planNotifications.map((notif: any) => (
+              <Card key={notif.id} className="border-l-4 border-l-blue-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Bell className="w-5 h-5 text-blue-600" />
+                    {notif.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-foreground whitespace-pre-line">{notif.message}</p>
+                  
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleAcknowledge(notif.id)}
+                      disabled={acknowledgeMutation.isPending}
+                    >
+                      {acknowledgeMutation.isPending ? "Processing..." : "I Understand"}
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => handleViewPlanDetails(notif.planId)}
+                    >
+                      View Plan Details
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                  
+                  {notif.effectiveDate && (
+                    <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
+                      Effective Date: {format(new Date(notif.effectiveDate), 'MMMM d, yyyy')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

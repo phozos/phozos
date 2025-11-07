@@ -283,6 +283,83 @@ export class SubscriptionController extends BaseController {
       return this.handleError(res, error, 'SubscriptionController.getMyEffectivePrice');
     }
   }
+
+  /**
+   * Get unread plan notifications for the authenticated user
+   * 
+   * @route GET /api/subscription/plan-notifications/unread
+   * @access Protected
+   * @param {AuthenticatedRequest} req - Request with authenticated user
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of unread plan notifications
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {500} Internal server error
+   */
+  async getUnreadPlanNotifications(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const planNotificationService = getService<any>(TYPES.IPlanNotificationService);
+      
+      const notifications = await planNotificationService.getUnreadPlanNotifications(userId);
+      
+      return this.sendSuccess(res, notifications);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getUnreadPlanNotifications');
+    }
+  }
+
+  /**
+   * Mark a plan notification as read
+   * 
+   * @route POST /api/subscription/plan-notifications/:notificationId/read
+   * @access Protected
+   * @param {AuthenticatedRequest} req - Request with authenticated user and notification ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success response
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {500} Internal server error
+   */
+  async markPlanNotificationRead(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { notificationId } = req.params;
+      
+      const planNotificationService = getService<any>(TYPES.IPlanNotificationService);
+      await planNotificationService.markPlanNotificationRead(userId, notificationId);
+      
+      return this.sendEmptySuccess(res);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.markPlanNotificationRead');
+    }
+  }
+
+  /**
+   * Acknowledge a plan change notification
+   * 
+   * @route POST /api/subscription/plan-notifications/:notificationId/acknowledge
+   * @access Protected
+   * @param {AuthenticatedRequest} req - Request with authenticated user and notification ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success response
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {500} Internal server error
+   */
+  async acknowledgePlanChange(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { notificationId } = req.params;
+      
+      const planNotificationService = getService<any>(TYPES.IPlanNotificationService);
+      await planNotificationService.acknowledgePlanChange(userId, notificationId);
+      
+      return this.sendEmptySuccess(res);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.acknowledgePlanChange');
+    }
+  }
 }
 
 export const subscriptionController = new SubscriptionController();

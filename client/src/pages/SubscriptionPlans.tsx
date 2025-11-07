@@ -12,7 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { PremiumBadgeSelector, PremiumBadgeDisplay, BadgeKey, premiumBadges } from "@/components/PremiumBadges";
@@ -153,6 +155,9 @@ export default function SubscriptionPlans() {
   const [upgradeDialog, setUpgradeDialog] = useState<{ open: boolean; subscription: UserSubscription | null }>({ open: false, subscription: null });
   const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string>("");
   
+  const [createVersionDialog, setCreateVersionDialog] = useState<{ open: boolean; plan: SubscriptionPlan | null; newPrice: string }>({ open: false, plan: null, newPrice: "" });
+  const [notifySubscribers, setNotifySubscribers] = useState(true);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, loading } = useAuth();
@@ -247,6 +252,28 @@ export default function SubscriptionPlans() {
       },
       onError: () => {
         toast({ title: "Error", description: "Failed to cancel subscription", variant: "destructive" });
+      },
+    }
+  );
+
+  const createVersionMutation = useApiMutation(
+    (data: { planId: string; updates: any; notifySubscribers: boolean }) =>
+      api.post(`/api/admin/subscription-plans/${data.planId}/create-version`, {
+        updates: data.updates,
+        notifySubscribers: data.notifySubscribers
+      }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/subscription-plans"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/user-subscriptions"] });
+        setCreateVersionDialog({ open: false, plan: null, newPrice: "" });
+        toast({ 
+          title: "Success", 
+          description: "New plan version created successfully" + (notifySubscribers ? " and notifications sent" : "")
+        });
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to create new plan version", variant: "destructive" });
       },
     }
   );
@@ -391,6 +418,36 @@ export default function SubscriptionPlans() {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
+    });
+  };
+
+  const getSubscriberCount = (planId: string) => {
+    return subscriptions.filter(sub => 
+      sub.plan.id === planId && 
+      (sub.subscription.status === 'active' || sub.subscription.status === 'pending')
+    ).length;
+  };
+
+  const calculatePercentageChange = (oldPrice: number, newPrice: number) => {
+    const change = ((newPrice - oldPrice) / oldPrice) * 100;
+    return change.toFixed(1);
+  };
+
+  const getEffectiveDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 30);
+    return date;
+  };
+
+  const handleCreateVersionWithNotification = () => {
+    if (!createVersionDialog.plan) return;
+    
+    createVersionMutation.mutate({
+      planId: createVersionDialog.plan.id,
+      updates: {
+        price: createVersionDialog.newPrice
+      },
+      notifySubscribers
     });
   };
 
@@ -613,26 +670,37 @@ export default function SubscriptionPlans() {
                     </ul>
                   </div>
 
-                  <div className="flex space-x-2 pt-2">
+                  <div className="flex flex-col space-y-2 pt-2">
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingPlan(plan);
+                          setEditSelectedBadge(safeBadgeKey(plan.logo));
+                        }}
+                        className="flex-1"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => deletePlanMutation.mutate(plan.id)}
+                        disabled={deletePlanMutation.isPending}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingPlan(plan);
-                        setEditSelectedBadge(safeBadgeKey(plan.logo));
-                      }}
-                      className="flex-1"
+                      variant="secondary"
+                      onClick={() => setCreateVersionDialog({ open: true, plan, newPrice: plan.price })}
+                      className="w-full"
                     >
-                      <Edit className="h-3 w-3 mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => deletePlanMutation.mutate(plan.id)}
-                      disabled={deletePlanMutation.isPending}
-                    >
-                      <Trash2 className="h-3 w-3" />
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      Create New Version
                     </Button>
                   </div>
                 </CardContent>
@@ -1266,6 +1334,97 @@ export default function SubscriptionPlans() {
           </DialogContent>
         </Dialog>
       )}
+
+      <AlertDialog open={createVersionDialog.open} onOpenChange={(open) => !open && setCreateVersionDialog({ open: false, plan: null, newPrice: "" })}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Create New Version & Notify Subscribers?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {createVersionDialog.plan && (
+                <>
+                  This will create a new version of <strong>{createVersionDialog.plan.name}</strong> and notify{" "}
+                  {getSubscriberCount(createVersionDialog.plan.id)} existing subscribers.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {createVersionDialog.plan && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="new-price">New Price</Label>
+                <Input
+                  id="new-price"
+                  type="number"
+                  step="0.01"
+                  value={createVersionDialog.newPrice}
+                  onChange={(e) => setCreateVersionDialog({ ...createVersionDialog, newPrice: e.target.value })}
+                  className="mt-1"
+                />
+              </div>
+
+              <Alert>
+                <Mail className="h-4 w-4" />
+                <AlertTitle>Notification Preview</AlertTitle>
+                <AlertDescription className="mt-2 p-4 bg-muted rounded-md space-y-2">
+                  <div>
+                    <strong>Subject:</strong>{" "}
+                    {Number(createVersionDialog.newPrice) > Number(createVersionDialog.plan.price)
+                      ? `Price Increase Notice: ${createVersionDialog.plan.name}`
+                      : `Price Reduction Notice: ${createVersionDialog.plan.name}`}
+                  </div>
+
+                  <div className="text-sm leading-relaxed">
+                    We're writing to inform you of an upcoming price change for your{" "}
+                    <strong>{createVersionDialog.plan.name}</strong> subscription. Effective{" "}
+                    <strong>{formatDate(getEffectiveDate().toISOString())}</strong>, the price will{" "}
+                    {Number(createVersionDialog.newPrice) > Number(createVersionDialog.plan.price)
+                      ? "increase"
+                      : "decrease"}{" "}
+                    from <strong>{createVersionDialog.plan.currency} {createVersionDialog.plan.price}</strong> to{" "}
+                    <strong>{createVersionDialog.plan.currency} {createVersionDialog.newPrice}</strong> (
+                    {calculatePercentageChange(
+                      Number(createVersionDialog.plan.price),
+                      Number(createVersionDialog.newPrice)
+                    )}
+                    % change).
+                  </div>
+
+                  <div className="text-sm font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 p-2 rounded">
+                    Your current pricing of {createVersionDialog.plan.currency} {createVersionDialog.plan.price} is
+                    grandfathered and will NOT change.
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    This new pricing applies only to new subscribers.
+                  </div>
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="notifySubscribers"
+                  checked={notifySubscribers}
+                  onCheckedChange={(checked) => setNotifySubscribers(checked as boolean)}
+                />
+                <Label htmlFor="notifySubscribers" className="text-sm font-normal cursor-pointer">
+                  Send notifications to {getSubscriberCount(createVersionDialog.plan.id)} subscribers
+                </Label>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCreateVersionWithNotification}
+              disabled={createVersionMutation.isPending}
+            >
+              {createVersionMutation.isPending ? "Creating..." : "Create & Notify"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

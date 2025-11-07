@@ -19,4 +19,9 @@ router.post('/user/subscribe', csrfProtection, asyncHandler((req: AuthenticatedR
 router.post('/upgrade', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.upgradeSubscription(req, res)));
 router.get('/effective-price', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getMyEffectivePrice(req, res)));
 
+// Plan notification routes
+router.get('/plan-notifications/unread', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUnreadPlanNotifications(req, res)));
+router.post('/plan-notifications/:notificationId/read', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.markPlanNotificationRead(req, res)));
+router.post('/plan-notifications/:notificationId/acknowledge', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.acknowledgePlanChange(req, res)));
+
 export default router;

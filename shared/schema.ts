@@ -974,6 +974,42 @@ export const subscriptionPlanChanges = pgTable("subscription_plan_changes", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Subscription Plan Notifications table (for plan change notifications)
+export const subscriptionPlanNotifications = pgTable("subscription_plan_notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  notificationType: varchar("notification_type", { length: 50 }).notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  notificationDate: timestamp("notification_date").notNull(),
+  sentAt: timestamp("sent_at"),
+  recipientCount: integer("recipient_count").default(0),
+  metadata: jsonb("metadata").$type<{
+    oldPrice?: number;
+    newPrice?: number;
+    percentChange?: string;
+    priceIncrease?: boolean;
+    successorPlanId?: string;
+    migrationDeadline?: string;
+    [key: string]: any;
+  }>(),
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// User Plan Notifications table (for tracking individual user notification delivery)
+export const userPlanNotifications = pgTable("user_plan_notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planNotificationId: uuid("plan_notification_id").references(() => subscriptionPlanNotifications.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  sentAt: timestamp("sent_at").notNull().defaultNow(),
+  readAt: timestamp("read_at"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  emailStatus: varchar("email_status", { length: 50 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
@@ -983,6 +1019,8 @@ export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEven
 export const insertSubscriptionAuditOutboxSchema = createInsertSchema(subscriptionAuditOutbox).omit({ id: true, createdAt: true });
 export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
 export const insertSubscriptionPlanChangeSchema = createInsertSchema(subscriptionPlanChanges).omit({ id: true, createdAt: true });
+export const insertSubscriptionPlanNotificationSchema = createInsertSchema(subscriptionPlanNotifications).omit({ id: true, createdAt: true });
+export const insertUserPlanNotificationSchema = createInsertSchema(userPlanNotifications).omit({ id: true, createdAt: true });
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -1011,4 +1049,8 @@ export type FailedPayment = typeof failedPayments.$inferSelect;
 export type InsertFailedPayment = z.infer<typeof insertFailedPaymentSchema>;
 export type SubscriptionPlanChange = typeof subscriptionPlanChanges.$inferSelect;
 export type InsertSubscriptionPlanChange = z.infer<typeof insertSubscriptionPlanChangeSchema>;
+export type SubscriptionPlanNotification = typeof subscriptionPlanNotifications.$inferSelect;
+export type InsertSubscriptionPlanNotification = z.infer<typeof insertSubscriptionPlanNotificationSchema>;
+export type UserPlanNotification = typeof userPlanNotifications.$inferSelect;
+export type InsertUserPlanNotification = z.infer<typeof insertUserPlanNotificationSchema>;
 

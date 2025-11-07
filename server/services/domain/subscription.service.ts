@@ -1,11 +1,12 @@
 import { BaseService } from '../base.service';
 import { ISubscriptionPlanRepository, IStudentRepository, ISubscriptionPlanAuditRepository, IUserSubscriptionRepository } from '../../repositories';
-import { container, TYPES } from '../container';
+import { container, TYPES, getService } from '../container';
 import { 
   SubscriptionPlan, InsertSubscriptionPlan
 } from '@shared/schema';
 import { ValidationServiceError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
+import { IPlanNotificationService } from './plan-notification.service';
 
 export interface PlanAnalytics {
   planId: string;
@@ -27,7 +28,7 @@ export interface ISubscriptionService {
   updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined>;
   deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean>;
   // Versioning Methods
-  createPlanVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string, releaseNotes?: string): Promise<SubscriptionPlan>;
+  createPlanVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string, releaseNotes?: string, notifySubscribers?: boolean): Promise<SubscriptionPlan>;
   getPlanVersions(basePlanId: string): Promise<SubscriptionPlan[]>;
   getPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined>;
   deprecatePlan(planId: string, successorPlanId: string | undefined, adminId: string, reason: string): Promise<void>;
@@ -210,9 +211,12 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
     basePlanId: string,
     updates: Partial<SubscriptionPlan>,
     adminId: string,
-    releaseNotes?: string
+    releaseNotes?: string,
+    notifySubscribers: boolean = true
   ): Promise<SubscriptionPlan> {
     try {
+      const oldPlan = await this.subscriptionPlanRepository.findLatestVersion(basePlanId);
+      
       const newVersion = await this.subscriptionPlanRepository.createNewVersion(
         basePlanId,
         updates,
@@ -232,6 +236,22 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         },
         changeReason: `Created version ${newVersion.version}${releaseNotes ? ': ' + releaseNotes : ''}`
       });
+
+      if (notifySubscribers && oldPlan && updates.price && Number(updates.price) !== Number(oldPlan.price)) {
+        const effectiveDate = new Date();
+        effectiveDate.setDate(effectiveDate.getDate() + 30);
+
+        const planNotificationService = getService<IPlanNotificationService>(TYPES.IPlanNotificationService);
+        const notification = await planNotificationService.createPriceChangeNotification(
+          oldPlan.id,
+          Number(oldPlan.price),
+          Number(updates.price),
+          effectiveDate,
+          adminId
+        );
+
+        await planNotificationService.sendPlanNotifications(notification.id);
+      }
 
       return newVersion;
     } catch (error) {
