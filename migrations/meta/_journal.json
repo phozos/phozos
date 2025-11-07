@@ -113,6 +113,13 @@
       "when": 1762506218454,
       "tag": "0015_military_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1762532431075,
+      "tag": "0016_bumpy_rictor",
+      "breakpoints": true
     }
   ]
 }
