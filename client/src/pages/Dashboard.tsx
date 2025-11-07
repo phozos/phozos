@@ -73,7 +73,7 @@ export default function Dashboard() {
   );
 
   // Fetch user's subscription
-  const { data: subscription, isLoading: subscriptionLoading } = useApiQuery(
+  const { data: subscription, isLoading: subscriptionLoading } = useApiQuery<any>(
     ["/api/subscription/user/subscription"],
     '/api/subscription/user/subscription',
     undefined,
@@ -84,7 +84,7 @@ export default function Dashboard() {
   );
 
   // Fetch effective price info
-  const { data: priceInfo, isLoading: priceLoading } = useApiQuery(
+  const { data: priceInfo, isLoading: priceLoading } = useApiQuery<any>(
     ["/api/subscription/effective-price"],
     '/api/subscription/effective-price',
     undefined,
@@ -231,7 +231,6 @@ export default function Dashboard() {
                 <div className="mt-4">
                   <span className={`text-sm ${
                     stat.changeType === 'positive' ? 'text-green-600' :
-                    stat.changeType === 'negative' ? 'text-red-600' :
                     'text-muted-foreground'
                   }`}>
                     {stat.change}
