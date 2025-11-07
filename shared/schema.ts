@@ -822,7 +822,7 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   description: text("description"),
   logo: text("logo").default("graduation-cap"), // Plan logo identifier
   features: jsonb("features").$type<string[]>().notNull(),
-  tierLevel: integer("tier_level").notNull().unique(),
+  tierLevel: integer("tier_level").notNull(),
   isLifetime: boolean("is_lifetime").default(true),
   maxUniversities: integer("max_universities").notNull(),
   maxCountries: integer("max_countries").notNull(),
@@ -842,6 +842,13 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   isBusinessFocused: boolean("is_business_focused").default(false),
   displayOrder: integer("display_order").default(0),
   isActive: boolean("is_active").default(true),
+  basePlanId: uuid("base_plan_id").notNull().references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
+  version: integer("version").notNull().default(1),
+  versionName: varchar("version_name", { length: 50 }),
+  isLatestVersion: boolean("is_latest_version").default(true),
+  deprecatedAt: timestamp("deprecated_at"),
+  archivedAt: timestamp("archived_at"),
+  successorPlanId: uuid("successor_plan_id").references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

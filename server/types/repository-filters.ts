@@ -62,6 +62,7 @@ export interface PaymentFilters {
 export interface SubscriptionPlanFilters {
   isActive?: boolean;
   planType?: string;
+  includeAllVersions?: boolean;
 }
 
 export interface UserSubscriptionFilters {

@@ -20,6 +20,13 @@ export interface ISubscriptionPlanRepository {
   delete(id: string): Promise<boolean>;
   findByTierLevel(tierLevel: number): Promise<SubscriptionPlan | undefined>;
   findHigherTiers(currentTierLevel: number): Promise<SubscriptionPlan[]>;
+  findLatestVersion(basePlanId: string): Promise<SubscriptionPlan | undefined>;
+  findAllVersions(basePlanId: string): Promise<SubscriptionPlan[]>;
+  findVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined>;
+  createNewVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string): Promise<SubscriptionPlan>;
+  deprecatePlan(planId: string, successorPlanId?: string): Promise<SubscriptionPlan>;
+  archivePlan(planId: string): Promise<SubscriptionPlan>;
+  getSubscriberCount(planId: string): Promise<number>;
 }
 
 export interface IUserSubscriptionRepository {
@@ -44,12 +51,28 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
 
   async findAll(filters?: SubscriptionPlanFilters): Promise<SubscriptionPlan[]> {
     try {
+      const conditions: SQL[] = [];
+      
+      // By default, only return latest versions and active plans (customer-facing behavior)
+      // Admins can override with includeAllVersions: true
+      if (!filters?.includeAllVersions) {
+        conditions.push(eq(subscriptionPlans.isLatestVersion, true));
+      }
+      
+      // Filter by isActive if specified
+      if (filters?.isActive !== undefined) {
+        conditions.push(eq(subscriptionPlans.isActive, filters.isActive));
+      } else if (!filters?.includeAllVersions) {
+        // Default to active plans for customer-facing queries
+        conditions.push(eq(subscriptionPlans.isActive, true));
+      }
+      
       let query = db
         .select()
         .from(subscriptionPlans);
       
-      if (filters?.isActive !== undefined) {
-        query = query.where(eq(subscriptionPlans.isActive, filters.isActive)) as typeof query;
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
       }
       
       return await query.orderBy(subscriptionPlans.displayOrder, subscriptionPlans.price) as SubscriptionPlan[];
@@ -60,10 +83,16 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
 
   async findActive(): Promise<SubscriptionPlan[]> {
     try {
+      // For customer-facing queries, only return latest versions of active plans
       return await db
         .select()
         .from(subscriptionPlans)
-        .where(eq(subscriptionPlans.isActive, true))
+        .where(
+          and(
+            eq(subscriptionPlans.isActive, true),
+            eq(subscriptionPlans.isLatestVersion, true)
+          )
+        )
         .orderBy(subscriptionPlans.displayOrder, subscriptionPlans.price) as SubscriptionPlan[];
     } catch (error) {
       handleDatabaseError(error, 'SubscriptionPlanRepository.findActive');
@@ -110,6 +139,182 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
       return results[0] as SubscriptionPlan;
     } catch (error) {
       handleDatabaseError(error, 'SubscriptionPlanRepository.update');
+    }
+  }
+
+  async findLatestVersion(basePlanId: string): Promise<SubscriptionPlan | undefined> {
+    try {
+      const results = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(
+          and(
+            eq(subscriptionPlans.basePlanId, basePlanId),
+            eq(subscriptionPlans.isLatestVersion, true)
+          )
+        )
+        .limit(1);
+      return results[0] as SubscriptionPlan | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findLatestVersion');
+    }
+  }
+
+  async findAllVersions(basePlanId: string): Promise<SubscriptionPlan[]> {
+    try {
+      return await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.basePlanId, basePlanId))
+        .orderBy(desc(subscriptionPlans.version)) as SubscriptionPlan[];
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findAllVersions');
+    }
+  }
+
+  async findVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined> {
+    try {
+      const results = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(
+          and(
+            eq(subscriptionPlans.basePlanId, basePlanId),
+            eq(subscriptionPlans.version, version)
+          )
+        )
+        .limit(1);
+      return results[0] as SubscriptionPlan | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findVersion');
+    }
+  }
+
+  async createNewVersion(
+    basePlanId: string,
+    updates: Partial<SubscriptionPlan>,
+    adminId: string
+  ): Promise<SubscriptionPlan> {
+    try {
+      return await db.transaction(async (tx) => {
+        const currentLatest = await tx
+          .select()
+          .from(subscriptionPlans)
+          .where(
+            and(
+              eq(subscriptionPlans.basePlanId, basePlanId),
+              eq(subscriptionPlans.isLatestVersion, true)
+            )
+          )
+          .limit(1);
+
+        if (!currentLatest[0]) {
+          throw new NotFoundError('Base Plan', basePlanId);
+        }
+
+        const nextVersion = currentLatest[0].version + 1;
+
+        await tx
+          .update(subscriptionPlans)
+          .set({ isLatestVersion: false, updatedAt: new Date() })
+          .where(eq(subscriptionPlans.id, currentLatest[0].id));
+
+        const newPlanData: any = {
+          ...currentLatest[0],
+          ...updates,
+          id: undefined,
+          basePlanId,
+          version: nextVersion,
+          versionName: `v${nextVersion}`,
+          isLatestVersion: true,
+          deprecatedAt: null,
+          archivedAt: null,
+          successorPlanId: null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        delete newPlanData.id;
+
+        const newPlan = await tx
+          .insert(subscriptionPlans)
+          .values(newPlanData)
+          .returning();
+
+        return newPlan[0] as SubscriptionPlan;
+      });
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.createNewVersion');
+    }
+  }
+
+  async deprecatePlan(planId: string, successorPlanId?: string): Promise<SubscriptionPlan> {
+    try {
+      const updated = await db
+        .update(subscriptionPlans)
+        .set({
+          deprecatedAt: new Date(),
+          successorPlanId,
+          isActive: false,
+          updatedAt: new Date()
+        })
+        .where(eq(subscriptionPlans.id, planId))
+        .returning();
+
+      if (!updated[0]) {
+        throw new NotFoundError('Subscription Plan', planId);
+      }
+
+      return updated[0] as SubscriptionPlan;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.deprecatePlan');
+    }
+  }
+
+  async archivePlan(planId: string): Promise<SubscriptionPlan> {
+    try {
+      const subscriberCount = await this.getSubscriberCount(planId);
+      if (subscriberCount > 0) {
+        throw new Error(
+          `Cannot archive plan with ${subscriberCount} active subscribers`
+        );
+      }
+
+      const updated = await db
+        .update(subscriptionPlans)
+        .set({
+          archivedAt: new Date(),
+          isActive: false,
+          updatedAt: new Date()
+        })
+        .where(eq(subscriptionPlans.id, planId))
+        .returning();
+
+      if (!updated[0]) {
+        throw new NotFoundError('Subscription Plan', planId);
+      }
+
+      return updated[0] as SubscriptionPlan;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.archivePlan');
+    }
+  }
+
+  async getSubscriberCount(planId: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(userSubscriptions)
+        .where(
+          and(
+            eq(userSubscriptions.planId, planId),
+            eq(userSubscriptions.status, 'active')
+          )
+        );
+
+      return Number(result[0]?.count || 0);
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.getSubscriberCount');
     }
   }
 }

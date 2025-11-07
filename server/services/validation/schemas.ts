@@ -89,6 +89,32 @@ export const updateSubscriptionPlanBodySchema = subscriptionPlanSchema.partial()
   changeReason: z.string().optional()
 });
 
+// Plan versioning schemas
+export const createPlanVersionSchema = z.object({
+  updates: z.object({
+    name: z.string().min(1).max(255).optional(),
+    description: z.string().optional(),
+    price: z.number().nonnegative().optional(),
+    features: z.array(z.string()).optional(),
+    maxUniversities: z.number().int().positive().optional(),
+    maxCountries: z.number().int().positive().optional(),
+    turnaroundDays: z.number().int().positive().optional(),
+    tierLevel: z.number().int().positive().optional(),
+    isActive: z.boolean().optional(),
+    displayOrder: z.number().int().optional()
+  }),
+  releaseNotes: z.string().min(1, 'Release notes are required').max(2000)
+});
+
+export const deprecatePlanSchema = z.object({
+  successorPlanId: uuidSchema.optional(),
+  reason: z.string().min(1, 'Reason is required for deprecation').max(1000)
+});
+
+export const archivePlanSchema = z.object({
+  reason: z.string().min(1, 'Reason is required for archiving').max(1000)
+});
+
 export const userSubscriptionSchema = z.object({
   userId: uuidSchema,
   planId: uuidSchema,

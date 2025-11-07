@@ -79,6 +79,14 @@ router.delete('/subscription-plans/:id', csrfProtection, asyncHandler((req: Auth
 router.get('/subscription-plans/recent-changes', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRecentPlanChanges(req, res)));
 router.get('/subscription-plans/:id/change-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanChangeHistory(req, res)));
 
+// Plan Versioning
+router.post('/subscription-plans/:basePlanId/versions', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createPlanVersion(req, res)));
+router.get('/subscription-plans/:basePlanId/versions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersions(req, res)));
+router.get('/subscription-plans/:basePlanId/versions/:version', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersion(req, res)));
+router.post('/subscription-plans/:planId/deprecate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deprecatePlan(req, res)));
+router.post('/subscription-plans/:planId/archive', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.archivePlan(req, res)));
+router.get('/subscription-plans/:planId/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanAnalytics(req, res)));
+
 // User Subscriptions
 router.get('/user-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptions(req, res)));
 router.post('/student-subscription/:studentId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateStudentSubscription(req, res)));

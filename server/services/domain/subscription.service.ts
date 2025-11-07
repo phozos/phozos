@@ -1,11 +1,22 @@
 import { BaseService } from '../base.service';
-import { ISubscriptionPlanRepository, IStudentRepository, ISubscriptionPlanAuditRepository } from '../../repositories';
+import { ISubscriptionPlanRepository, IStudentRepository, ISubscriptionPlanAuditRepository, IUserSubscriptionRepository } from '../../repositories';
 import { container, TYPES } from '../container';
 import { 
   SubscriptionPlan, InsertSubscriptionPlan
 } from '@shared/schema';
 import { ValidationServiceError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
+
+export interface PlanAnalytics {
+  planId: string;
+  planName: string;
+  version: number;
+  activeSubscribers: number;
+  totalRevenue: number;
+  isDeprecated: boolean;
+  deprecatedAt: Date | null;
+  successorPlan: SubscriptionPlan | null;
+}
 
 export interface ISubscriptionService {
   // Subscription Plans
@@ -15,6 +26,13 @@ export interface ISubscriptionService {
   createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan>;
   updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined>;
   deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean>;
+  // Versioning Methods
+  createPlanVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string, releaseNotes?: string): Promise<SubscriptionPlan>;
+  getPlanVersions(basePlanId: string): Promise<SubscriptionPlan[]>;
+  getPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined>;
+  deprecatePlan(planId: string, successorPlanId: string | undefined, adminId: string, reason: string): Promise<void>;
+  archivePlan(planId: string, adminId: string, reason: string): Promise<void>;
+  getPlanAnalytics(planId: string): Promise<PlanAnalytics>;
   // Helper Methods (temporary - should be moved to appropriate service)
   getCounselorStudentAssignment(counselorId: string, studentId: string): Promise<boolean>;
 }
@@ -23,7 +41,8 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
   constructor(
     private subscriptionPlanRepository: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository),
     private studentRepository: IStudentRepository = container.get<IStudentRepository>(TYPES.IStudentRepository),
-    private planAuditRepository: ISubscriptionPlanAuditRepository = container.get<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository)
+    private planAuditRepository: ISubscriptionPlanAuditRepository = container.get<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository),
+    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository)
   ) {
     super();
   }
@@ -183,6 +202,136 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       return await this.subscriptionPlanRepository.delete(id);
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.deleteSubscriptionPlan');
+    }
+  }
+
+  // Versioning Methods
+  async createPlanVersion(
+    basePlanId: string,
+    updates: Partial<SubscriptionPlan>,
+    adminId: string,
+    releaseNotes?: string
+  ): Promise<SubscriptionPlan> {
+    try {
+      const newVersion = await this.subscriptionPlanRepository.createNewVersion(
+        basePlanId,
+        updates,
+        adminId
+      );
+
+      await this.planAuditRepository.logChange({
+        planId: newVersion.id,
+        changedBy: adminId,
+        changeType: 'created',
+        fieldChanges: {
+          type: 'new_version',
+          basePlanId,
+          version: newVersion.version,
+          changes: updates,
+          releaseNotes
+        },
+        changeReason: `Created version ${newVersion.version}${releaseNotes ? ': ' + releaseNotes : ''}`
+      });
+
+      return newVersion;
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.createPlanVersion');
+    }
+  }
+
+  async getPlanVersions(basePlanId: string): Promise<SubscriptionPlan[]> {
+    try {
+      return await this.subscriptionPlanRepository.findAllVersions(basePlanId);
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getPlanVersions');
+    }
+  }
+
+  async getPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined> {
+    try {
+      return await this.subscriptionPlanRepository.findVersion(basePlanId, version);
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getPlanVersion');
+    }
+  }
+
+  async deprecatePlan(
+    planId: string,
+    successorPlanId: string | undefined,
+    adminId: string,
+    reason: string
+  ): Promise<void> {
+    try {
+      const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(planId);
+      
+      if (subscriberCount === 0) {
+        throw new Error(
+          'Cannot deprecate plan with no subscribers. Use archive instead.'
+        );
+      }
+
+      await this.subscriptionPlanRepository.deprecatePlan(planId, successorPlanId);
+
+      await this.planAuditRepository.logChange({
+        planId,
+        changedBy: adminId,
+        changeType: 'deprecated',
+        fieldChanges: {
+          subscriberCount,
+          successorPlanId
+        },
+        changeReason: reason
+      });
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.deprecatePlan');
+    }
+  }
+
+  async archivePlan(planId: string, adminId: string, reason: string): Promise<void> {
+    try {
+      await this.subscriptionPlanRepository.archivePlan(planId);
+
+      await this.planAuditRepository.logChange({
+        planId,
+        changedBy: adminId,
+        changeType: 'archived',
+        fieldChanges: {
+          archived: true
+        },
+        changeReason: reason
+      });
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.archivePlan');
+    }
+  }
+
+  async getPlanAnalytics(planId: string): Promise<PlanAnalytics> {
+    try {
+      const plan = await this.subscriptionPlanRepository.findById(planId);
+      const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(planId);
+      
+      const subscriptions = await this.userSubscriptionRepo.findAll({ planId });
+      const totalRevenue = subscriptions.reduce((sum, sub) => {
+        return sum + Number(sub.amountPaid || 0);
+      }, 0);
+
+      let successorPlan = null;
+      if (plan.successorPlanId) {
+        successorPlan = await this.subscriptionPlanRepository.findByIdOptional(plan.successorPlanId);
+      }
+
+      return {
+        planId: plan.id,
+        planName: plan.name,
+        version: plan.version,
+        activeSubscribers: subscriberCount,
+        totalRevenue,
+        isDeprecated: !!plan.deprecatedAt,
+        deprecatedAt: plan.deprecatedAt,
+        successorPlan
+      };
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getPlanAnalytics');
     }
   }
 

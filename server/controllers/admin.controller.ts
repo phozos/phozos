@@ -27,6 +27,11 @@ import {
   insertUniversitySchema,
   insertSubscriptionPlanSchema 
 } from '@shared/schema';
+import { 
+  createPlanVersionSchema,
+  deprecatePlanSchema,
+  archivePlanSchema
+} from '../services/validation/schemas';
 import { CreateStaffRequestSchema } from '@shared/api-contracts';
 import { VALID_ACCOUNT_STATUSES } from '@shared/account-status';
 import { AccountId, StudentProfileId, toAccountId, toStudentProfileId } from '@shared/types/branded-ids';
@@ -1270,6 +1275,169 @@ export class AdminController extends BaseController {
       return this.sendSuccess(res, changes);
     } catch (error) {
       return this.handleError(res, error, 'AdminController.getRecentPlanChanges');
+    }
+  }
+
+  /**
+   * Create a new version of a subscription plan
+   * 
+   * @route POST /api/admin/subscription-plans/:basePlanId/versions
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId and version details
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns the newly created plan version
+   */
+  async createPlanVersion(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId } = req.params;
+      const validatedData = createPlanVersionSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const newVersion = await subscriptionService.createPlanVersion(
+        basePlanId,
+        validatedData.updates,
+        adminId,
+        validatedData.releaseNotes
+      );
+
+      res.status(201);
+      return this.sendSuccess(res, newVersion);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.createPlanVersion');
+    }
+  }
+
+  /**
+   * Get all versions of a subscription plan
+   * 
+   * @route GET /api/admin/subscription-plans/:basePlanId/versions
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns array of all plan versions
+   */
+  async getPlanVersions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId } = req.params;
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const versions = await subscriptionService.getPlanVersions(basePlanId);
+
+      return this.sendSuccess(res, versions);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanVersions');
+    }
+  }
+
+  /**
+   * Get a specific version of a subscription plan
+   * 
+   * @route GET /api/admin/subscription-plans/:basePlanId/versions/:version
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId and version number
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns the specific plan version
+   */
+  async getPlanVersion(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId, version } = req.params;
+      const versionNumber = parseInt(version, 10);
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const planVersion = await subscriptionService.getPlanVersion(basePlanId, versionNumber);
+
+      if (!planVersion) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Plan version not found');
+      }
+
+      return this.sendSuccess(res, planVersion);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanVersion');
+    }
+  }
+
+  /**
+   * Deprecate a subscription plan
+   * 
+   * @route POST /api/admin/subscription-plans/:planId/deprecate
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with planId, successorPlanId, and reason
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success message
+   */
+  async deprecatePlan(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+      const validatedData = deprecatePlanSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      await subscriptionService.deprecatePlan(
+        planId, 
+        validatedData.successorPlanId, 
+        adminId, 
+        validatedData.reason
+      );
+
+      return this.sendSuccess(res, { message: 'Plan deprecated successfully' });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.deprecatePlan');
+    }
+  }
+
+  /**
+   * Archive a subscription plan (only if no active subscribers)
+   * 
+   * @route POST /api/admin/subscription-plans/:planId/archive
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with planId and reason
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success message
+   */
+  async archivePlan(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+      const validatedData = archivePlanSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      await subscriptionService.archivePlan(planId, adminId, validatedData.reason);
+
+      return this.sendSuccess(res, { message: 'Plan archived successfully' });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.archivePlan');
+    }
+  }
+
+  /**
+   * Get analytics for a subscription plan
+   * 
+   * @route GET /api/admin/subscription-plans/:planId/analytics
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with planId
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns plan analytics including subscriber count and revenue
+   */
+  async getPlanAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const analytics = await subscriptionService.getPlanAnalytics(planId);
+
+      return this.sendSuccess(res, analytics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanAnalytics');
     }
   }
 
