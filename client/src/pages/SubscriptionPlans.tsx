@@ -68,6 +68,12 @@ interface UserSubscription {
     countriesUsed: number;
     createdAt: string;
     updatedAt: string;
+    
+    // Grandfathering fields
+    subscribedPlanSnapshot?: any;
+    grandfatheredPrice?: string;
+    grandfatheredUntil?: string | null;
+    isGrandfathered?: boolean;
   };
   user: {
     id: string;
@@ -742,20 +748,39 @@ export default function SubscriptionPlans() {
                             <div>
                               <div className="font-medium">{sub.plan.name}</div>
                               <div className="text-sm text-gray-500">
-                                ${sub.plan.price} {sub.plan.currency}
+                                Current: ${sub.plan.price} {sub.plan.currency}
                               </div>
+                              {sub.subscription.isGrandfathered && sub.subscription.grandfatheredPrice && (
+                                <div className="text-xs text-amber-600 mt-1">
+                                  Grandfathered: ${sub.subscription.grandfatheredPrice}
+                                </div>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge className={getStatusBadgeColor(sub.subscription.status)}>
-                              {sub.subscription.status}
-                            </Badge>
+                            <div className="flex flex-col gap-1">
+                              <Badge className={getStatusBadgeColor(sub.subscription.status)}>
+                                {sub.subscription.status}
+                              </Badge>
+                              {sub.subscription.isGrandfathered && (
+                                <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900 text-xs">
+                                  🔒 Locked
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             {sub.subscription.amountPaid ? (
-                              <span className="font-medium">
-                                ${sub.subscription.amountPaid} {sub.subscription.currency}
-                              </span>
+                              <div>
+                                <span className="font-medium">
+                                  ${sub.subscription.amountPaid} {sub.subscription.currency}
+                                </span>
+                                {sub.subscription.isGrandfathered && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    (Price locked)
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-gray-400">N/A</span>
                             )}

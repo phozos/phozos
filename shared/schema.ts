@@ -874,6 +874,13 @@ export const userSubscriptions = pgTable("user_subscriptions", {
   amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }),
   currency: varchar("currency", { length: 3 }).default("INR"),
   paidAt: timestamp("paid_at"),
+  
+  // Grandfathering support (Phase 2)
+  subscribedPlanSnapshot: jsonb("subscribed_plan_snapshot"), // Immutable snapshot of plan at subscription time
+  grandfatheredPrice: decimal("grandfathered_price", { precision: 10, scale: 2 }), // Locked price immune to plan changes
+  grandfatheredUntil: timestamp("grandfathered_until"), // Optional expiration (null = forever)
+  isGrandfathered: boolean("is_grandfathered").default(false), // Whether pricing is grandfathered
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

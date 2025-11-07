@@ -17,5 +17,6 @@ router.use(requireAuth);
 router.get('/user/subscription', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserSubscription(req, res)));
 router.post('/user/subscribe', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.subscribe(req, res)));
 router.post('/upgrade', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.upgradeSubscription(req, res)));
+router.get('/effective-price', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getMyEffectivePrice(req, res)));
 
 export default router;

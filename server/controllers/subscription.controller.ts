@@ -238,6 +238,51 @@ export class SubscriptionController extends BaseController {
       return this.handleError(res, error, 'SubscriptionController.upgradeSubscription');
     }
   }
+
+  /**
+   * Get effective price for the authenticated user's subscription
+   * 
+   * @route GET /api/subscription/effective-price
+   * @access Protected
+   * @param {AuthenticatedRequest} req - Request with authenticated user
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns effective price and price update offer information
+   * 
+   * @description
+   * Returns the user's effective subscription price (grandfathered if applicable)
+   * and information about whether they can benefit from a price drop.
+   * 
+   * @example
+   * // Response:
+   * {
+   *   "effectivePrice": 7999,
+   *   "priceUpdate": {
+   *     "shouldOffer": true,
+   *     "currentPrice": 7999,
+   *     "newPrice": 6999,
+   *     "savings": 1000
+   *   }
+   * }
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {500} Internal server error
+   */
+  async getMyEffectivePrice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      
+      const effectivePrice = await userSubscriptionService.getEffectivePrice(userId);
+      const priceUpdate = await userSubscriptionService.shouldOfferPriceUpdate(userId);
+      
+      return this.sendSuccess(res, {
+        effectivePrice,
+        priceUpdate
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getMyEffectivePrice');
+    }
+  }
 }
 
 export const subscriptionController = new SubscriptionController();

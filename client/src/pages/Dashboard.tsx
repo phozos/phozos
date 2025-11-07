@@ -25,9 +25,11 @@ import {
   Eye,
   Target,
   BookOpen,
-  Globe
+  Globe,
+  Lock
 } from "lucide-react";
 import { Link } from "wouter";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -66,6 +68,28 @@ export default function Dashboard() {
     undefined,
     { 
       staleTime: 10 * 60 * 1000, // 10 minutes
+      enabled: !!user,
+    }
+  );
+
+  // Fetch user's subscription
+  const { data: subscription, isLoading: subscriptionLoading } = useApiQuery(
+    ["/api/subscription/user/subscription"],
+    '/api/subscription/user/subscription',
+    undefined,
+    { 
+      staleTime: 5 * 60 * 1000,
+      enabled: !!user,
+    }
+  );
+
+  // Fetch effective price info
+  const { data: priceInfo, isLoading: priceLoading } = useApiQuery(
+    ["/api/subscription/effective-price"],
+    '/api/subscription/effective-price',
+    undefined,
+    { 
+      staleTime: 5 * 60 * 1000,
       enabled: !!user,
     }
   );
@@ -318,6 +342,73 @@ export default function Dashboard() {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Subscription Card */}
+            {subscription && subscription.id && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Subscription</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Plan:</span>
+                      <span className="font-semibold">{subscription.plan?.name || 'N/A'}</span>
+                    </div>
+                    
+                    {subscription.isGrandfathered && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Your Price:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-green-600">
+                              ₹{subscription.grandfatheredPrice}
+                            </span>
+                            <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900">
+                              <Lock className="w-3 h-3 mr-1" />
+                              Locked
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        {priceInfo?.priceUpdate?.shouldOffer && (
+                          <Alert className="mt-3">
+                            <TrendingUp className="h-4 w-4" />
+                            <AlertTitle>Price Drop Available!</AlertTitle>
+                            <AlertDescription className="text-xs mt-1">
+                              This plan now costs ₹{priceInfo.priceUpdate.newPrice} 
+                              (save ₹{priceInfo.priceUpdate.savings}). 
+                              <Button variant="link" className="h-auto p-0 text-xs" asChild>
+                                <Link href="/subscription-plans">Update my price</Link>
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        
+                        <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
+                          <Lock className="w-3 h-3 inline mr-1" />
+                          Your price is locked. New subscribers pay ₹{subscription.plan?.price || 'N/A'}.
+                        </div>
+                      </>
+                    )}
+                    
+                    {!subscription.isGrandfathered && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Price:</span>
+                        <span className="font-semibold">₹{subscription.plan?.price || 'N/A'}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Status:</span>
+                      <Badge variant={subscription.status === 'active' ? 'default' : 'secondary'}>
+                        {subscription.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             {/* Quick Actions */}
             <Card>
               <CardHeader>

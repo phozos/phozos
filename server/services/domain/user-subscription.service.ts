@@ -17,6 +17,8 @@ export interface IUserSubscriptionService {
   upgradeSubscription(userId: string, newPlanId: string): Promise<UserSubscription>;
   subscribeUserToPlan(userId: string, planId: string, orderId?: string): Promise<UserSubscription>;
   canPurchasePlan(userId: string, planId: string): Promise<{ allowed: boolean; reason?: string; requiresUpgrade?: boolean; currentPlan?: any }>;
+  getEffectivePrice(userId: string): Promise<number | null>;
+  shouldOfferPriceUpdate(userId: string): Promise<{ shouldOffer: boolean; currentPrice: number; newPrice: number; savings?: number }>;
 }
 
 export class UserSubscriptionService extends BaseService implements IUserSubscriptionService {
@@ -325,7 +327,7 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
         }
       }
 
-      // Create new subscription
+      // Create new subscription with grandfathering support
       return await this.createSubscription({
         userId,
         planId,
@@ -337,10 +339,74 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
         lifetimeActivatedAt: new Date(),
         highestTierReached: plan.tierLevel,
         expiresAt: null,
-        autoRenew: null
+        autoRenew: null,
+        
+        // Grandfathering fields (Phase 2)
+        subscribedPlanSnapshot: plan as any,  // Full immutable snapshot
+        grandfatheredPrice: plan.price,       // Lock the price
+        isGrandfathered: true,                // Mark as grandfathered
+        grandfatheredUntil: null              // Forever (null = no expiration)
       });
     } catch (error) {
       return this.handleError(error, 'UserSubscriptionService.subscribeUserToPlan');
+    }
+  }
+
+  async getEffectivePrice(userId: string): Promise<number | null> {
+    try {
+      const subscription = await this.userSubscriptionRepo.findByUser(userId);
+      
+      if (!subscription) {
+        return null;
+      }
+
+      // If grandfathered, return locked price
+      if (subscription.isGrandfathered && subscription.grandfatheredPrice) {
+        return Number(subscription.grandfatheredPrice);
+      }
+
+      // Otherwise, return current plan price
+      const currentPlan = await this.subscriptionPlanRepo.findById(subscription.planId);
+      return currentPlan ? Number(currentPlan.price) : null;
+    } catch (error) {
+      return this.handleError(error, 'UserSubscriptionService.getEffectivePrice');
+    }
+  }
+
+  async shouldOfferPriceUpdate(userId: string): Promise<{ 
+    shouldOffer: boolean; 
+    currentPrice: number; 
+    newPrice: number;
+    savings?: number;
+  }> {
+    try {
+      const subscription = await this.userSubscriptionRepo.findByUser(userId);
+      
+      if (!subscription || !subscription.isGrandfathered) {
+        return { shouldOffer: false, currentPrice: 0, newPrice: 0 };
+      }
+
+      const currentPlan = await this.subscriptionPlanRepo.findById(subscription.planId);
+      if (!currentPlan) {
+        return { shouldOffer: false, currentPrice: 0, newPrice: 0 };
+      }
+
+      const lockedPrice = Number(subscription.grandfatheredPrice);
+      const currentPrice = Number(currentPlan.price);
+
+      // Offer if current price is LOWER than locked price
+      if (currentPrice < lockedPrice) {
+        return {
+          shouldOffer: true,
+          currentPrice: lockedPrice,
+          newPrice: currentPrice,
+          savings: lockedPrice - currentPrice
+        };
+      }
+
+      return { shouldOffer: false, currentPrice: lockedPrice, newPrice: currentPrice };
+    } catch (error) {
+      return this.handleError(error, 'UserSubscriptionService.shouldOfferPriceUpdate');
     }
   }
 }
