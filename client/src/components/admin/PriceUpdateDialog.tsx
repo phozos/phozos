@@ -50,6 +50,9 @@ const priceUpdateSchema = z.object({
   effectiveDate: z.string().min(1, "Effective date is required"),
   notifySubscribers: z.boolean().default(true),
   changeReason: z.string().min(10, "Reason must be at least 10 characters").max(500),
+}).refine((data) => data.newPrice !== undefined, {
+  message: "New price is required",
+  path: ["newPrice"],
 });
 
 type PriceUpdateFormData = z.infer<typeof priceUpdateSchema>;
@@ -66,7 +69,7 @@ export default function PriceUpdateDialog({
   const form = useForm<PriceUpdateFormData>({
     resolver: zodResolver(priceUpdateSchema),
     defaultValues: {
-      newPrice: plan ? parseFloat(plan.price) : 0,
+      newPrice: undefined as any,
       effectiveDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       notifySubscribers: true,
       changeReason: ""
@@ -77,6 +80,17 @@ export default function PriceUpdateDialog({
 
   const onSubmit = (data: PriceUpdateFormData) => {
     if (!plan) return;
+    
+    // Validate that the new price is different from the current price
+    const currentPrice = parseFloat(plan.price);
+    if (data.newPrice === currentPrice) {
+      toast({
+        title: "Invalid Price Update",
+        description: "New price must be different from current price",
+        variant: "destructive"
+      });
+      return;
+    }
     
     priceUpdateMutation.mutate(
       { 
@@ -101,7 +115,12 @@ export default function PriceUpdateDialog({
 
   const oldPrice = parseFloat(plan.price);
   const newPrice = form.watch("newPrice");
-  const priceChange = newPrice && oldPrice ? ((newPrice - oldPrice) / oldPrice * 100).toFixed(1) : "0";
+  const priceDiff = newPrice && oldPrice ? newPrice - oldPrice : 0;
+  const priceChange = newPrice && oldPrice && newPrice !== oldPrice 
+    ? ((newPrice - oldPrice) / oldPrice * 100).toFixed(1) 
+    : "0";
+  const isIncrease = priceDiff > 0;
+  const isDecrease = priceDiff < 0;
   const effectiveDate = form.watch("effectiveDate");
 
   return (
@@ -134,11 +153,24 @@ export default function PriceUpdateDialog({
                       placeholder="Enter new price"
                       {...field}
                       onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                      className={
+                        newPrice && oldPrice && newPrice !== oldPrice
+                          ? isIncrease 
+                            ? "border-orange-500 focus-visible:ring-orange-500" 
+                            : "border-green-500 focus-visible:ring-green-500"
+                          : ""
+                      }
                     />
                   </FormControl>
-                  {newPrice && oldPrice && (
-                    <FormDescription>
-                      {newPrice > oldPrice ? "Increase" : "Decrease"} of {Math.abs(parseFloat(priceChange))}%
+                  {newPrice && oldPrice && newPrice !== oldPrice && (
+                    <FormDescription className={isIncrease ? "text-orange-600 dark:text-orange-400" : "text-green-600 dark:text-green-400"}>
+                      {isIncrease ? "↑ Increase" : "↓ Decrease"} of {Math.abs(parseFloat(priceChange))}% 
+                      ({isIncrease ? "+" : ""}{plan.currency || 'INR'} {Math.abs(priceDiff).toFixed(2)})
+                    </FormDescription>
+                  )}
+                  {newPrice && oldPrice && newPrice === oldPrice && (
+                    <FormDescription className="text-yellow-600 dark:text-yellow-400">
+                      ⚠️ New price is the same as current price
                     </FormDescription>
                   )}
                   <FormMessage />

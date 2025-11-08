@@ -10,6 +10,7 @@ import { IPlanNotificationService } from './plan-notification.service';
 import { db } from '../../db';
 import { eq } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
+import { InputSanitizer } from '../../utils/input-sanitizer';
 
 export interface PlanAnalytics {
   planId: string;
@@ -115,19 +116,29 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
     try {
       this.validateRequired(plan, ['name', 'price', 'features', 'maxUniversities', 'maxCountries', 'turnaroundDays']);
 
+      // P0.5: Sanitize user inputs to prevent XSS attacks
+      const sanitizedPlan: InsertSubscriptionPlan = {
+        ...plan,
+        name: InputSanitizer.sanitizePlainText(plan.name),
+        description: InputSanitizer.sanitizePlainText(plan.description),
+        features: InputSanitizer.sanitizeArray(plan.features),
+        universityTier: plan.universityTier ? InputSanitizer.sanitizePlainText(plan.universityTier) as any : plan.universityTier,
+        supportType: plan.supportType ? InputSanitizer.sanitizePlainText(plan.supportType) as any : plan.supportType
+      };
+
       const errors: Record<string, string> = {};
 
-      const nameValidation = CommonValidators.validateStringLength(plan.name, 1, 255, 'Plan name');
+      const nameValidation = CommonValidators.validateStringLength(sanitizedPlan.name, 1, 255, 'Plan name');
       if (!nameValidation.valid) {
         errors.name = nameValidation.error!;
       }
 
-      if (plan.price !== undefined && plan.price !== null) {
-        BusinessRuleValidators.validatePaymentAmount(Number(plan.price), 0);
+      if (sanitizedPlan.price !== undefined && sanitizedPlan.price !== null) {
+        BusinessRuleValidators.validatePaymentAmount(Number(sanitizedPlan.price), 0);
       }
 
-      if (plan.maxUniversities !== undefined && plan.maxUniversities !== null) {
-        const maxUnivValidation = CommonValidators.validatePositiveNumber(plan.maxUniversities, 'Max universities');
+      if (sanitizedPlan.maxUniversities !== undefined && sanitizedPlan.maxUniversities !== null) {
+        const maxUnivValidation = CommonValidators.validatePositiveNumber(sanitizedPlan.maxUniversities, 'Max universities');
         if (!maxUnivValidation.valid) {
           errors.maxUniversities = maxUnivValidation.error!;
         }
@@ -141,7 +152,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       const finalPlan = await db.transaction(async (tx) => {
         // Step 1: Insert with NULL basePlanId
         const tempPlan = {
-          ...plan,
+          ...sanitizedPlan,
           basePlanId: null as any,
           version: 1,
           versionName: 'v1',
@@ -186,21 +197,41 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
    */
   async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined> {
     try {
+      // P0.5: Sanitize user inputs to prevent XSS attacks
+      const sanitizedUpdates: Partial<SubscriptionPlan> = { ...updates };
+      if (updates.name !== undefined) {
+        sanitizedUpdates.name = InputSanitizer.sanitizePlainText(updates.name);
+      }
+      if (updates.description !== undefined) {
+        sanitizedUpdates.description = InputSanitizer.sanitizePlainText(updates.description);
+      }
+      if (updates.features !== undefined) {
+        sanitizedUpdates.features = InputSanitizer.sanitizeArray(updates.features);
+      }
+      if (updates.universityTier !== undefined) {
+        sanitizedUpdates.universityTier = InputSanitizer.sanitizePlainText(updates.universityTier) as any;
+      }
+      if (updates.supportType !== undefined) {
+        sanitizedUpdates.supportType = InputSanitizer.sanitizePlainText(updates.supportType) as any;
+      }
+      
+      const sanitizedChangeReason = changeReason ? InputSanitizer.sanitizePlainText(changeReason) : undefined;
+
       const errors: Record<string, string> = {};
 
-      if (updates.name !== undefined) {
-        const nameValidation = CommonValidators.validateStringLength(updates.name, 1, 255, 'Plan name');
+      if (sanitizedUpdates.name !== undefined) {
+        const nameValidation = CommonValidators.validateStringLength(sanitizedUpdates.name, 1, 255, 'Plan name');
         if (!nameValidation.valid) {
           errors.name = nameValidation.error!;
         }
       }
 
-      if (updates.price !== undefined && updates.price !== null) {
-        BusinessRuleValidators.validatePaymentAmount(Number(updates.price), 0);
+      if (sanitizedUpdates.price !== undefined && sanitizedUpdates.price !== null) {
+        BusinessRuleValidators.validatePaymentAmount(Number(sanitizedUpdates.price), 0);
       }
 
-      if (updates.maxUniversities !== undefined && updates.maxUniversities !== null) {
-        const maxUnivValidation = CommonValidators.validatePositiveNumber(updates.maxUniversities, 'Max universities');
+      if (sanitizedUpdates.maxUniversities !== undefined && sanitizedUpdates.maxUniversities !== null) {
+        const maxUnivValidation = CommonValidators.validatePositiveNumber(sanitizedUpdates.maxUniversities, 'Max universities');
         if (!maxUnivValidation.valid) {
           errors.maxUniversities = maxUnivValidation.error!;
         }
@@ -216,7 +247,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       }
 
       // Check if price is being changed
-      if (updates.price !== undefined && Number(updates.price) !== Number(oldPlan.price)) {
+      if (sanitizedUpdates.price !== undefined && Number(sanitizedUpdates.price) !== Number(oldPlan.price)) {
         const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(id);
         
         if (subscriberCount > 0) {
@@ -229,19 +260,19 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
 
       // Log warning if updating plan with subscribers (non-price changes)
       const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(id);
-      if (subscriberCount > 0 && !changeReason) {
+      if (subscriberCount > 0 && !sanitizedChangeReason) {
         logger.warn('Updating plan with active subscribers without changeReason', {
           planId: id,
           planName: oldPlan.name,
           subscriberCount,
           adminId,
-          updates: Object.keys(updates)
+          updates: Object.keys(sanitizedUpdates)
         });
       }
 
-      const fieldChanges = this.calculateFieldChanges(oldPlan, updates);
+      const fieldChanges = this.calculateFieldChanges(oldPlan, sanitizedUpdates);
 
-      const updatedPlan = await this.subscriptionPlanRepository.update(id, updates);
+      const updatedPlan = await this.subscriptionPlanRepository.update(id, sanitizedUpdates);
 
       if (Object.keys(fieldChanges).length > 0) {
         await this.planAuditRepository.logChange({
@@ -249,7 +280,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
           changedBy: adminId,
           changeType: 'updated',
           fieldChanges,
-          changeReason,
+          changeReason: sanitizedChangeReason,
           ipAddress,
           userAgent
         });
@@ -277,6 +308,9 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
     userAgent?: string
   ): Promise<SubscriptionPlan> {
     try {
+      // P0.5: Sanitize release notes
+      const sanitizedReleaseNotes = releaseNotes ? InputSanitizer.sanitizePlainText(releaseNotes) : undefined;
+      
       // Validate price
       BusinessRuleValidators.validatePaymentAmount(newPrice, 0);
 
@@ -307,7 +341,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         basePlanId,
         { price: newPrice.toString() as any },
         adminId,
-        releaseNotes || `Price updated from ${oldPlan.price} to ${newPrice}`,
+        sanitizedReleaseNotes || `Price updated from ${oldPlan.price} to ${newPrice}`,
         notifySubscribers
       );
 
@@ -378,6 +412,33 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         changeReason: `Created version ${newVersion.version}${releaseNotes ? ': ' + releaseNotes : ''}`
       });
 
+      // Auto-grandfather existing subscribers on price increases (P0.4)
+      if (oldPlan && updates.price && Number(updates.price) > Number(oldPlan.price)) {
+        try {
+          const grandfatheredCount = await this.grandfatherExistingSubscribers(
+            oldPlan.id,
+            Number(oldPlan.price),
+            adminId
+          );
+          
+          logger.info('Auto-grandfathered existing subscribers on price increase', {
+            oldPlanId: oldPlan.id,
+            newPlanId: newVersion.id,
+            oldPrice: oldPlan.price,
+            newPrice: updates.price,
+            subscribersGrandfathered: grandfatheredCount,
+            adminId
+          });
+        } catch (grandfatherError) {
+          logger.error('Failed to auto-grandfather existing subscribers', {
+            error: grandfatherError,
+            oldPlanId: oldPlan.id,
+            newPlanId: newVersion.id
+          });
+          // Don't fail the entire operation, but log the error
+        }
+      }
+
       // Send notifications if price changed and notification service is available
       if (notifySubscribers && oldPlan && updates.price && Number(updates.price) !== Number(oldPlan.price)) {
         try {
@@ -424,6 +485,80 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       return await this.subscriptionPlanRepository.findVersion(basePlanId, version);
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.getPlanVersion');
+    }
+  }
+
+  /**
+   * Auto-grandfather existing subscribers when price increases
+   * This ensures existing customers retain their original price
+   * P0.4: Critical fix for auto-grandfathering on price updates
+   */
+  private async grandfatherExistingSubscribers(
+    planId: string,
+    grandfatheredPrice: number,
+    adminId: string
+  ): Promise<number> {
+    try {
+      // Find all active subscriptions for this plan
+      const activeSubscriptions = await this.userSubscriptionRepo.findAll({
+        planId,
+        status: 'active'
+      });
+
+      if (activeSubscriptions.length === 0) {
+        logger.info('No active subscribers to grandfather', { planId });
+        return 0;
+      }
+
+      let grandfatheredCount = 0;
+
+      // Update each subscription with grandfathered price
+      for (const subscription of activeSubscriptions) {
+        // Skip if already grandfathered at a lower price
+        if (subscription.isGrandfathered && subscription.grandfatheredPrice) {
+          const existingGrandfatheredPrice = Number(subscription.grandfatheredPrice);
+          if (existingGrandfatheredPrice <= grandfatheredPrice) {
+            logger.debug('Skipping subscription already grandfathered at lower price', {
+              subscriptionId: subscription.id,
+              existingPrice: existingGrandfatheredPrice,
+              newGrandfatheredPrice: grandfatheredPrice
+            });
+            continue;
+          }
+        }
+
+        // Apply grandfathering
+        await this.userSubscriptionRepo.updateGrandfatheredPrice(
+          subscription.id,
+          grandfatheredPrice
+        );
+
+        grandfatheredCount++;
+
+        // Log to audit trail
+        await this.planAuditRepository.logChange({
+          planId,
+          changedBy: adminId,
+          changeType: 'grandfathered',
+          fieldChanges: {
+            subscriptionId: { old: null, new: subscription.id },
+            userId: { old: null, new: subscription.userId },
+            grandfatheredPrice: { old: subscription.grandfatheredPrice || null, new: grandfatheredPrice },
+            isGrandfathered: { old: subscription.isGrandfathered || false, new: true }
+          },
+          changeReason: `Auto-grandfathered due to price increase`
+        });
+      }
+
+      return grandfatheredCount;
+    } catch (error) {
+      logger.error('Error grandfathering existing subscribers', {
+        error,
+        planId,
+        grandfatheredPrice,
+        adminId
+      });
+      throw error;
     }
   }
 

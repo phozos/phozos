@@ -4,6 +4,41 @@ import { requireAdmin } from '../middleware/authentication';
 import { csrfProtection } from '../middleware/csrf';
 import { asyncHandler } from '../middleware/error-handler';
 import { AuthenticatedRequest } from '../types/auth';
+import rateLimit from 'express-rate-limit';
+
+// P0.6: Rate limiters for expensive operations to prevent DoS attacks
+const versionCreationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 version creations per 15 minutes per admin
+  message: 'Too many version creation requests. Please try again in 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    return req.user?.id || req.ip || 'unknown';
+  }
+});
+
+const migrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 migrations per hour per admin
+  message: 'Too many migration requests. Please try again in 1 hour.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    return req.user?.id || req.ip || 'unknown';
+  }
+});
+
+const bulkNotificationLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 1, // 1 bulk notification per 30 minutes per admin
+  message: 'Too many bulk notification requests. Please try again in 30 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => {
+    return req.user?.id || req.ip || 'unknown';
+  }
+});
 
 const router = Router();
 
@@ -80,7 +115,7 @@ router.get('/subscription-plans/recent-changes', asyncHandler((req: Authenticate
 router.get('/subscription-plans/:id/change-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanChangeHistory(req, res)));
 
 // Plan Versioning
-router.post('/subscription-plans/:basePlanId/versions', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createPlanVersion(req, res)));
+router.post('/subscription-plans/:basePlanId/versions', versionCreationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createPlanVersion(req, res)));
 router.get('/subscription-plans/:basePlanId/versions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersions(req, res)));
 router.get('/subscription-plans/:basePlanId/versions/:version', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersion(req, res)));
 
@@ -130,9 +165,9 @@ router.delete('/outbox/events/:id', csrfProtection, asyncHandler((req: Authentic
 
 // Plan Migrations
 router.get('/migrations', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrations(req, res)));
-router.post('/migrations', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createMigration(req, res)));
+router.post('/migrations', migrationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createMigration(req, res)));
 router.get('/migrations/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigration(req, res)));
-router.post('/migrations/:id/start', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.startMigration(req, res)));
+router.post('/migrations/:id/start', migrationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.startMigration(req, res)));
 router.post('/migrations/:id/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelMigration(req, res)));
 router.get('/migrations/:id/stats', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrationStats(req, res)));
 
@@ -151,7 +186,7 @@ router.get('/features/:featureName/health', asyncHandler((req: AuthenticatedRequ
 router.get('/features/:featureName/lifecycle', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureLifecycle(req, res)));
 
 // Bulk Operations
-router.post('/features/bulk', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.executeBulkFeatureOperation(req, res)));
+router.post('/features/bulk', bulkNotificationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.executeBulkFeatureOperation(req, res)));
 
 // Feature Deprecation Workflow
 router.post('/features/deprecations', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createDeprecationSchedule(req, res)));

@@ -206,6 +206,8 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
   ): Promise<SubscriptionPlan> {
     try {
       return await db.transaction(async (tx) => {
+        // Use SELECT FOR UPDATE to lock the row and prevent race conditions
+        // This ensures that concurrent version creation will be serialized
         const currentLatest = await tx
           .select()
           .from(subscriptionPlans)
@@ -215,7 +217,8 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
               eq(subscriptionPlans.isLatestVersion, true)
             )
           )
-          .limit(1);
+          .limit(1)
+          .for('update');
 
         if (!currentLatest[0]) {
           throw new NotFoundError('Base Plan', basePlanId);
@@ -223,6 +226,8 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
 
         const nextVersion = currentLatest[0].version + 1;
 
+        // Update the current latest version to mark it as not latest
+        // This row is already locked, so no race condition here
         await tx
           .update(subscriptionPlans)
           .set({ isLatestVersion: false, updatedAt: new Date() })

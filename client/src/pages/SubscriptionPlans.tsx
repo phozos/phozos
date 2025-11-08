@@ -164,6 +164,8 @@ export default function SubscriptionPlans() {
   const [selectedPlanForVersions, setSelectedPlanForVersions] = useState<string | null>(null);
   const [priceUpdateDialogOpen, setPriceUpdateDialogOpen] = useState(false);
   const [deprecationDialogOpen, setDeprecationDialogOpen] = useState(false);
+  const [deletePlanDialog, setDeletePlanDialog] = useState<{ open: boolean; plan: SubscriptionPlan | null; subscriberCount: number }>({ open: false, plan: null, subscriberCount: 0 });
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -241,6 +243,8 @@ export default function SubscriptionPlans() {
     {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ["/api/admin/subscription-plans"] });
+        setDeletePlanDialog({ open: false, plan: null, subscriberCount: 0 });
+        setDeleteConfirmationText("");
         toast({ title: "Success", description: "Subscription plan deleted successfully" });
       },
       onError: () => {
@@ -248,6 +252,24 @@ export default function SubscriptionPlans() {
       },
     }
   );
+
+  const getActiveSubscriberCount = (planId: string): number => {
+    return subscriptions.filter(
+      sub => sub.plan.id === planId && sub.subscription.status === 'active'
+    ).length;
+  };
+
+  const handleDeletePlanClick = (plan: SubscriptionPlan) => {
+    const subscriberCount = getActiveSubscriberCount(plan.id);
+    setDeletePlanDialog({ open: true, plan, subscriberCount });
+    setDeleteConfirmationText("");
+  };
+
+  const handleConfirmDeletePlan = () => {
+    if (deletePlanDialog.plan && deleteConfirmationText === "DELETE") {
+      deletePlanMutation.mutate(deletePlanDialog.plan.id);
+    }
+  };
 
   const cancelSubscriptionMutation = useApiMutation(
     (subscriptionId: string) => api.delete(`/api/admin/user-subscriptions/${subscriptionId}`),
@@ -706,7 +728,7 @@ export default function SubscriptionPlans() {
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => deletePlanMutation.mutate(plan.id)}
+                        onClick={() => handleDeletePlanClick(plan)}
                         disabled={deletePlanMutation.isPending}
                       >
                         <Trash2 className="h-3 w-3" />
@@ -1489,6 +1511,71 @@ export default function SubscriptionPlans() {
           queryClient.invalidateQueries({ queryKey: ["/api/admin/subscription-plans"] });
         }}
       />
+
+      <AlertDialog open={deletePlanDialog.open} onOpenChange={(open) => setDeletePlanDialog({ open, plan: null, subscriberCount: 0 })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Subscription Plan
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-4">
+              <div>
+                You are about to permanently delete the plan{" "}
+                <strong className="text-foreground">{deletePlanDialog.plan?.name}</strong>.
+              </div>
+
+              {deletePlanDialog.subscriberCount > 0 && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Warning: Active Subscribers</AlertTitle>
+                  <AlertDescription>
+                    This plan has <strong>{deletePlanDialog.subscriberCount}</strong> active subscriber
+                    {deletePlanDialog.subscriberCount !== 1 ? "s" : ""}. Deleting this plan will affect{" "}
+                    {deletePlanDialog.subscriberCount === 1 ? "this user" : "these users"}.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {deletePlanDialog.subscriberCount === 0 && (
+                <div className="text-sm text-muted-foreground">
+                  This plan has no active subscribers.
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="delete-confirm" className="text-sm font-semibold">
+                  Type <span className="text-destructive font-mono">DELETE</span> to confirm:
+                </Label>
+                <Input
+                  id="delete-confirm"
+                  type="text"
+                  value={deleteConfirmationText}
+                  onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                  placeholder="Type DELETE here"
+                  className="font-mono"
+                />
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                This action cannot be undone. The plan and all associated data will be permanently deleted.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteConfirmationText("")}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDeletePlan}
+              disabled={deleteConfirmationText !== "DELETE" || deletePlanMutation.isPending}
+            >
+              {deletePlanMutation.isPending ? "Deleting..." : "Delete Plan"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
