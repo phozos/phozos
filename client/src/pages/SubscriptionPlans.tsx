@@ -693,11 +693,49 @@ export default function SubscriptionPlans() {
                       </Button>
                       <Button
                         size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedPlanForVersions(plan.id);
+                        }}
+                        className="flex-1"
+                        title="View Version History"
+                      >
+                        <History className="h-3 w-3 mr-1" />
+                        Versions
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="destructive"
                         onClick={() => deletePlanMutation.mutate(plan.id)}
                         disabled={deletePlanMutation.isPending}
                       >
                         <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingPlan(plan);
+                          setPriceUpdateDialogOpen(true);
+                        }}
+                        className="flex-1"
+                      >
+                        <DollarSign className="h-3 w-3 mr-1" />
+                        Update Price
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingPlan(plan);
+                          setDeprecationDialogOpen(true);
+                        }}
+                        className="flex-1 text-yellow-600 hover:text-yellow-700"
+                      >
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Deprecate
                       </Button>
                     </div>
                     <Button
