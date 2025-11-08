@@ -14,11 +14,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell } from "lucide-react";
+import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { PremiumBadgeSelector, PremiumBadgeDisplay, BadgeKey, premiumBadges } from "@/components/PremiumBadges";
 import { useAuth } from "@/hooks/useAuth";
+import PlanVersionHistory from "@/components/admin/PlanVersionHistory";
+import PriceUpdateDialog from "@/components/admin/PriceUpdateDialog";
+import PlanDeprecationDialog from "@/components/admin/PlanDeprecationDialog";
 
 interface SubscriptionPlan {
   id: string;
@@ -157,6 +160,10 @@ export default function SubscriptionPlans() {
   
   const [createVersionDialog, setCreateVersionDialog] = useState<{ open: boolean; plan: SubscriptionPlan | null; newPrice: string }>({ open: false, plan: null, newPrice: "" });
   const [notifySubscribers, setNotifySubscribers] = useState(true);
+  
+  const [selectedPlanForVersions, setSelectedPlanForVersions] = useState<string | null>(null);
+  const [priceUpdateDialogOpen, setPriceUpdateDialogOpen] = useState(false);
+  const [deprecationDialogOpen, setDeprecationDialogOpen] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
