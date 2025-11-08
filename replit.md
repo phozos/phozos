@@ -4,6 +4,16 @@
 
 EduPath is an international education platform connecting students with global universities. It offers AI-powered university matching, application tracking, document management, counselor assignment, community forums, and subscription services. Built with a full-stack TypeScript (React frontend, Express backend) architecture, it serves students, team members (admins/counselors), and company profiles. The platform aims to streamline the international education application process and provide comprehensive support to all stakeholders. It is designed to be a robust solution for the global education market, enhancing student success and institutional outreach.
 
+## Recent Changes
+
+### Phase 1: Critical Fixes (November 2025)
+- **Price Update Dialog Improvements:** Removed prefilled default values, added reactive price difference calculation with visual highlighting, and validation to prevent same-price updates.
+- **Destructive Action Confirmations:** Added AlertDialog for plan deletion requiring typed "DELETE" confirmation and showing active subscriber counts.
+- **Race Condition Prevention:** Implemented SELECT FOR UPDATE row locking in version creation to eliminate duplicate version numbers from concurrent admins.
+- **Automatic Grandfathering:** Implemented auto-grandfathering of existing subscribers when plan prices increase, preserving customer pricing with full audit trail.
+- **XSS Protection:** Installed isomorphic-dompurify and created InputSanitizer utility for comprehensive input sanitization across all user-facing fields.
+- **DoS Protection:** Added express-rate-limit middleware on expensive operations (version creation: 5 per 15 min, migrations: 3 per hour, bulk notifications: 1 per 30 min).
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -19,7 +29,7 @@ Preferred communication style: Simple, everyday language.
 - **Standardized API Response Format:** Unified `{ success: boolean, data?: T, error?: ApiError, meta?: ApiMeta }` envelope for all API endpoints.
 - **Role-Based Access Control (RBAC):** Differentiates Customer, Team Member (Admin/Counselor), and Company Profile user types with `authorize()` middleware and JWT.
 - **Database Schema Design:** PostgreSQL with UUID primary keys and typed enums, managed by Drizzle ORM for type-safe queries. Includes polymorphic user tables, student profiles, universities, applications, forums, subscriptions, and real-time chat.
-- **Security Implementation:** JWT authentication with refresh tokens, HMAC-signed CSRF protection, rate limiting, bcrypt password hashing, secure IP detection, account lockout, and cryptographically secure temporary passwords. Includes webhook deduplication, rate limiting, IP whitelisting, transaction isolation, and timestamp validation for payment security.
+- **Security Implementation:** JWT authentication with refresh tokens, HMAC-signed CSRF protection, rate limiting, bcrypt password hashing, secure IP detection, account lockout, and cryptographically secure temporary passwords. Includes webhook deduplication, rate limiting, IP whitelisting, transaction isolation, and timestamp validation for payment security. Input sanitization via isomorphic-dompurify for XSS prevention. Targeted rate limiting on expensive admin operations (version creation, migrations, bulk notifications) for DoS protection.
 - **Error Handling Strategy:** Centralized custom error classes (e.g., `ServiceError`) mapped to standardized API error responses and HTTP status codes.
 - **Centralized Configuration System:** Production-ready module (`server/config/index.ts`) with layered dotenv-flow loading, Zod schema validation, type-safe exports, and feature flags.
 - **Payment Integration:** Secure Razorpay gateway with multi-step verification (signature, order, plan/amount matching) and webhook signature verification for subscription activation.
@@ -41,7 +51,7 @@ Preferred communication style: Simple, everyday language.
 - **Database:** Neon PostgreSQL (serverless).
 
 ### Key NPM Packages
-- **Backend:** `express`, `drizzle-orm`, `zod`, `bcrypt`, `cookie-parser`, `express-rate-limit`, `express-slow-down`, `razorpay`.
+- **Backend:** `express`, `drizzle-orm`, `zod`, `bcrypt`, `cookie-parser`, `express-rate-limit`, `express-slow-down`, `razorpay`, `isomorphic-dompurify`.
 - **Frontend:** `@tanstack/react-query`, `react-hook-form`, `wouter`, `@radix-ui/*`, `tailwindcss`.
 - **Development:** `vite`, `tsx`, `esbuild`, `vitest`, `eslint`, `@typescript-eslint`, `husky`, `lint-staged`.
 
