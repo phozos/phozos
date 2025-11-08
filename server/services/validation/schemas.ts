@@ -106,13 +106,22 @@ export const createPlanVersionSchema = z.object({
   releaseNotes: z.string().min(1, 'Release notes are required').max(2000)
 });
 
-export const deprecatePlanSchema = z.object({
-  successorPlanId: uuidSchema.optional(),
-  reason: z.string().min(1, 'Reason is required for deprecation').max(1000)
+// Price update schema - for dedicated price change endpoint
+export const updatePlanPriceSchema = z.object({
+  newPrice: z.number().positive('Price must be positive'),
+  effectiveDate: z.string().datetime('Must be ISO 8601 date'),
+  notifySubscribers: z.boolean().optional().default(true)
 });
 
+// Deprecation schema - enhanced with detailed reason requirement
+export const deprecatePlanSchema = z.object({
+  successorPlanId: uuidSchema.optional(),
+  reason: z.string().min(10, 'Deprecation reason must be at least 10 characters').max(500)
+});
+
+// Archive schema - enhanced with detailed reason requirement
 export const archivePlanSchema = z.object({
-  reason: z.string().min(1, 'Reason is required for archiving').max(1000)
+  reason: z.string().min(10, 'Archive reason must be at least 10 characters').max(500)
 });
 
 // Plan migration schemas

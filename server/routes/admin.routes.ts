@@ -83,9 +83,13 @@ router.get('/subscription-plans/:id/change-history', asyncHandler((req: Authenti
 router.post('/subscription-plans/:basePlanId/versions', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createPlanVersion(req, res)));
 router.get('/subscription-plans/:basePlanId/versions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersions(req, res)));
 router.get('/subscription-plans/:basePlanId/versions/:version', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersion(req, res)));
-router.post('/subscription-plans/:planId/deprecate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deprecatePlan(req, res)));
-router.post('/subscription-plans/:planId/archive', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.archivePlan(req, res)));
-router.get('/subscription-plans/:planId/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanAnalytics(req, res)));
+
+// Phase 4: New API endpoints for versioning and grandfathering
+router.post('/subscription-plans/:basePlanId/price', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updatePlanPrice(req, res)));
+router.get('/subscription-plans/:basePlanId/versions/history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersionHistory(req, res)));
+router.post('/subscription-plans/:id/deprecate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deprecatePlan(req, res)));
+router.post('/subscription-plans/:id/archive', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.archivePlan(req, res)));
+router.get('/subscription-plans/:id/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanAnalytics(req, res)));
 
 // User Subscriptions
 router.get('/user-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptions(req, res)));
