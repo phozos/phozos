@@ -134,6 +134,13 @@
       "when": 1762539416766,
       "tag": "0018_huge_silvermane",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1762575432151,
+      "tag": "0019_nifty_wonder_man",
+      "breakpoints": true
     }
   ]
 }

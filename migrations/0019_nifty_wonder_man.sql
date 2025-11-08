@@ -1,0 +1,1 @@
+ALTER TABLE "subscription_plans" ALTER COLUMN "base_plan_id" DROP NOT NULL;
