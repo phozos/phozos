@@ -22,12 +22,18 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Mail } from "lucide-react";
+import { Mail, HelpCircle } from "lucide-react";
 import { format } from "date-fns";
 
 interface SubscriptionPlan {
@@ -133,8 +139,9 @@ export default function PriceUpdateDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <TooltipProvider>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="bg-muted p-4 rounded-lg">
               <div className="text-sm text-muted-foreground">Current Price</div>
               <div className="text-2xl font-bold">{plan.currency || 'INR'} {plan.price}</div>
@@ -183,7 +190,17 @@ export default function PriceUpdateDialog({
               name="effectiveDate"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Effective Date *</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <FormLabel>Effective Date *</FormLabel>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>The date when this new price version becomes active for new subscriptions. Existing subscribers keep their current price (grandfathering). Recommended: Set at least 30 days in advance.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <FormControl>
                     <Input type="date" {...field} />
                   </FormControl>
@@ -254,9 +271,19 @@ export default function PriceUpdateDialog({
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
-                    <FormLabel className="text-sm font-normal cursor-pointer">
-                      Send notification emails to existing subscribers
-                    </FormLabel>
+                    <div className="flex items-center gap-2">
+                      <FormLabel className="text-sm font-normal cursor-pointer">
+                        Send notification emails to existing subscribers
+                      </FormLabel>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>If checked, all existing subscribers will receive an email notification about the price update. They will be reassured that their current price is protected (grandfathered) and won't change.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                   </div>
                 </FormItem>
               )}
@@ -266,12 +293,20 @@ export default function PriceUpdateDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={priceUpdateMutation.isPending}>
-                {priceUpdateMutation.isPending ? "Creating..." : "Create New Version"}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="submit" disabled={priceUpdateMutation.isPending}>
+                    {priceUpdateMutation.isPending ? "Creating..." : "Create New Version"}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Creates a new price version while preserving existing subscribers' current pricing</p>
+                </TooltipContent>
+              </Tooltip>
             </DialogFooter>
           </form>
         </Form>
+        </TooltipProvider>
       </DialogContent>
     </Dialog>
   );

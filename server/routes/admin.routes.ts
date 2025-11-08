@@ -7,15 +7,15 @@ import { AuthenticatedRequest } from '../types/auth';
 import rateLimit from 'express-rate-limit';
 
 // P0.6: Rate limiters for expensive operations to prevent DoS attacks
+// Admin routes always have authenticated user, so we can use user ID directly
 const versionCreationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 version creations per 15 minutes per admin
   message: 'Too many version creation requests. Please try again in 15 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => {
-    return req.user?.id || req.ip || 'unknown';
-  }
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user // Skip if somehow no user (requireAdmin should prevent this)
 });
 
 const migrationLimiter = rateLimit({
@@ -24,9 +24,8 @@ const migrationLimiter = rateLimit({
   message: 'Too many migration requests. Please try again in 1 hour.',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => {
-    return req.user?.id || req.ip || 'unknown';
-  }
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user
 });
 
 const bulkNotificationLimiter = rateLimit({
@@ -35,9 +34,8 @@ const bulkNotificationLimiter = rateLimit({
   message: 'Too many bulk notification requests. Please try again in 30 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => {
-    return req.user?.id || req.ip || 'unknown';
-  }
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user
 });
 
 const router = Router();

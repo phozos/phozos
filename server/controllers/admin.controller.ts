@@ -1623,16 +1623,41 @@ export class AdminController extends BaseController {
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
       await subscriptionService.deprecatePlan(
         id, 
-        validatedData.successorPlanId, 
+        validatedData.successorPlanId || undefined, 
         adminId, 
         validatedData.reason
       );
+
+      let migrationId: string | null = null;
+
+      // Create migration workflow if requested and successor plan is specified
+      if (validatedData.createMigration && validatedData.successorPlanId) {
+        const migrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+        const deprecatedPlan = await subscriptionService.getSubscriptionPlan(id);
+        const successorPlan = await subscriptionService.getSubscriptionPlan(validatedData.successorPlanId);
+        
+        if (deprecatedPlan && successorPlan) {
+          const migration = await migrationService.createMigration({
+            name: `Migration from ${deprecatedPlan.name} to ${successorPlan.name}`,
+            sourcePlanId: id,
+            targetPlanId: validatedData.successorPlanId,
+            migrationType: 'voluntary',
+            startDate: new Date(),
+            incentiveType: undefined,
+            incentiveValue: undefined
+          }, adminId);
+          
+          migrationId = migration.id;
+        }
+      }
 
       return this.sendSuccess(res, {
         message: 'Plan deprecated successfully',
         deprecatedPlanId: id,
         successorPlanId: validatedData.successorPlanId || null,
-        reason: validatedData.reason
+        reason: validatedData.reason,
+        migrationCreated: !!migrationId,
+        migrationId: migrationId
       });
     } catch (error: any) {
       if (error instanceof z.ZodError) {

@@ -330,7 +330,10 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
           newPrice,
           adminId
         });
-        return oldPlan;
+        throw new InvalidOperationError(
+          'update plan price',
+          `New price (${newPrice}) must be different from current price (${oldPlan.price}). Price update cancelled.`
+        );
       }
 
       // Use the basePlanId for versioning

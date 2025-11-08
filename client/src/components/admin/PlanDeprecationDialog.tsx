@@ -22,6 +22,12 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,7 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, HelpCircle } from "lucide-react";
 
 interface SubscriptionPlan {
   id: string;
@@ -121,8 +127,9 @@ export default function PlanDeprecationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <TooltipProvider>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Important</AlertTitle>
@@ -142,7 +149,17 @@ export default function PlanDeprecationDialog({
               name="successorPlanId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Successor Plan (Optional)</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <FormLabel>Successor Plan (Optional)</FormLabel>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>The recommended plan for users to migrate to. If specified, you can create a migration workflow to help existing subscribers transition smoothly.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Select 
                     onValueChange={field.onChange} 
                     value={field.value || undefined}
@@ -173,7 +190,17 @@ export default function PlanDeprecationDialog({
               name="reason"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Reason for Deprecation *</FormLabel>
+                  <div className="flex items-center gap-2">
+                    <FormLabel>Reason for Deprecation *</FormLabel>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Explain why this plan is being deprecated. This reason will be recorded in audit logs and may be included in subscriber notifications.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <FormControl>
                     <Textarea 
                       placeholder="e.g., Replacing with new tier structure to better align with customer needs..."
@@ -202,9 +229,19 @@ export default function PlanDeprecationDialog({
                       />
                     </FormControl>
                     <div className="space-y-1 leading-none">
-                      <FormLabel className="text-sm font-normal cursor-pointer">
-                        Create migration workflow to successor plan
-                      </FormLabel>
+                      <div className="flex items-center gap-2">
+                        <FormLabel className="text-sm font-normal cursor-pointer">
+                          Create migration workflow to successor plan
+                        </FormLabel>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs">
+                            <p>Automatically creates a migration workflow that allows you to manage and track subscriber transitions to the successor plan. You'll be able to execute migrations in batches and monitor progress.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                       <FormDescription>
                         Allows you to plan and execute subscriber migrations
                       </FormDescription>
@@ -251,6 +288,7 @@ export default function PlanDeprecationDialog({
             </DialogFooter>
           </form>
         </Form>
+        </TooltipProvider>
       </DialogContent>
     </Dialog>
   );

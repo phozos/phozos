@@ -115,8 +115,10 @@ export const updatePlanPriceSchema = z.object({
 
 // Deprecation schema - enhanced with detailed reason requirement
 export const deprecatePlanSchema = z.object({
-  successorPlanId: uuidSchema.optional(),
-  reason: z.string().min(10, 'Deprecation reason must be at least 10 characters').max(500)
+  successorPlanId: uuidSchema.optional().nullable(),
+  reason: z.string().min(10, 'Deprecation reason must be at least 10 characters').max(500),
+  createMigration: z.boolean().default(false),
+  notifySubscribers: z.boolean().default(true)
 });
 
 // Archive schema - enhanced with detailed reason requirement

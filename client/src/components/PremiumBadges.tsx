@@ -500,48 +500,64 @@ export const premiumBadges = {
   'platinum': {
     component: PlatinumBadge,
     name: 'Platinum Elite',
+    displayName: 'Platinum Elite',
+    label: 'PLATINUM',
     description: 'Hexagonal titanium-platinum alloy with pristine metallic finish',
     tier: 'PLATINUM'
   },
   'gold': {
     component: GoldBadge,
     name: 'Aurum Luxury',
+    displayName: 'Aurum Luxury',
+    label: 'AURUM',
     description: 'Octagonal 24-karat gold with precision-cut medallion center',
     tier: 'AURUM'
   },
   'diamond': {
     component: DiamondBadge,
     name: 'Brilliance Cut',
+    displayName: 'Brilliance Cut',
+    label: 'BRILLIANCE',
     description: 'Multi-faceted diamond with precision light refraction technology',
     tier: 'BRILLIANCE'
   },
   'crown': {
     component: CrownBadge,
     name: 'Royal Majesty',
+    displayName: 'Royal Majesty',
+    label: 'MAJESTY',
     description: 'Hand-forged crown with authentic ruby, sapphire & emerald jewels',
     tier: 'MAJESTY'
   },
   'shield': {
     component: ShieldBadge,
     name: 'Titanium Fortress',
+    displayName: 'Titanium Fortress',
+    label: 'FORTRESS',
     description: 'Military-grade titanium shield with emerald security core',
     tier: 'FORTRESS'
   },
   'lightning': {
     component: LightningBadge,
     name: 'Electric Voltage',
+    displayName: 'Electric Voltage',
+    label: 'VOLTAGE',
     description: 'Copper-electric hexagon with high-voltage discharge effects',
     tier: 'VOLTAGE'
   },
   'gem': {
     component: GemBadge,
     name: 'Prismatic Crystal',
+    displayName: 'Prismatic Crystal',
+    label: 'PRISMATIC',
     description: 'Rhodium-encased aquamarine crystal with multi-layered refraction',
     tier: 'PRISMATIC'
   },
   'target': {
     component: TargetBadge,
     name: 'Carbon Apex',
+    displayName: 'Carbon Apex',
+    label: 'APEX',
     description: 'Carbon fiber targeting system with precision crosshair technology',
     tier: 'APEX'
   }

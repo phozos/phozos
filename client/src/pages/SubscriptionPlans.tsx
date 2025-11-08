@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History } from "lucide-react";
+import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History, Inbox, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { PremiumBadgeSelector, PremiumBadgeDisplay, BadgeKey, premiumBadges } from "@/components/PremiumBadges";
@@ -654,6 +654,21 @@ export default function SubscriptionPlans() {
         </TabsList>
 
         <TabsContent value="plans">
+          {plans.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 px-4">
+                <Inbox className="h-16 w-16 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Subscription Plans Yet</h3>
+                <p className="text-muted-foreground text-center mb-6 max-w-md">
+                  Get started by creating your first subscription plan. Define pricing, features, and benefits for your users.
+                </p>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Your First Plan
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {plans.map((plan) => (
               <Card key={plan.id} className={`relative ${!plan.isActive ? 'opacity-60' : ''}`}>
@@ -780,6 +795,7 @@ export default function SubscriptionPlans() {
               </Card>
             ))}
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="subscriptions">
@@ -864,8 +880,30 @@ export default function SubscriptionPlans() {
                   <TableBody>
                     {filteredAndSortedSubscriptions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                          No subscriptions found
+                        <TableCell colSpan={7} className="text-center py-12">
+                          <div className="flex flex-col items-center justify-center">
+                            <Info className="h-12 w-12 text-muted-foreground mb-3" />
+                            <h3 className="text-lg font-semibold mb-1">No Subscriptions Found</h3>
+                            <p className="text-muted-foreground text-sm max-w-md">
+                              {subscriptions.length === 0 
+                                ? "No users have subscribed yet. Once users subscribe to a plan, they'll appear here." 
+                                : "No subscriptions match your current filters. Try adjusting your search criteria or filters."}
+                            </p>
+                            {subscriptions.length > 0 && (
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="mt-4"
+                                onClick={() => {
+                                  setSearchText("");
+                                  setStatusFilter("all");
+                                  setPlanFilter("all");
+                                }}
+                              >
+                                Clear All Filters
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (

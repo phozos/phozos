@@ -5,8 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { History, Users, Eye } from "lucide-react";
-import { format } from "date-fns";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { History, Users, Eye, HelpCircle } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 interface PlanVersion {
   id: string;
@@ -106,17 +112,44 @@ export default function PlanVersionHistory({ basePlanId, onVersionSelect }: Plan
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Version</TableHead>
-              <TableHead>Price</TableHead>
-              <TableHead>Active Subscribers</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
+        <TooltipProvider>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <div className="flex items-center gap-2">
+                    Version
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Version number increments with each price or feature change</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Active Subscribers</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-2">
+                    Status
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p><strong>Active:</strong> Latest version for new subscribers<br/>
+                        <strong>Grandfathered:</strong> Older version with existing subscribers<br/>
+                        <strong>Deprecated:</strong> Plan no longer available</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
           <TableBody>
             {typedHistory.versions.map((version) => (
               <TableRow 
@@ -143,7 +176,7 @@ export default function PlanVersionHistory({ basePlanId, onVersionSelect }: Plan
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {format(new Date(version.createdAt), 'MMM d, yyyy')}
+                  {formatDate(version.createdAt, "short")}
                 </TableCell>
                 <TableCell>
                   {version.deprecatedAt ? (
@@ -168,6 +201,7 @@ export default function PlanVersionHistory({ basePlanId, onVersionSelect }: Plan
             ))}
           </TableBody>
         </Table>
+        </TooltipProvider>
       </CardContent>
     </Card>
   );
