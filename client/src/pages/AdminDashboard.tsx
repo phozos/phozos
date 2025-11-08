@@ -2185,6 +2185,18 @@ export default function AdminDashboard() {
                 Subscription Analytics
               </Button>
             </Link>
+            <Link href="/admin/plan-analytics">
+              <Button variant="outline">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Plan Analytics
+              </Button>
+            </Link>
+            <Link href="/admin/migrations">
+              <Button variant="outline">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Migrations
+              </Button>
+            </Link>
             <Link href="/test/conversions">
               <Button variant="outline" data-testid="button-test-conversions">
                 <TestTube className="w-4 h-4 mr-2" />

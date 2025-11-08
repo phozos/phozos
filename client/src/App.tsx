@@ -39,6 +39,7 @@ const Community = lazy(() => import("@/pages/Community"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const SubscriptionAnalytics = lazy(() => import("@/pages/admin/SubscriptionAnalytics"));
 const PlanAnalytics = lazy(() => import("@/pages/admin/PlanAnalytics"));
+const PlanMigrations = lazy(() => import("@/pages/admin/PlanMigrations"));
 const FeatureManagementDashboard = lazy(() => import("@/pages/admin/FeatureManagementDashboard"));
 const StudentChat = lazy(() => import("@/pages/StudentChat"));
 const CompanyDashboard = lazy(() => import("@/pages/CompanyDashboard"));
@@ -137,6 +138,14 @@ function AppContent() {
           <ProtectedRoute {...adminOnly}>
             <Suspense fallback={<LoadingFallback />}>
               <FeatureManagementDashboard />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/migrations">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PlanMigrations />
             </Suspense>
           </ProtectedRoute>
         </Route>
