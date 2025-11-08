@@ -5,6 +5,7 @@ import { UserSubscription, InsertUserSubscription } from '@shared/schema';
 import { ValidationServiceError, InvalidOperationError } from '../errors';
 import { CommonValidators } from '../validation';
 import { NotFoundError } from '../../repositories/errors';
+import { logger } from '../../utils/logger';
 
 export interface IUserSubscriptionService {
   getCurrentSubscription(userId: string): Promise<UserSubscription | undefined>;
@@ -269,6 +270,11 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
     }
   }
 
+  /**
+   * Subscribe user to a plan with automatic version redirection and full grandfathering
+   * - Redirects to latest version if an older version is requested
+   * - Implements full grandfathering (snapshot, locked price, forever)
+   */
   async subscribeUserToPlan(userId: string, planId: string, orderId?: string): Promise<UserSubscription> {
     try {
       const errors: Record<string, string> = {};
@@ -295,26 +301,46 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
         }
       }
 
-      // Check if user can purchase this plan
-      const validation = await this.canPurchasePlan(userId, planId);
-      if (!validation.allowed) {
-        throw new InvalidOperationError('purchase plan', validation.reason || 'Plan purchase not allowed');
-      }
-
-      // Fetch the plan to get tierLevel
-      const plan = await this.subscriptionPlanRepo.findById(planId);
+      // Fetch the requested plan
+      let plan = await this.subscriptionPlanRepo.findById(planId);
       if (!plan) {
         throw new NotFoundError('Subscription Plan', planId);
       }
 
+      // PHASE 3: Check if planId is the latest version, redirect if not
+      if (!plan.isLatestVersion) {
+        const basePlanId = plan.basePlanId || plan.id;
+        const latestVersion = await this.subscriptionPlanRepo.findLatestVersion(basePlanId);
+        
+        if (latestVersion && latestVersion.id !== planId) {
+          logger.info('Redirecting subscription to latest plan version', {
+            userId,
+            requestedPlanId: planId,
+            requestedVersion: plan.version,
+            latestPlanId: latestVersion.id,
+            latestVersion: latestVersion.version,
+            planFamily: basePlanId
+          });
+          
+          // Use latest version instead
+          plan = latestVersion;
+        }
+      }
+
+      // Check if user can purchase this plan (using the potentially redirected plan)
+      const validation = await this.canPurchasePlan(userId, plan.id);
+      if (!validation.allowed) {
+        throw new InvalidOperationError('purchase plan', validation.reason || 'Plan purchase not allowed');
+      }
+
       const startDate = new Date();
 
-      // If this is an upgrade, update existing subscription
+      // If this is an upgrade, update existing subscription with FULL grandfathering
       if (validation.requiresUpgrade) {
         const currentSubscription = await this.userSubscriptionRepo.findActiveByUserId(userId);
         if (currentSubscription) {
           return await this.userSubscriptionRepo.update(currentSubscription.id, {
-            planId,
+            planId: plan.id,  // Use potentially redirected plan
             orderId,
             status: 'active',
             isLifetime: true,
@@ -322,15 +348,21 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
             highestTierReached: plan.tierLevel,
             expiresAt: null,
             autoRenew: null,
-            lifetimeActivatedAt: currentSubscription.lifetimeActivatedAt || new Date()
+            lifetimeActivatedAt: currentSubscription.lifetimeActivatedAt || new Date(),
+            
+            // PHASE 3: Full grandfathering for upgrades
+            subscribedPlanSnapshot: plan as any,
+            grandfatheredPrice: plan.price,
+            isGrandfathered: true,
+            grandfatheredUntil: null
           });
         }
       }
 
-      // Create new subscription with grandfathering support
+      // Create new subscription with FULL grandfathering support
       return await this.createSubscription({
         userId,
-        planId,
+        planId: plan.id,  // Use potentially redirected plan
         orderId,
         status: 'active',
         startedAt: startDate,
@@ -341,7 +373,7 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
         expiresAt: null,
         autoRenew: null,
         
-        // Grandfathering fields (Phase 2)
+        // PHASE 3: Full grandfathering (snapshot, locked price, forever)
         subscribedPlanSnapshot: plan as any,  // Full immutable snapshot
         grandfatheredPrice: plan.price,       // Lock the price
         isGrandfathered: true,                // Mark as grandfathered

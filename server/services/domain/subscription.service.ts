@@ -4,11 +4,12 @@ import { container, TYPES, getService } from '../container';
 import { 
   SubscriptionPlan, InsertSubscriptionPlan, subscriptionPlans
 } from '@shared/schema';
-import { ValidationServiceError } from '../errors';
+import { ValidationServiceError, InvalidOperationError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
 import { IPlanNotificationService } from './plan-notification.service';
 import { db } from '../../db';
 import { eq } from 'drizzle-orm';
+import { logger } from '../../utils/logger';
 
 export interface PlanAnalytics {
   planId: string;
@@ -25,9 +26,11 @@ export interface ISubscriptionService {
   // Subscription Plans
   getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
   getAllSubscriptionPlans(): Promise<SubscriptionPlan[]>;
+  getAllSubscriptionPlansWithVersions(): Promise<SubscriptionPlan[]>;
   getSubscriptionPlan(id: string): Promise<SubscriptionPlan | undefined>;
   createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan>;
   updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined>;
+  updatePlanPrice(planId: string, newPrice: number, adminId: string, releaseNotes?: string, notifySubscribers?: boolean, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan>;
   deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean>;
   // Versioning Methods
   createPlanVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string, releaseNotes?: string, notifySubscribers?: boolean): Promise<SubscriptionPlan>;
@@ -68,9 +71,13 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
   }
 
   // Subscription Plans
+  /**
+   * Get customer-facing subscription plans (latest versions only, active plans)
+   * This is the primary method for displaying plans to customers
+   */
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     try {
-      return await this.subscriptionPlanRepository.findActive();
+      return await this.subscriptionPlanRepository.findLatestVersions({ isActive: true });
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.getSubscriptionPlans');
     }
@@ -81,6 +88,18 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       return await this.subscriptionPlanRepository.findAll();
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.getAllSubscriptionPlans');
+    }
+  }
+
+  /**
+   * Get all subscription plans including all versions (for admin dashboard)
+   * Shows complete version history for each plan family
+   */
+  async getAllSubscriptionPlansWithVersions(): Promise<SubscriptionPlan[]> {
+    try {
+      return await this.subscriptionPlanRepository.findAll({ includeAllVersions: true });
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getAllSubscriptionPlansWithVersions');
     }
   }
 
@@ -119,7 +138,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       }
 
       // PHASE 0 HOTFIX: Two-step creation for self-referencing FK
-      return await db.transaction(async (tx) => {
+      const finalPlan = await db.transaction(async (tx) => {
         // Step 1: Insert with NULL basePlanId
         const tempPlan = {
           ...plan,
@@ -141,23 +160,30 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
           .where(eq(subscriptionPlans.id, createdPlan.id))
           .returning();
 
-        // Step 3: Audit log
-        await this.planAuditRepository.logChange({
-          planId: finalPlan.id,
-          changedBy: adminId,
-          changeType: 'created',
-          fieldChanges: { created: { old: null, new: finalPlan } },
-          ipAddress,
-          userAgent
-        });
-
         return finalPlan as SubscriptionPlan;
       });
+
+      // Step 3: Audit log (AFTER transaction commits)
+      await this.planAuditRepository.logChange({
+        planId: finalPlan.id,
+        changedBy: adminId,
+        changeType: 'created',
+        fieldChanges: { created: { old: null, new: finalPlan } },
+        ipAddress,
+        userAgent
+      });
+
+      return finalPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.createSubscriptionPlan');
     }
   }
 
+  /**
+   * Update subscription plan (NON-PRICE updates only)
+   * Price changes are blocked if plan has active subscribers - use updatePlanPrice() instead
+   * Logs deprecation warning if updating a plan with active subscribers
+   */
   async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined> {
     try {
       const errors: Record<string, string> = {};
@@ -189,6 +215,30 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         return undefined;
       }
 
+      // Check if price is being changed
+      if (updates.price !== undefined && Number(updates.price) !== Number(oldPlan.price)) {
+        const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(id);
+        
+        if (subscriberCount > 0) {
+          throw new InvalidOperationError(
+            'update plan price',
+            `Cannot change price for plan with ${subscriberCount} active subscribers. Use updatePlanPrice() to create a new version instead.`
+          );
+        }
+      }
+
+      // Log warning if updating plan with subscribers (non-price changes)
+      const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(id);
+      if (subscriberCount > 0 && !changeReason) {
+        logger.warn('Updating plan with active subscribers without changeReason', {
+          planId: id,
+          planName: oldPlan.name,
+          subscriberCount,
+          adminId,
+          updates: Object.keys(updates)
+        });
+      }
+
       const fieldChanges = this.calculateFieldChanges(oldPlan, updates);
 
       const updatedPlan = await this.subscriptionPlanRepository.update(id, updates);
@@ -208,6 +258,72 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       return updatedPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.updateSubscriptionPlan');
+    }
+  }
+
+  /**
+   * Dedicated method for price changes with proper versioning
+   * Creates a new version of the plan with the new price
+   * Existing subscribers remain on their current version (grandfathering)
+   * Optionally notifies subscribers about the upcoming price change
+   */
+  async updatePlanPrice(
+    planId: string,
+    newPrice: number,
+    adminId: string,
+    releaseNotes?: string,
+    notifySubscribers: boolean = true,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<SubscriptionPlan> {
+    try {
+      // Validate price
+      BusinessRuleValidators.validatePaymentAmount(newPrice, 0);
+
+      const oldPlan = await this.subscriptionPlanRepository.findById(planId);
+      if (!oldPlan) {
+        throw new InvalidOperationError(
+          'update plan price',
+          'Plan not found'
+        );
+      }
+
+      // Check if price is actually changing
+      if (Number(newPrice) === Number(oldPlan.price)) {
+        logger.warn('Attempted to update price to same value', {
+          planId,
+          currentPrice: oldPlan.price,
+          newPrice,
+          adminId
+        });
+        return oldPlan;
+      }
+
+      // Use the basePlanId for versioning
+      const basePlanId = oldPlan.basePlanId || oldPlan.id;
+
+      // Create new version with price change
+      const newVersion = await this.createPlanVersion(
+        basePlanId,
+        { price: newPrice.toString() as any },
+        adminId,
+        releaseNotes || `Price updated from ${oldPlan.price} to ${newPrice}`,
+        notifySubscribers
+      );
+
+      logger.info('Plan price updated via versioning', {
+        planId,
+        basePlanId,
+        oldVersion: oldPlan.version,
+        newVersion: newVersion.version,
+        oldPrice: oldPlan.price,
+        newPrice,
+        adminId
+      });
+
+      return newVersion;
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.updatePlanPrice');
     }
   }
 
@@ -253,29 +369,40 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         changedBy: adminId,
         changeType: 'created',
         fieldChanges: {
-          type: 'new_version',
-          basePlanId,
-          version: newVersion.version,
-          changes: updates,
-          releaseNotes
+          type: { old: null, new: 'new_version' },
+          basePlanId: { old: null, new: basePlanId },
+          version: { old: oldPlan?.version || 0, new: newVersion.version },
+          changes: { old: oldPlan, new: updates },
+          releaseNotes: { old: null, new: releaseNotes || '' }
         },
         changeReason: `Created version ${newVersion.version}${releaseNotes ? ': ' + releaseNotes : ''}`
       });
 
+      // Send notifications if price changed and notification service is available
       if (notifySubscribers && oldPlan && updates.price && Number(updates.price) !== Number(oldPlan.price)) {
-        const effectiveDate = new Date();
-        effectiveDate.setDate(effectiveDate.getDate() + 30);
+        try {
+          const effectiveDate = new Date();
+          effectiveDate.setDate(effectiveDate.getDate() + 30);
 
-        const planNotificationService = getService<IPlanNotificationService>(TYPES.IPlanNotificationService);
-        const notification = await planNotificationService.createPriceChangeNotification(
-          oldPlan.id,
-          Number(oldPlan.price),
-          Number(updates.price),
-          effectiveDate,
-          adminId
-        );
+          const planNotificationService = getService<IPlanNotificationService>(TYPES.IPlanNotificationService);
+          const notification = await planNotificationService.createPriceChangeNotification(
+            oldPlan.id,
+            Number(oldPlan.price),
+            Number(updates.price),
+            effectiveDate,
+            adminId
+          );
 
-        await planNotificationService.sendPlanNotifications(notification.id);
+          await planNotificationService.sendPlanNotifications(notification.id);
+        } catch (notificationError) {
+          // Log but don't fail if notification service is unavailable (e.g., during tests)
+          logger.warn('Failed to send price change notifications', {
+            error: notificationError,
+            basePlanId,
+            oldPrice: oldPlan.price,
+            newPrice: updates.price
+          });
+        }
       }
 
       return newVersion;
@@ -322,8 +449,8 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         changedBy: adminId,
         changeType: 'deprecated',
         fieldChanges: {
-          subscriberCount,
-          successorPlanId
+          subscriberCount: { old: 0, new: subscriberCount },
+          successorPlanId: { old: null, new: successorPlanId || null }
         },
         changeReason: reason
       });
@@ -341,7 +468,7 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         changedBy: adminId,
         changeType: 'archived',
         fieldChanges: {
-          archived: true
+          archived: { old: false, new: true }
         },
         changeReason: reason
       });
@@ -360,9 +487,10 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         return sum + Number(sub.amountPaid || 0);
       }, 0);
 
-      let successorPlan = null;
+      let successorPlan: SubscriptionPlan | null = null;
       if (plan.successorPlanId) {
-        successorPlan = await this.subscriptionPlanRepository.findByIdOptional(plan.successorPlanId);
+        const foundSuccessor = await this.subscriptionPlanRepository.findByIdOptional(plan.successorPlanId);
+        successorPlan = foundSuccessor || null;
       }
 
       return {
