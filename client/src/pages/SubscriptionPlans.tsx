@@ -1470,6 +1470,25 @@ export default function SubscriptionPlans() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PriceUpdateDialog
+        plan={editingPlan}
+        open={priceUpdateDialogOpen}
+        onOpenChange={setPriceUpdateDialogOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/admin/subscription-plans"] });
+        }}
+      />
+
+      <PlanDeprecationDialog
+        plan={editingPlan}
+        availablePlans={plans.filter(p => p.id !== editingPlan?.id)}
+        open={deprecationDialogOpen}
+        onOpenChange={setDeprecationDialogOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/admin/subscription-plans"] });
+        }}
+      />
     </div>
   );
 }
