@@ -2,11 +2,13 @@ import { BaseService } from '../base.service';
 import { ISubscriptionPlanRepository, IStudentRepository, ISubscriptionPlanAuditRepository, IUserSubscriptionRepository } from '../../repositories';
 import { container, TYPES, getService } from '../container';
 import { 
-  SubscriptionPlan, InsertSubscriptionPlan
+  SubscriptionPlan, InsertSubscriptionPlan, subscriptionPlans
 } from '@shared/schema';
 import { ValidationServiceError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
 import { IPlanNotificationService } from './plan-notification.service';
+import { db } from '../../db';
+import { eq } from 'drizzle-orm';
 
 export interface PlanAnalytics {
   planId: string;
@@ -116,18 +118,41 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         throw new ValidationServiceError('Subscription Plan', errors);
       }
 
-      const createdPlan = await this.subscriptionPlanRepository.create(plan);
+      // PHASE 0 HOTFIX: Two-step creation for self-referencing FK
+      return await db.transaction(async (tx) => {
+        // Step 1: Insert with NULL basePlanId
+        const tempPlan = {
+          ...plan,
+          basePlanId: null as any,
+          version: 1,
+          versionName: 'v1',
+          isLatestVersion: true,
+        };
+        
+        const [createdPlan] = await tx
+          .insert(subscriptionPlans)
+          .values(tempPlan)
+          .returning();
+        
+        // Step 2: Update basePlanId to self-reference
+        const [finalPlan] = await tx
+          .update(subscriptionPlans)
+          .set({ basePlanId: createdPlan.id })
+          .where(eq(subscriptionPlans.id, createdPlan.id))
+          .returning();
 
-      await this.planAuditRepository.logChange({
-        planId: createdPlan.id,
-        changedBy: adminId,
-        changeType: 'created',
-        fieldChanges: { created: { old: null, new: createdPlan } },
-        ipAddress,
-        userAgent
+        // Step 3: Audit log
+        await this.planAuditRepository.logChange({
+          planId: finalPlan.id,
+          changedBy: adminId,
+          changeType: 'created',
+          fieldChanges: { created: { old: null, new: finalPlan } },
+          ipAddress,
+          userAgent
+        });
+
+        return finalPlan as SubscriptionPlan;
       });
-
-      return createdPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.createSubscriptionPlan');
     }

@@ -844,7 +844,7 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   isBusinessFocused: boolean("is_business_focused").default(false),
   displayOrder: integer("display_order").default(0),
   isActive: boolean("is_active").default(true),
-  basePlanId: uuid("base_plan_id").notNull().references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
+  basePlanId: uuid("base_plan_id").references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
   version: integer("version").notNull().default(1),
   versionName: varchar("version_name", { length: 50 }),
   isLatestVersion: boolean("is_latest_version").default(true),
