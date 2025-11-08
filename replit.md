@@ -6,6 +6,15 @@ EduPath is an international education platform connecting students with global u
 
 ## Recent Changes
 
+### Phase 2: UX/UI Improvements (November 2025)
+- **Comprehensive Tooltips:** Added helpful tooltips throughout admin interfaces including price update dialogs, plan deprecation dialogs, and version history views to guide admins through complex operations.
+- **Standardized Date Formatting:** Created centralized `formatDate` utility function with support for short, long, and relative date formats for consistency across the application.
+- **Empty State Messaging:** Added informative empty states for subscription plans and subscriptions tabs with clear guidance and actionable next steps.
+- **Badge Naming Consistency:** Standardized premium badge display names and labels across all contexts for better user experience.
+- **Migration Workflow Integration:** Wired deprecation dialog migration checkbox to backend, enabling automatic migration workflow creation when plans are deprecated.
+- **Backend Price Validation:** Enhanced server-side validation to reject same-price updates with clear error messages, preventing no-op version creation.
+- **Rate Limiter Fixes:** Resolved IPv6 compatibility issues in admin route rate limiters by using authenticated user IDs instead of IP-based fallbacks.
+
 ### Phase 1: Critical Fixes (November 2025)
 - **Price Update Dialog Improvements:** Removed prefilled default values, added reactive price difference calculation with visual highlighting, and validation to prevent same-price updates.
 - **Destructive Action Confirmations:** Added AlertDialog for plan deletion requiring typed "DELETE" confirmation and showing active subscriber counts.
