@@ -27,6 +27,12 @@ export interface ISubscriptionPlanRepository {
   deprecatePlan(planId: string, successorPlanId?: string): Promise<SubscriptionPlan>;
   archivePlan(planId: string): Promise<SubscriptionPlan>;
   getSubscriberCount(planId: string): Promise<number>;
+  findLatestVersions(filters?: { isActive?: boolean }): Promise<SubscriptionPlan[]>;
+  findAllVersionsOfPlan(basePlanId: string): Promise<SubscriptionPlan[]>;
+  findPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined>;
+  getLatestVersionNumber(basePlanId: string): Promise<number>;
+  markAsNotLatest(planId: string): Promise<void>;
+  getActiveVersionCount(basePlanId: string): Promise<number>;
 }
 
 export interface IUserSubscriptionRepository {
@@ -42,6 +48,9 @@ export interface IUserSubscriptionRepository {
   findActiveByUserId(userId: string): Promise<UserSubscription | undefined>;
   findByOrderId(orderId: string): Promise<UserSubscription | undefined>;
   hasActiveSubscription(userId: string): Promise<boolean>;
+  updateGrandfatheredPrice(subscriptionId: string, newPrice: number): Promise<UserSubscription>;
+  clearGrandfathering(subscriptionId: string): Promise<UserSubscription>;
+  findGrandfatheredSubscriptions(planId: string): Promise<UserSubscription[]>;
 }
 
 export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan, InsertSubscriptionPlan> implements ISubscriptionPlanRepository {
@@ -317,6 +326,96 @@ export class SubscriptionPlanRepository extends BaseRepository<SubscriptionPlan,
       handleDatabaseError(error, 'SubscriptionPlanRepository.getSubscriberCount');
     }
   }
+
+  async findLatestVersions(filters?: { isActive?: boolean }): Promise<SubscriptionPlan[]> {
+    try {
+      const conditions: SQL[] = [eq(subscriptionPlans.isLatestVersion, true)];
+      
+      if (filters?.isActive !== undefined) {
+        conditions.push(eq(subscriptionPlans.isActive, filters.isActive));
+      }
+      
+      return await db
+        .select()
+        .from(subscriptionPlans)
+        .where(and(...conditions))
+        .orderBy(subscriptionPlans.tierLevel, subscriptionPlans.displayOrder) as SubscriptionPlan[];
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findLatestVersions');
+    }
+  }
+
+  async findAllVersionsOfPlan(basePlanId: string): Promise<SubscriptionPlan[]> {
+    try {
+      return await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.basePlanId, basePlanId))
+        .orderBy(desc(subscriptionPlans.version)) as SubscriptionPlan[];
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findAllVersionsOfPlan');
+    }
+  }
+
+  async findPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined> {
+    try {
+      const results = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(
+          and(
+            eq(subscriptionPlans.basePlanId, basePlanId),
+            eq(subscriptionPlans.version, version)
+          )
+        )
+        .limit(1);
+      return results[0] as SubscriptionPlan | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.findPlanVersion');
+    }
+  }
+
+  async getLatestVersionNumber(basePlanId: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ maxVersion: sql<number>`MAX(${subscriptionPlans.version})` })
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.basePlanId, basePlanId));
+      
+      return result[0]?.maxVersion || 0;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.getLatestVersionNumber');
+    }
+  }
+
+  async markAsNotLatest(planId: string): Promise<void> {
+    try {
+      await db
+        .update(subscriptionPlans)
+        .set({ isLatestVersion: false, updatedAt: new Date() })
+        .where(eq(subscriptionPlans.id, planId));
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.markAsNotLatest');
+    }
+  }
+
+  async getActiveVersionCount(basePlanId: string): Promise<number> {
+    try {
+      const result = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(subscriptionPlans)
+        .where(
+          and(
+            eq(subscriptionPlans.basePlanId, basePlanId),
+            eq(subscriptionPlans.isActive, true)
+          )
+        );
+      
+      return result[0]?.count || 0;
+    } catch (error) {
+      handleDatabaseError(error, 'SubscriptionPlanRepository.getActiveVersionCount');
+    }
+  }
 }
 
 export class UserSubscriptionRepository extends BaseRepository<UserSubscription, InsertUserSubscription> implements IUserSubscriptionRepository {
@@ -484,6 +583,68 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription,
       return results.length > 0;
     } catch (error) {
       handleDatabaseError(error, 'UserSubscriptionRepository.hasActiveSubscription');
+    }
+  }
+
+  async updateGrandfatheredPrice(subscriptionId: string, newPrice: number): Promise<UserSubscription> {
+    try {
+      const [updated] = await db
+        .update(userSubscriptions)
+        .set({
+          grandfatheredPrice: newPrice.toString(),
+          isGrandfathered: true,
+          updatedAt: new Date()
+        })
+        .where(eq(userSubscriptions.id, subscriptionId))
+        .returning();
+      
+      if (!updated) {
+        throw new NotFoundError('UserSubscription', subscriptionId);
+      }
+      
+      return updated as UserSubscription;
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.updateGrandfatheredPrice');
+    }
+  }
+
+  async clearGrandfathering(subscriptionId: string): Promise<UserSubscription> {
+    try {
+      const [updated] = await db
+        .update(userSubscriptions)
+        .set({
+          grandfatheredPrice: null,
+          grandfatheredUntil: null,
+          isGrandfathered: false,
+          updatedAt: new Date()
+        })
+        .where(eq(userSubscriptions.id, subscriptionId))
+        .returning();
+      
+      if (!updated) {
+        throw new NotFoundError('UserSubscription', subscriptionId);
+      }
+      
+      return updated as UserSubscription;
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.clearGrandfathering');
+    }
+  }
+
+  async findGrandfatheredSubscriptions(planId: string): Promise<UserSubscription[]> {
+    try {
+      return await db
+        .select()
+        .from(userSubscriptions)
+        .where(
+          and(
+            eq(userSubscriptions.planId, planId),
+            eq(userSubscriptions.isGrandfathered, true),
+            eq(userSubscriptions.status, 'active')
+          )
+        ) as UserSubscription[];
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.findGrandfatheredSubscriptions');
     }
   }
 }
