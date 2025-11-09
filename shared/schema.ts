@@ -354,7 +354,23 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-
+// Audit Logs - Comprehensive audit trail for compliance and debugging
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id),
+  adminId: uuid("admin_id").references(() => users.id),
+  action: text("action").notNull(), // 'create', 'update', 'delete', 'read'
+  resourceType: text("resource_type").notNull(), // 'subscription_plan', 'user_subscription', etc.
+  resourceId: uuid("resource_id"),
+  changes: jsonb("changes"), // Before/after data
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  requestMethod: text("request_method"),
+  requestPath: text("request_path"),
+  success: boolean("success").default(true),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow()
+});
 
 // Forum comments
 export const forumComments = pgTable("forum_comments", {

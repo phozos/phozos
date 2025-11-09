@@ -7,9 +7,19 @@ import {
 } from '../../repositories';
 import { INotificationService } from './notification.service';
 import { container, TYPES } from '../container';
-import { PlanMigration, SubscriptionPlan } from '@shared/schema';
+import { 
+  PlanMigration, 
+  SubscriptionPlan,
+  planMigrations,
+  planMigrationUsers,
+  userSubscriptions,
+  subscriptionPlans,
+  notifications
+} from '@shared/schema';
 import { InvalidOperationError } from '../errors';
 import { NotFoundError } from '../../repositories/errors';
+import { db } from '../../db';
+import { eq, and, sql } from 'drizzle-orm';
 
 export interface CreateMigrationData {
   name: string;
@@ -156,38 +166,113 @@ export class PlanMigrationService extends BaseService implements IPlanMigrationS
 
   async processMigrationAcceptance(migrationId: string, userId: string): Promise<void> {
     try {
-      const migUser = await this.migrationUserRepo.findByMigrationAndUser(migrationId, userId);
-      const migration = await this.migrationRepo.findById(migrationId);
-
-      if (!migUser) {
-        throw new NotFoundError('Migration User', 'not found');
-      }
-
-      const subscription = await this.userSubscriptionRepo.findById(migUser.subscriptionId);
-      const targetPlan = await this.subscriptionPlanRepo.findById(migration.targetPlanId);
-
-      await this.userSubscriptionRepo.update(subscription.id, {
-        planId: migration.targetPlanId,
-        tierLevel: targetPlan.tierLevel,
-        grandfatheredPrice: this.calculateIncentivePrice(targetPlan, migration),
-        isGrandfathered: !!migration.incentiveValue
-      });
-
-      await this.migrationUserRepo.update(migUser.id, {
-        status: 'migrated',
-        respondedAt: new Date(),
-        migratedAt: new Date(),
-        incentiveApplied: !!migration.incentiveValue
-      });
-
-      await this.migrationRepo.increment(migrationId, 'migratedUsers');
-
-      await this.notificationService.createNotification({
-        userId: userId,
-        type: 'system',
-        title: 'Migration Successful',
-        message: `You have successfully migrated to the ${targetPlan.name} plan.`,
-        data: { migrationId, newPlanId: targetPlan.id }
+      return await db.transaction(async (tx) => {
+        // Step 1: Validate migration and lock migration row
+        const migration = await tx
+          .select()
+          .from(planMigrations)
+          .where(eq(planMigrations.id, migrationId))
+          .for('update')  // Lock migration row
+          .limit(1);
+        
+        if (migration.length === 0) {
+          throw new NotFoundError('Plan Migration', migrationId);
+        }
+        
+        const migrationData = migration[0];
+        
+        // Step 2: Find migration user record and lock
+        const migUser = await tx
+          .select()
+          .from(planMigrationUsers)
+          .where(and(
+            eq(planMigrationUsers.migrationId, migrationId),
+            eq(planMigrationUsers.userId, userId)
+          ))
+          .for('update')  // Lock user migration row
+          .limit(1);
+        
+        if (migUser.length === 0 || migUser[0].status !== 'pending') {
+          throw new InvalidOperationError(
+            'process migration',
+            'Migration not found or already processed'
+          );
+        }
+        
+        // Step 3: Get subscription and lock (using subscriptionId from migUser)
+        const subscription = await tx
+          .select()
+          .from(userSubscriptions)
+          .where(eq(userSubscriptions.id, migUser[0].subscriptionId))
+          .for('update')  // Lock subscription row
+          .limit(1);
+        
+        if (subscription.length === 0) {
+          throw new NotFoundError('User Subscription', migUser[0].subscriptionId);
+        }
+        
+        // Step 4: Get target plan details
+        const targetPlan = await tx
+          .select()
+          .from(subscriptionPlans)
+          .where(eq(subscriptionPlans.id, migrationData.targetPlanId))
+          .limit(1);
+        
+        if (targetPlan.length === 0) {
+          throw new NotFoundError('Target Plan', migrationData.targetPlanId);
+        }
+        
+        // Step 5: Calculate incentive price
+        const incentivePrice = this.calculateIncentivePrice(
+          targetPlan[0], 
+          migrationData as PlanMigration
+        );
+        
+        // Step 6: Update subscription
+        await tx
+          .update(userSubscriptions)
+          .set({
+            planId: migrationData.targetPlanId,
+            tierLevel: targetPlan[0].tierLevel,
+            grandfatheredPrice: incentivePrice,
+            isGrandfathered: !!migrationData.incentiveValue,
+            updatedAt: new Date()
+          })
+          .where(eq(userSubscriptions.id, subscription[0].id));
+        
+        // Step 7: Update migration user status
+        await tx
+          .update(planMigrationUsers)
+          .set({
+            status: 'migrated',
+            respondedAt: new Date(),
+            migratedAt: new Date(),
+            incentiveApplied: !!migrationData.incentiveValue
+          })
+          .where(eq(planMigrationUsers.id, migUser[0].id));
+        
+        // Step 8: Increment migration counter
+        await tx
+          .update(planMigrations)
+          .set({
+            migratedUsers: sql`${planMigrations.migratedUsers} + 1`,
+            updatedAt: new Date()
+          })
+          .where(eq(planMigrations.id, migrationId));
+        
+        // Step 9: Create notification (within transaction)
+        await tx
+          .insert(notifications)
+          .values({
+            userId,
+            type: 'system',
+            title: 'Plan Migration Successful',
+            message: `You've been migrated to ${targetPlan[0].name}`,
+            isRead: false,
+            createdAt: new Date()
+          });
+        
+        // ✅ All steps succeed or ALL rollback
       });
     } catch (error) {
       return this.handleError(error, 'PlanMigrationService.processMigrationAcceptance');
