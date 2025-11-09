@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { UpgradeConfirmationDialog } from "@/components/UpgradeConfirmationDialog";
 import { PlanComparisonTable } from "@/components/public/PlanComparisonTable";
+import { formatCurrency, formatMonthlyFromYearly } from "@/lib/currency";
 
 interface SubscriptionPlan {
   id: string;
@@ -321,14 +322,14 @@ export default function PublicPlans() {
                             </span>
                           ) : (
                             <>
-                              <span className="text-4xl font-bold text-foreground">${plan.price}</span>
+                              <span className="text-4xl font-bold text-foreground">{formatCurrency(plan.price, plan.currency)}</span>
                               <span className="text-muted-foreground ml-2">/year</span>
                             </>
                           )}
                         </div>
                         {!isFree && (
                           <div className="text-sm text-muted-foreground mt-1">
-                            ${(parseFloat(plan.price) / 12).toFixed(0)}/month billed annually
+                            {formatMonthlyFromYearly(plan.price, plan.currency)}/month billed annually
                           </div>
                         )}
                       </div>

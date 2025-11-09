@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, CheckCircle2, IndianRupee } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/currency";
 
 interface UpgradeConfirmationDialogProps {
   open: boolean;
@@ -37,13 +38,6 @@ export function UpgradeConfirmationDialog({
   if (!upgradeData) return null;
 
   const { currentPlanName, targetPlanName, originalPrice, alreadyPaid, prorationAmount, currency } = upgradeData;
-  
-  const formatCurrency = (amount: number) => {
-    if (currency === 'INR') {
-      return `₹${amount.toFixed(2)}`;
-    }
-    return `${currency} ${amount.toFixed(2)}`;
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -79,19 +73,19 @@ export function UpgradeConfirmationDialog({
             <div className="space-y-2">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">{targetPlanName} Plan Price</span>
-                <span className="font-medium">{formatCurrency(originalPrice)}</span>
+                <span className="font-medium">{formatCurrency(originalPrice, currency)}</span>
               </div>
               
               <div className="flex justify-between items-center text-sm">
                 <span className="text-muted-foreground">Already Paid</span>
-                <span className="font-medium text-green-600">- {formatCurrency(alreadyPaid)}</span>
+                <span className="font-medium text-green-600">- {formatCurrency(alreadyPaid, currency)}</span>
               </div>
               
               <div className="h-px bg-border my-2" />
               
               <div className="flex justify-between items-center">
                 <span className="font-semibold text-foreground">Upgrade Cost</span>
-                <span className="text-xl font-bold text-primary">{formatCurrency(prorationAmount)}</span>
+                <span className="text-xl font-bold text-primary">{formatCurrency(prorationAmount, currency)}</span>
               </div>
             </div>
 
@@ -100,7 +94,7 @@ export function UpgradeConfirmationDialog({
               <div className="pt-3 border-t border-border">
                 <Badge variant="secondary" className="w-full justify-center py-2 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400">
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  You've already paid {formatCurrency(alreadyPaid)} - Upgrade for just {formatCurrency(prorationAmount)} more!
+                  You've already paid {formatCurrency(alreadyPaid, currency)} - Upgrade for just {formatCurrency(prorationAmount, currency)} more!
                 </Badge>
               </div>
             )}

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Check, X, Star, Zap, Crown, Award, Globe, Users, Heart, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/currency";
 
 interface SubscriptionPlan {
   id: string;
@@ -163,7 +164,7 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                             {parseFloat(plan.price) === 0 ? (
                               'Free'
                             ) : (
-                              <>${plan.price}<span className="text-sm text-muted-foreground">/year</span></>
+                              <>{formatCurrency(plan.price, plan.currency)}<span className="text-sm text-muted-foreground">/year</span></>
                             )}
                           </div>
                         </div>
@@ -235,7 +236,7 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                                 {parseFloat(plan.price) === 0 ? (
                                   'Free'
                                 ) : (
-                                  `$${plan.price}/yr`
+                                  `${formatCurrency(plan.price, plan.currency)}/yr`
                                 )}
                               </div>
                             </div>

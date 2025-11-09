@@ -24,6 +24,7 @@ import PriceUpdateDialog from "@/components/admin/PriceUpdateDialog";
 import PlanDeprecationDialog from "@/components/admin/PlanDeprecationDialog";
 import BulkSubscriptionOperations from "@/components/admin/BulkSubscriptionOperations";
 import LifetimeAnalyticsDashboard from "@/components/admin/LifetimeAnalyticsDashboard";
+import { formatCurrency } from "@/lib/currency";
 
 interface SubscriptionPlan {
   id: string;
@@ -519,7 +520,7 @@ export default function SubscriptionPlans() {
                 </div>
                 <div>
                   <Label htmlFor="currency">Currency</Label>
-                  <Select name="currency" defaultValue="USD">
+                  <Select name="currency" defaultValue="INR">
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -688,9 +689,8 @@ export default function SubscriptionPlans() {
                   </div>
                   <div className="flex items-baseline space-x-1">
                     <span className="text-3xl font-bold text-blue-600">
-                      ${plan.price}
+                      {formatCurrency(plan.price, plan.currency)}
                     </span>
-                    <span className="text-sm text-gray-500">{plan.currency}</span>
                   </div>
                   <p className="text-sm text-gray-600">{plan.description}</p>
                 </CardHeader>
@@ -925,11 +925,11 @@ export default function SubscriptionPlans() {
                             <div>
                               <div className="font-medium">{sub.plan.name}</div>
                               <div className="text-sm text-gray-500">
-                                Current: ${sub.plan.price} {sub.plan.currency}
+                                Current: {formatCurrency(sub.plan.price, sub.plan.currency)}
                               </div>
                               {sub.subscription.isGrandfathered && sub.subscription.grandfatheredPrice && (
                                 <div className="text-xs text-amber-600 mt-1">
-                                  Grandfathered: ${sub.subscription.grandfatheredPrice}
+                                  Grandfathered: {formatCurrency(sub.subscription.grandfatheredPrice, sub.plan.currency)}
                                 </div>
                               )}
                             </div>
@@ -950,7 +950,7 @@ export default function SubscriptionPlans() {
                             {sub.subscription.amountPaid ? (
                               <div>
                                 <span className="font-medium">
-                                  ${sub.subscription.amountPaid} {sub.subscription.currency}
+                                  {formatCurrency(sub.subscription.amountPaid, sub.subscription.currency)}
                                 </span>
                                 {sub.subscription.isGrandfathered && (
                                   <div className="text-xs text-muted-foreground mt-1">
@@ -1082,7 +1082,7 @@ export default function SubscriptionPlans() {
                           <TableCell>
                             {payment.amount ? (
                               <span className="font-medium">
-                                ${payment.amount} {payment.currency}
+                                {formatCurrency(payment.amount, payment.currency)}
                               </span>
                             ) : (
                               <span className="text-gray-400">N/A</span>
@@ -1159,7 +1159,7 @@ export default function SubscriptionPlans() {
                         </code>
                       </TableCell>
                       <TableCell>
-                        ${payment.amountPaid} {payment.currency}
+                        {formatCurrency(payment.amountPaid, payment.currency)}
                       </TableCell>
                       <TableCell className="text-sm">
                         {formatDateTime(payment.paidAt)}
@@ -1268,7 +1268,7 @@ export default function SubscriptionPlans() {
                     .filter(plan => plan.isActive && plan.id !== upgradeDialog.subscription?.plan.id)
                     .map(plan => (
                       <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name} - ${plan.price} {plan.currency}
+                        {plan.name} - {formatCurrency(plan.price, plan.currency)}
                       </SelectItem>
                     ))}
                 </SelectContent>
