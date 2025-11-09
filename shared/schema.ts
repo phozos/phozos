@@ -33,6 +33,7 @@ export const reportReasonEnum = pgEnum("report_reason", ["spam", "inappropriate"
 export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "completed", "failed"]);
 export const deprecationPhaseEnum = pgEnum("deprecation_phase", ["announcement", "grace_period", "soft_disable", "hard_removal"]);
 export const deprecationStatusEnum = pgEnum("deprecation_status", ["scheduled", "in_progress", "completed", "cancelled"]);
+export const paymentTypeEnum = pgEnum("payment_type", ["new_subscription", "upgrade", "renewal"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -945,6 +946,22 @@ export const subscriptionEvents = pgTable("subscription_events", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Payments table (for complete payment ledger tracking)
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'set null' }),
+  paymentType: paymentTypeEnum("payment_type").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  orderId: text("order_id").notNull(),
+  paymentReference: text("payment_reference").notNull(),
+  paymentGateway: text("payment_gateway").notNull(),
+  paidAt: timestamp("paid_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Subscription Audit Outbox table (for event outbox pattern)
 export const subscriptionAuditOutbox = pgTable("subscription_audit_outbox", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1150,6 +1167,7 @@ export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions
 export const insertPaymentSettingsSchema = createInsertSchema(paymentSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({ id: true, createdAt: true });
 export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEvents).omit({ id: true, createdAt: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertSubscriptionAuditOutboxSchema = createInsertSchema(subscriptionAuditOutbox).omit({ id: true, createdAt: true });
 export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
 export const insertSubscriptionPlanChangeSchema = createInsertSchema(subscriptionPlanChanges).omit({ id: true, createdAt: true });
@@ -1183,6 +1201,8 @@ export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
 export type SubscriptionEvent = typeof subscriptionEvents.$inferSelect;
 export type InsertSubscriptionEvent = z.infer<typeof insertSubscriptionEventSchema>;
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type SubscriptionAuditOutbox = typeof subscriptionAuditOutbox.$inferSelect;
 export type InsertSubscriptionAuditOutbox = z.infer<typeof insertSubscriptionAuditOutboxSchema>;
 export type FailedPayment = typeof failedPayments.$inferSelect;

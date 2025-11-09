@@ -9,7 +9,8 @@ import {
   userSubscriptions, 
   subscriptionPlans, 
   subscriptionEvents,
-  failedPayments 
+  failedPayments,
+  payments 
 } from '@shared/schema';
 import { eq, and, sql, gte, lt, desc, count } from 'drizzle-orm';
 
@@ -221,76 +222,58 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
 
   async getRevenueMetrics(): Promise<RevenueMetrics> {
     try {
+      // UPDATED: Query from payments table for accurate revenue tracking
+      // This fixes the revenue gap issue where upgrade payments were lost
+      const revenueByPlanData = await db
+        .select({
+          planId: payments.planId,
+          planName: subscriptionPlans.name,
+          totalRevenue: sql<number>`COALESCE(SUM(CAST(${payments.amount} AS NUMERIC)), 0)`,
+          paymentCount: sql<number>`CAST(COUNT(*) AS INT)`
+        })
+        .from(payments)
+        .leftJoin(subscriptionPlans, eq(payments.planId, subscriptionPlans.id))
+        .groupBy(payments.planId, subscriptionPlans.name);
+
+      // Get total revenue from all payments
+      const totalRevenueResult = await db
+        .select({
+          total: sql<number>`COALESCE(SUM(CAST(${payments.amount} AS NUMERIC)), 0)`,
+          count: sql<number>`CAST(COUNT(*) AS INT)`
+        })
+        .from(payments);
+
+      const totalRevenue = parseFloat(totalRevenueResult[0]?.total?.toString() || '0');
+      const totalPayments = totalRevenueResult[0]?.count || 0;
+
+      const averageTransactionValue = totalPayments > 0 
+        ? totalRevenue / totalPayments 
+        : 0;
+
+      // Get active subscriptions for MRR calculation (unchanged - based on current plans)
       const activeSubscriptionsWithPlans = await db
         .select({
-          planId: userSubscriptions.planId,
-          planName: subscriptionPlans.name,
           planPrice: subscriptionPlans.price,
-          amountPaid: userSubscriptions.amountPaid,
-          currency: userSubscriptions.currency,
           isLifetime: userSubscriptions.isLifetime
         })
         .from(userSubscriptions)
         .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
         .where(eq(userSubscriptions.status, 'active'));
 
-      const allPaidSubscriptions = await db
-        .select({
-          amountPaid: userSubscriptions.amountPaid
-        })
-        .from(userSubscriptions)
-        .where(sql`${userSubscriptions.amountPaid} IS NOT NULL`);
-
-      let totalRevenue = 0;
       let mrr = 0;
-      const revenueByPlanMap = new Map<string, { planId: string; planName: string; revenue: number; count: number }>();
-
       for (const sub of activeSubscriptionsWithPlans) {
-        const amount = parseFloat(sub.amountPaid || '0');
-        const planPrice = parseFloat(sub.planPrice || '0');
-        
-        if (sub.isLifetime) {
-          if (sub.planId) {
-            const existing = revenueByPlanMap.get(sub.planId) || {
-              planId: sub.planId,
-              planName: sub.planName || 'Unknown',
-              revenue: 0,
-              count: 0
-            };
-            existing.revenue += amount;
-            existing.count += 1;
-            revenueByPlanMap.set(sub.planId, existing);
-          }
-        } else {
-          mrr += planPrice;
-          if (sub.planId) {
-            const existing = revenueByPlanMap.get(sub.planId) || {
-              planId: sub.planId,
-              planName: sub.planName || 'Unknown',
-              revenue: 0,
-              count: 0
-            };
-            existing.revenue += planPrice;
-            existing.count += 1;
-            revenueByPlanMap.set(sub.planId, existing);
-          }
+        if (!sub.isLifetime) {
+          mrr += parseFloat(sub.planPrice || '0');
         }
       }
 
-      for (const sub of allPaidSubscriptions) {
-        totalRevenue += parseFloat(sub.amountPaid || '0');
-      }
-
       const arr = mrr * 12;
-      const averageTransactionValue = allPaidSubscriptions.length > 0 
-        ? totalRevenue / allPaidSubscriptions.length 
-        : 0;
 
-      const revenueByPlan = Array.from(revenueByPlanMap.values()).map(item => ({
-        planId: item.planId,
-        planName: item.planName,
-        revenue: Math.round(item.revenue * 100) / 100,
-        subscriptionCount: item.count
+      const revenueByPlan = revenueByPlanData.map(item => ({
+        planId: item.planId || 'unknown',
+        planName: item.planName || 'Unknown',
+        revenue: Math.round(parseFloat(item.totalRevenue?.toString() || '0') * 100) / 100,
+        subscriptionCount: item.paymentCount
       }));
 
       return {
@@ -771,6 +754,8 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
 
   async getLifetimeMetrics(): Promise<LifetimeSubscriptionMetrics> {
     try {
+      // UPDATED: Aggregate all payments per user to get true lifetime value
+      // This correctly accounts for upgrades where users pay multiple times
       const activeLifetimeSubscriptions = await db
         .select({
           subscriptionId: userSubscriptions.id,
@@ -778,11 +763,30 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
           planId: userSubscriptions.planId,
           planName: subscriptionPlans.name,
           tierLevel: userSubscriptions.tierLevel,
-          highestTierReached: userSubscriptions.highestTierReached,
-          amountPaid: userSubscriptions.amountPaid
+          highestTierReached: userSubscriptions.highestTierReached
         })
         .from(userSubscriptions)
         .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+        .where(
+          and(
+            eq(userSubscriptions.status, 'active'),
+            eq(userSubscriptions.isLifetime, true)
+          )
+        );
+
+      // Get all payments for active lifetime subscriptions
+      const paymentsData = await db
+        .select({
+          userId: payments.userId,
+          subscriptionId: payments.subscriptionId,
+          planId: payments.planId,
+          planName: subscriptionPlans.name,
+          amount: payments.amount,
+          paymentType: payments.paymentType
+        })
+        .from(payments)
+        .leftJoin(subscriptionPlans, eq(payments.planId, subscriptionPlans.id))
+        .leftJoin(userSubscriptions, eq(payments.subscriptionId, userSubscriptions.id))
         .where(
           and(
             eq(userSubscriptions.status, 'active'),
@@ -794,7 +798,7 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
       const planRevenueMap = new Map<string, {
         planId: string;
         planName: string;
-        subscriberCount: number;
+        subscriberCount: Set<string>;
         revenue: number;
       }>();
       const tierRevenueMap = new Map<number, {
@@ -804,33 +808,41 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
       }>();
       let usersWithUpgrades = 0;
 
-      for (const sub of activeLifetimeSubscriptions) {
-        const amountPaid = parseFloat(sub.amountPaid || '0');
-        totalRevenue += amountPaid;
+      // Aggregate payment data
+      for (const payment of paymentsData) {
+        const amount = parseFloat(payment.amount?.toString() || '0');
+        totalRevenue += amount;
 
+        if (payment.planId) {
+          const existing = planRevenueMap.get(payment.planId) || {
+            planId: payment.planId,
+            planName: payment.planName || 'Unknown',
+            subscriberCount: new Set<string>(),
+            revenue: 0
+          };
+          existing.subscriberCount.add(payment.userId);
+          existing.revenue += amount;
+          planRevenueMap.set(payment.planId, existing);
+        }
+      }
+
+      // Count users with upgrades
+      for (const sub of activeLifetimeSubscriptions) {
         if (sub.highestTierReached && sub.tierLevel && sub.highestTierReached > sub.tierLevel) {
           usersWithUpgrades++;
         }
 
-        if (sub.planId) {
-          const existing = planRevenueMap.get(sub.planId) || {
-            planId: sub.planId,
-            planName: sub.planName || 'Unknown',
-            subscriberCount: 0,
-            revenue: 0
-          };
-          existing.subscriberCount += 1;
-          existing.revenue += amountPaid;
-          planRevenueMap.set(sub.planId, existing);
-        }
-
         if (sub.tierLevel !== null) {
+          const userPayments = paymentsData.filter(p => p.userId === sub.userId);
+          const userTotalRevenue = userPayments.reduce((sum, p) => 
+            sum + parseFloat(p.amount?.toString() || '0'), 0);
+
           const existing = tierRevenueMap.get(sub.tierLevel) || {
             tierLevel: sub.tierLevel,
             revenue: 0,
             subscriberCount: 0
           };
-          existing.revenue += amountPaid;
+          existing.revenue += userTotalRevenue;
           existing.subscriberCount += 1;
           tierRevenueMap.set(sub.tierLevel, existing);
         }
@@ -850,10 +862,10 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
       const planDistribution = Array.from(planRevenueMap.values()).map(item => ({
         planId: item.planId,
         planName: item.planName,
-        subscriberCount: item.subscriberCount,
+        subscriberCount: item.subscriberCount.size,
         revenue: Math.round(item.revenue * 100) / 100,
         percentage: totalActiveSubscribers > 0 
-          ? Math.round((item.subscriberCount / totalActiveSubscribers) * 100 * 100) / 100 
+          ? Math.round((item.subscriberCount.size / totalActiveSubscribers) * 100 * 100) / 100 
           : 0
       })).sort((a, b) => b.revenue - a.revenue);
 

@@ -1,6 +1,6 @@
 import { BaseService } from '../base.service';
 import { db } from '../../db';
-import { userSubscriptions, subscriptionPlans } from '@shared/schema';
+import { userSubscriptions, subscriptionPlans, payments } from '@shared/schema';
 import { UserSubscription } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { InvalidOperationError, ValidationServiceError } from '../errors';
@@ -190,6 +190,20 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
 
           const updatedSubscription = updated[0] as UserSubscription;
 
+          // Record payment to payments table (CRITICAL: Fixes revenue tracking for upgrades)
+          await tx.insert(payments).values({
+            userId,
+            subscriptionId: updatedSubscription.id,
+            planId: targetPlan.id,
+            paymentType: 'upgrade',
+            amount: amountPaid.toString(),
+            currency,
+            orderId,
+            paymentReference: paymentId,
+            paymentGateway: 'razorpay',
+            paidAt: new Date(),
+          });
+
           // Log subscription upgrade event to outbox
           await subscriptionAuditOutboxService.enqueueEvent(
             tx,
@@ -243,6 +257,20 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
         }
 
         const newSubscription = created[0] as UserSubscription;
+
+        // Record payment to payments table
+        await tx.insert(payments).values({
+          userId,
+          subscriptionId: newSubscription.id,
+          planId: targetPlan.id,
+          paymentType: 'new_subscription',
+          amount: amountPaid.toString(),
+          currency,
+          orderId,
+          paymentReference: paymentId,
+          paymentGateway: 'razorpay',
+          paidAt: new Date(),
+        });
 
         // Log subscription creation event to outbox
         await subscriptionAuditOutboxService.enqueueEvent(
