@@ -22,6 +22,8 @@ import { useAuth } from "@/hooks/useAuth";
 import PlanVersionHistory from "@/components/admin/PlanVersionHistory";
 import PriceUpdateDialog from "@/components/admin/PriceUpdateDialog";
 import PlanDeprecationDialog from "@/components/admin/PlanDeprecationDialog";
+import BulkSubscriptionOperations from "@/components/admin/BulkSubscriptionOperations";
+import LifetimeAnalyticsDashboard from "@/components/admin/LifetimeAnalyticsDashboard";
 
 interface SubscriptionPlan {
   id: string;
@@ -651,6 +653,8 @@ export default function SubscriptionPlans() {
           <TabsTrigger value="plans">Subscription Plans</TabsTrigger>
           <TabsTrigger value="subscriptions">User Subscriptions ({subscriptions.length})</TabsTrigger>
           <TabsTrigger value="failed-payments">Failed Payments ({failedPayments.length})</TabsTrigger>
+          <TabsTrigger value="bulk-operations">Bulk Operations</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="plans">
@@ -1112,6 +1116,14 @@ export default function SubscriptionPlans() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="bulk-operations">
+          <BulkSubscriptionOperations plans={plans} />
+        </TabsContent>
+
+        <TabsContent value="analytics">
+          <LifetimeAnalyticsDashboard />
         </TabsContent>
       </Tabs>
 

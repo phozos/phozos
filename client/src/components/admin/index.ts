@@ -5,3 +5,4 @@ export { default as VersionComparisonView } from './VersionComparisonView';
 export { default as PriceUpdateDialog } from './PriceUpdateDialog';
 export { default as PlanDeprecationDialog } from './PlanDeprecationDialog';
 export { default as MigrationManagementPanel } from './MigrationManagementPanel';
+export { default as BulkSubscriptionOperations } from './BulkSubscriptionOperations';

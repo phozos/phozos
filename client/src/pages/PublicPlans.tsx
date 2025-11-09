@@ -16,6 +16,7 @@ import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { UpgradeConfirmationDialog } from "@/components/UpgradeConfirmationDialog";
+import { PlanComparisonTable } from "@/components/public/PlanComparisonTable";
 
 interface SubscriptionPlan {
   id: string;
@@ -432,6 +433,21 @@ export default function PublicPlans() {
                 );
               })}
           </div>
+        </div>
+      </section>
+
+      {/* Plan Comparison Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-primary/5 via-background to-cream relative">
+        <div className="max-w-7xl mx-auto">
+          <PlanComparisonTable 
+            plans={plans.filter(plan => plan.isActive)}
+            onSelectPlan={(planId) => {
+              const selectedPlan = plans.find(p => p.id === planId);
+              if (selectedPlan) {
+                handlePurchasePlan(selectedPlan);
+              }
+            }}
+          />
         </div>
       </section>
 

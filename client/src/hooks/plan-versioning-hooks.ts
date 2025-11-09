@@ -120,3 +120,21 @@ export function usePlanAnalytics<T = any>(planId: string) {
     { enabled: !!planId }
   );
 }
+
+export function useRollbackPlanVersion() {
+  const queryClient = useQueryClient();
+  
+  return useApiMutation(
+    ({ planId, data }: { planId: string; data: any }) =>
+      api.post(`/api/admin/subscription-plans/${planId}/rollback`, data),
+    {
+      onSuccess: (_result, variables) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/subscription-plans"] });
+        queryClient.invalidateQueries({ predicate: (query) => {
+          const key = query.queryKey[0]?.toString();
+          return (key?.includes('/versions/history') || key?.includes('/analytics')) || false;
+        }});
+      }
+    }
+  );
+}

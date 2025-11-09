@@ -38,6 +38,16 @@ const bulkNotificationLimiter = rateLimit({
   skip: (req: any) => !req.user
 });
 
+const bulkOperationsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 bulk operations per 15 minutes per admin
+  message: 'Too many bulk operation requests. Please try again in 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user
+});
+
 const router = Router();
 
 // All routes require admin authentication
@@ -122,6 +132,7 @@ router.post('/subscription-plans/:basePlanId/price', csrfProtection, asyncHandle
 router.get('/subscription-plans/:basePlanId/versions/history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersionHistory(req, res)));
 router.post('/subscription-plans/:id/deprecate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deprecatePlan(req, res)));
 router.post('/subscription-plans/:id/archive', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.archivePlan(req, res)));
+router.post('/subscription-plans/:planId/rollback', versionCreationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.rollbackPlanVersion(req, res)));
 router.get('/subscription-plans/:id/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanAnalytics(req, res)));
 
 // User Subscriptions
@@ -131,6 +142,11 @@ router.get('/students-subscriptions', asyncHandler((req: AuthenticatedRequest, r
 router.delete('/user-subscriptions/:subscriptionId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelUserSubscription(req, res)));
 router.get('/user-subscriptions/:userId/payment-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserPaymentHistory(req, res)));
 router.get('/user-subscriptions/:userId/events', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptionEvents(req, res)));
+
+// Bulk Subscription Operations (P3.1)
+router.post('/subscriptions/bulk-migrate', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.bulkMigrateSubscribers(req, res)));
+router.post('/subscriptions/bulk-cancel', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.bulkCancelSubscriptions(req, res)));
+router.get('/subscriptions/export', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.exportSubscribers(req, res)));
 
 // Failed Payments
 router.get('/failed-payments', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFailedPayments(req, res)));
@@ -154,6 +170,7 @@ router.put('/staff-invitation-links/:id/refresh', csrfProtection, asyncHandler((
 router.get('/analytics/subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionAnalytics(req, res)));
 router.get('/analytics/revenue', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRevenueAnalytics(req, res)));
 router.get('/analytics/growth', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionGrowth(req, res)));
+router.get('/analytics/lifetime-metrics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getLifetimeMetrics(req, res)));
 
 // Outbox Monitoring
 router.get('/outbox/metrics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getOutboxMetrics(req, res)));

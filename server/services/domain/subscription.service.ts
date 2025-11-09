@@ -37,6 +37,7 @@ export interface ISubscriptionService {
   createPlanVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string, releaseNotes?: string, notifySubscribers?: boolean): Promise<SubscriptionPlan>;
   getPlanVersions(basePlanId: string): Promise<SubscriptionPlan[]>;
   getPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined>;
+  rollbackPlanVersion(planId: string, targetVersion: number, adminId: string, reason: string, notifySubscribers?: boolean): Promise<SubscriptionPlan>;
   deprecatePlan(planId: string, successorPlanId: string | undefined, adminId: string, reason: string): Promise<void>;
   archivePlan(planId: string, adminId: string, reason: string): Promise<void>;
   getPlanAnalytics(planId: string): Promise<PlanAnalytics>;
@@ -488,6 +489,136 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       return await this.subscriptionPlanRepository.findVersion(basePlanId, version);
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.getPlanVersion');
+    }
+  }
+
+  /**
+   * P3.4: Rollback plan to a previous version
+   * Creates a new version with fields copied from the target version
+   * Does NOT mutate historical data - creates a new version instead
+   */
+  async rollbackPlanVersion(
+    planId: string,
+    targetVersion: number,
+    adminId: string,
+    reason: string,
+    notifySubscribers: boolean = false
+  ): Promise<SubscriptionPlan> {
+    try {
+      // Sanitize reason
+      const sanitizedReason = InputSanitizer.sanitizePlainText(reason);
+
+      // Get current plan to determine basePlanId
+      const currentPlan = await this.subscriptionPlanRepository.findById(planId);
+      if (!currentPlan) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          'Plan not found'
+        );
+      }
+
+      const basePlanId = currentPlan.basePlanId || currentPlan.id;
+
+      // Get current latest version
+      const latestVersion = await this.subscriptionPlanRepository.findLatestVersion(basePlanId);
+      if (!latestVersion) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          'Could not find latest version'
+        );
+      }
+
+      // Prevent rollback to current version
+      if (targetVersion === latestVersion.version) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          `Cannot rollback to current version (v${targetVersion}). Target version must be different from the latest version.`
+        );
+      }
+
+      // Find the target version to rollback to
+      const targetPlan = await this.subscriptionPlanRepository.findVersion(basePlanId, targetVersion);
+      if (!targetPlan) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          `Target version ${targetVersion} not found for plan ${basePlanId}`
+        );
+      }
+
+      // Validate target version is older than current
+      if (targetVersion > latestVersion.version) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          `Cannot rollback to future version. Target version (v${targetVersion}) is newer than current version (v${latestVersion.version}).`
+        );
+      }
+
+      // Prepare updates by copying all relevant fields from target version
+      const rollbackUpdates: Partial<SubscriptionPlan> = {
+        name: targetPlan.name,
+        description: targetPlan.description,
+        price: targetPlan.price,
+        currency: targetPlan.currency,
+        features: targetPlan.features,
+        maxUniversities: targetPlan.maxUniversities,
+        maxCountries: targetPlan.maxCountries,
+        universityTier: targetPlan.universityTier,
+        supportType: targetPlan.supportType,
+        turnaroundDays: targetPlan.turnaroundDays,
+        includeLoanAssistance: targetPlan.includeLoanAssistance,
+        includeVisaSupport: targetPlan.includeVisaSupport,
+        includeCounselorSession: targetPlan.includeCounselorSession,
+        includeScholarshipPlanning: targetPlan.includeScholarshipPlanning,
+        includeMockInterview: targetPlan.includeMockInterview,
+        includeExpertEditing: targetPlan.includeExpertEditing,
+        includePostAdmitSupport: targetPlan.includePostAdmitSupport,
+        includeDedicatedManager: targetPlan.includeDedicatedManager,
+        includeNetworkingEvents: targetPlan.includeNetworkingEvents,
+        includeFlightAccommodation: targetPlan.includeFlightAccommodation,
+        isBusinessFocused: targetPlan.isBusinessFocused,
+        isActive: targetPlan.isActive,
+        displayOrder: targetPlan.displayOrder
+      };
+
+      // Create new version with rollback data
+      const releaseNotes = `Rolled back from v${latestVersion.version} to v${targetVersion}. Reason: ${sanitizedReason}`;
+      const newVersion = await this.createPlanVersion(
+        basePlanId,
+        rollbackUpdates,
+        adminId,
+        releaseNotes,
+        notifySubscribers
+      );
+
+      // Log rollback action in audit trail
+      await this.planAuditRepository.logChange({
+        planId: newVersion.id,
+        changedBy: adminId,
+        changeType: 'rollback',
+        fieldChanges: {
+          action: { old: null, new: 'rollback' },
+          fromVersion: { old: null, new: latestVersion.version },
+          toVersion: { old: null, new: targetVersion },
+          newVersion: { old: null, new: newVersion.version },
+          targetPlanId: { old: null, new: targetPlan.id },
+          rollbackData: { old: latestVersion, new: targetPlan }
+        },
+        changeReason: sanitizedReason
+      });
+
+      logger.info('Plan version rolled back successfully', {
+        planId: newVersion.id,
+        basePlanId,
+        fromVersion: latestVersion.version,
+        targetVersion,
+        newVersion: newVersion.version,
+        adminId,
+        reason: sanitizedReason
+      });
+
+      return newVersion;
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.rollbackPlanVersion');
     }
   }
 

@@ -126,6 +126,13 @@ export const archivePlanSchema = z.object({
   reason: z.string().min(10, 'Archive reason must be at least 10 characters').max(500)
 });
 
+// Rollback schema - for plan version rollback
+export const rollbackPlanVersionSchema = z.object({
+  targetVersion: z.number().int().positive('Target version must be a positive integer'),
+  reason: z.string().min(10, 'Rollback reason must be at least 10 characters').max(500),
+  notifySubscribers: z.boolean().optional().default(false)
+});
+
 // Plan migration schemas
 export const createMigrationSchema = z.object({
   name: z.string().min(1).max(255, 'Migration name must not exceed 255 characters'),
@@ -242,6 +249,24 @@ export const paymentSchema = z.object({
   gateway: paymentGatewaySchema,
   userId: uuidSchema.optional(),
   metadata: z.record(z.any()).optional()
+});
+
+// Bulk subscription operations schemas
+export const bulkMigrateSubscribersSchema = z.object({
+  sourcePlanId: uuidSchema,
+  targetPlanId: uuidSchema,
+  userIds: z.array(uuidSchema).min(1, 'At least one user ID is required').max(100, 'Cannot migrate more than 100 users at once')
+});
+
+export const bulkCancelSubscriptionsSchema = z.object({
+  userIds: z.array(uuidSchema).min(1, 'At least one user ID is required').max(100, 'Cannot cancel more than 100 subscriptions at once'),
+  reason: z.string().min(1, 'Cancellation reason is required').max(500, 'Reason must not exceed 500 characters')
+});
+
+export const exportSubscribersSchema = z.object({
+  planId: uuidSchema.optional(),
+  status: z.enum(['active', 'cancelled', 'expired', 'pending']).optional(),
+  format: z.enum(['csv']).optional().default('csv')
 });
 
 // Export helper type inference

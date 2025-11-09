@@ -21,6 +21,7 @@ import { ISubscriptionService } from '../services/domain/subscription.service';
 import { IUserSubscriptionService } from '../services/domain/user-subscription.service';
 import { IPaymentService } from '../services/domain/payment.service';
 import { IPlanMigrationService } from '../services/domain/plan-migration.service';
+import { IBulkSubscriptionAdminService } from '../services/domain/bulk-subscription-admin.service';
 import { ISubscriptionPlanRepository, ISubscriptionPlanAuditRepository } from '../repositories';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
@@ -34,9 +35,13 @@ import {
   updatePlanPriceSchema,
   deprecatePlanSchema,
   archivePlanSchema,
+  rollbackPlanVersionSchema,
   createMigrationSchema,
   startMigrationSchema,
-  cancelMigrationSchema
+  cancelMigrationSchema,
+  bulkMigrateSubscribersSchema,
+  bulkCancelSubscriptionsSchema,
+  exportSubscribersSchema
 } from '../services/validation/schemas';
 import { CreateStaffRequestSchema } from '@shared/api-contracts';
 import { VALID_ACCOUNT_STATUSES } from '@shared/account-status';
@@ -1706,6 +1711,62 @@ export class AdminController extends BaseController {
   }
 
   /**
+   * P3.4: Rollback plan to a previous version
+   * 
+   * Creates a new version with fields copied from the target version.
+   * Historical data remains immutable - this creates a new version with incremented version number.
+   * Useful for reverting unwanted price or feature changes.
+   * 
+   * @route POST /api/admin/subscription-plans/:planId/rollback
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with planId and rollback data
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns new version created from rollback
+   * 
+   * @example
+   * // Request body:
+   * {
+   *   "targetVersion": 2,
+   *   "reason": "Reverting price increase due to customer feedback",
+   *   "notifySubscribers": false
+   * }
+   */
+  async rollbackPlanVersion(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+      const validatedData = rollbackPlanVersionSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+      
+      if (!validatedData.reason || validatedData.reason.trim().length === 0) {
+        return this.sendError(res, 400, 'REASON_REQUIRED', 'Rollback reason is required');
+      }
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      
+      const newVersion = await subscriptionService.rollbackPlanVersion(
+        planId,
+        validatedData.targetVersion,
+        adminId,
+        validatedData.reason,
+        validatedData.notifySubscribers ?? false
+      );
+
+      return this.sendSuccess(res, {
+        message: 'Plan rolled back successfully',
+        newVersion,
+        rolledBackTo: validatedData.targetVersion,
+        reason: validatedData.reason,
+        subscribersNotified: validatedData.notifySubscribers ?? false
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.rollbackPlanVersion');
+    }
+  }
+
+  /**
    * Get analytics for a subscription plan
    * 
    * Returns comprehensive analytics for a specific plan version including
@@ -2239,6 +2300,30 @@ export class AdminController extends BaseController {
       return this.sendSuccess(res, growthData);
     } catch (error) {
       return this.handleError(res, error, 'AdminController.getSubscriptionGrowth');
+    }
+  }
+
+  /**
+   * Get lifetime subscription metrics
+   * 
+   * @route GET /api/admin/analytics/lifetime-metrics
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns lifetime subscription metrics including total revenue, ATV, upgrade rate, plan distribution, revenue by tier, and lifetime value by plan
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getLifetimeMetrics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const lifetimeMetrics = await analyticsService.getLifetimeMetrics();
+
+      return this.sendSuccess(res, lifetimeMetrics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getLifetimeMetrics');
     }
   }
 
@@ -2825,6 +2910,64 @@ export class AdminController extends BaseController {
       return this.sendSuccess(res, timeline);
     } catch (error) {
       return this.handleError(res, error, 'AdminController.getDeprecationTimeline');
+    }
+  }
+
+  async bulkMigrateSubscribers(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      
+      const validated = bulkMigrateSubscribersSchema.parse(req.body);
+      
+      const bulkService = getService<IBulkSubscriptionAdminService>(TYPES.IBulkSubscriptionAdminService);
+      const result = await bulkService.bulkMigrateSubscribers(
+        validated.sourcePlanId,
+        validated.targetPlanId,
+        validated.userIds,
+        adminId
+      );
+      
+      return this.sendSuccess(res, result);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.bulkMigrateSubscribers');
+    }
+  }
+
+  async bulkCancelSubscriptions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      
+      const validated = bulkCancelSubscriptionsSchema.parse(req.body);
+      
+      const bulkService = getService<IBulkSubscriptionAdminService>(TYPES.IBulkSubscriptionAdminService);
+      const result = await bulkService.bulkCancelSubscriptions(
+        validated.userIds,
+        validated.reason,
+        adminId
+      );
+      
+      return this.sendSuccess(res, result);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.bulkCancelSubscriptions');
+    }
+  }
+
+  async exportSubscribers(req: AuthenticatedRequest, res: Response) {
+    try {
+      const validated = exportSubscribersSchema.parse(req.query);
+      
+      const bulkService = getService<IBulkSubscriptionAdminService>(TYPES.IBulkSubscriptionAdminService);
+      const csv = await bulkService.exportSubscribers(
+        validated.planId,
+        validated.status,
+        validated.format
+      );
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="subscribers-export-${new Date().toISOString()}.csv"`);
+      return res.send(csv);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.exportSubscribers');
     }
   }
 }

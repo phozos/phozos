@@ -129,6 +129,32 @@ export interface ComprehensiveAnalytics {
   recentChanges: RecentPlanChange[];
 }
 
+export interface LifetimeSubscriptionMetrics {
+  totalRevenue: number;
+  totalActiveSubscribers: number;
+  averageTransactionValue: number;
+  upgradeRate: number;
+  planDistribution: Array<{
+    planId: string;
+    planName: string;
+    subscriberCount: number;
+    revenue: number;
+    percentage: number;
+  }>;
+  revenueByTier: Array<{
+    tierLevel: number;
+    revenue: number;
+    subscriberCount: number;
+  }>;
+  lifetimeValueByPlan: Array<{
+    planId: string;
+    planName: string;
+    totalRevenue: number;
+    subscriberCount: number;
+    avgLifetimeValue: number;
+  }>;
+}
+
 export interface ISubscriptionAnalyticsService {
   getSubscriptionMetrics(): Promise<SubscriptionMetrics>;
   getRevenueMetrics(): Promise<RevenueMetrics>;
@@ -137,6 +163,7 @@ export interface ISubscriptionAnalyticsService {
   getSubscriptionGrowth(): Promise<SubscriptionGrowthData>;
   getUpgradeDowngradeMetrics(): Promise<UpgradeDowngradeMetrics>;
   getComprehensiveAnalytics(): Promise<ComprehensiveAnalytics>;
+  getLifetimeMetrics(): Promise<LifetimeSubscriptionMetrics>;
 }
 
 export class SubscriptionAnalyticsService extends BaseService implements ISubscriptionAnalyticsService {
@@ -739,6 +766,124 @@ export class SubscriptionAnalyticsService extends BaseService implements ISubscr
       };
     } catch (error) {
       return this.handleError(error, 'SubscriptionAnalyticsService.getComprehensiveAnalytics');
+    }
+  }
+
+  async getLifetimeMetrics(): Promise<LifetimeSubscriptionMetrics> {
+    try {
+      const activeLifetimeSubscriptions = await db
+        .select({
+          subscriptionId: userSubscriptions.id,
+          userId: userSubscriptions.userId,
+          planId: userSubscriptions.planId,
+          planName: subscriptionPlans.name,
+          tierLevel: userSubscriptions.tierLevel,
+          highestTierReached: userSubscriptions.highestTierReached,
+          amountPaid: userSubscriptions.amountPaid
+        })
+        .from(userSubscriptions)
+        .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+        .where(
+          and(
+            eq(userSubscriptions.status, 'active'),
+            eq(userSubscriptions.isLifetime, true)
+          )
+        );
+
+      let totalRevenue = 0;
+      const planRevenueMap = new Map<string, {
+        planId: string;
+        planName: string;
+        subscriberCount: number;
+        revenue: number;
+      }>();
+      const tierRevenueMap = new Map<number, {
+        tierLevel: number;
+        revenue: number;
+        subscriberCount: number;
+      }>();
+      let usersWithUpgrades = 0;
+
+      for (const sub of activeLifetimeSubscriptions) {
+        const amountPaid = parseFloat(sub.amountPaid || '0');
+        totalRevenue += amountPaid;
+
+        if (sub.highestTierReached && sub.tierLevel && sub.highestTierReached > sub.tierLevel) {
+          usersWithUpgrades++;
+        }
+
+        if (sub.planId) {
+          const existing = planRevenueMap.get(sub.planId) || {
+            planId: sub.planId,
+            planName: sub.planName || 'Unknown',
+            subscriberCount: 0,
+            revenue: 0
+          };
+          existing.subscriberCount += 1;
+          existing.revenue += amountPaid;
+          planRevenueMap.set(sub.planId, existing);
+        }
+
+        if (sub.tierLevel !== null) {
+          const existing = tierRevenueMap.get(sub.tierLevel) || {
+            tierLevel: sub.tierLevel,
+            revenue: 0,
+            subscriberCount: 0
+          };
+          existing.revenue += amountPaid;
+          existing.subscriberCount += 1;
+          tierRevenueMap.set(sub.tierLevel, existing);
+        }
+      }
+
+      const totalActiveSubscribers = activeLifetimeSubscriptions.length;
+      const averageTransactionValue = totalActiveSubscribers > 0 
+        ? totalRevenue / totalActiveSubscribers 
+        : 0;
+
+      const uniqueUserIds = new Set(activeLifetimeSubscriptions.map(s => s.userId));
+      const totalUniqueUsers = uniqueUserIds.size;
+      const upgradeRate = totalUniqueUsers > 0 
+        ? (usersWithUpgrades / totalUniqueUsers) * 100 
+        : 0;
+
+      const planDistribution = Array.from(planRevenueMap.values()).map(item => ({
+        planId: item.planId,
+        planName: item.planName,
+        subscriberCount: item.subscriberCount,
+        revenue: Math.round(item.revenue * 100) / 100,
+        percentage: totalActiveSubscribers > 0 
+          ? Math.round((item.subscriberCount / totalActiveSubscribers) * 100 * 100) / 100 
+          : 0
+      })).sort((a, b) => b.revenue - a.revenue);
+
+      const revenueByTier = Array.from(tierRevenueMap.values()).map(item => ({
+        tierLevel: item.tierLevel,
+        revenue: Math.round(item.revenue * 100) / 100,
+        subscriberCount: item.subscriberCount
+      })).sort((a, b) => a.tierLevel - b.tierLevel);
+
+      const lifetimeValueByPlan = planDistribution.map(plan => ({
+        planId: plan.planId,
+        planName: plan.planName,
+        totalRevenue: plan.revenue,
+        subscriberCount: plan.subscriberCount,
+        avgLifetimeValue: plan.subscriberCount > 0 
+          ? Math.round((plan.revenue / plan.subscriberCount) * 100) / 100 
+          : 0
+      }));
+
+      return {
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalActiveSubscribers,
+        averageTransactionValue: Math.round(averageTransactionValue * 100) / 100,
+        upgradeRate: Math.round(upgradeRate * 100) / 100,
+        planDistribution,
+        revenueByTier,
+        lifetimeValueByPlan
+      };
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionAnalyticsService.getLifetimeMetrics');
     }
   }
 }
