@@ -34,6 +34,8 @@ export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing"
 export const deprecationPhaseEnum = pgEnum("deprecation_phase", ["announcement", "grace_period", "soft_disable", "hard_removal"]);
 export const deprecationStatusEnum = pgEnum("deprecation_status", ["scheduled", "in_progress", "completed", "cancelled"]);
 export const paymentTypeEnum = pgEnum("payment_type", ["new_subscription", "upgrade", "renewal"]);
+export const aiTierEnum = pgEnum("ai_tier", ["none", "basic", "pro", "ultra"]);
+export const prepTierEnum = pgEnum("prep_tier", ["none", "basic", "pro", "ultra"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -859,6 +861,24 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   includeNetworkingEvents: boolean("include_networking_events").default(false),
   includeFlightAccommodation: boolean("include_flight_accommodation").default(false),
   isBusinessFocused: boolean("is_business_focused").default(false),
+  
+  includeCourseCountrySelection: boolean("include_course_country_selection").default(false),
+  includeUniversityShortlisting: boolean("include_university_shortlisting").default(false),
+  includeOneOnOneEditing: boolean("include_one_on_one_editing").default(false),
+  includeProfileBuilding: boolean("include_profile_building").default(false),
+  includeTop50Counselling: boolean("include_top50_counselling").default(false),
+  
+  supportTypes: text("support_types").array().default(sql`ARRAY['email']::text[]`),
+  
+  phozosAiTier: aiTierEnum("phozos_ai_tier").default("none"),
+  
+  includeForexServices: boolean("include_forex_services").default(false),
+  
+  includePreDepartureSession: boolean("include_pre_departure_session").default(false),
+  
+  phozosPrepTier: prepTierEnum("phozos_prep_tier").default("none"),
+  phozosPrepDescription: text("phozos_prep_description"),
+  
   displayOrder: integer("display_order").default(0),
   isActive: boolean("is_active").default(true),
   basePlanId: uuid("base_plan_id").references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
