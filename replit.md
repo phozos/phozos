@@ -7,6 +7,7 @@ EduPath is an international education platform connecting students with global u
 ## Recent Changes
 
 ### Phase 2: UX/UI Improvements (November 2025)
+- **Payment History Fix:** Refactored admin payment history query to use immutable `payments` ledger table instead of mutable `userSubscriptions` table, now displaying complete transaction history including initial purchases, upgrades, and renewals with color-coded payment type badges.
 - **Comprehensive Tooltips:** Added helpful tooltips throughout admin interfaces including price update dialogs, plan deprecation dialogs, and version history views to guide admins through complex operations.
 - **Standardized Date Formatting:** Created centralized `formatDate` utility function with support for short, long, and relative date formats for consistency across the application.
 - **Empty State Messaging:** Added informative empty states for subscription plans and subscriptions tabs with clear guidance and actionable next steps.
