@@ -18,7 +18,40 @@ interface SubscriptionPlan {
   features: string[];
   maxUniversities: number;
   maxCountries: number;
-  supportType: string;
+  turnaroundDays?: number;
+  
+  // Support & Mentorship (modified from supportType to supportTypes)
+  supportType?: string; // Deprecated - for backward compatibility
+  supportTypes?: string[]; // New multi-select field
+  includeDedicatedManager?: boolean;
+  
+  // Core Application Services
+  includeCourseCountrySelection?: boolean;
+  includeUniversityShortlisting?: boolean;
+  includeExpertEditing?: boolean;
+  includeOneOnOneEditing?: boolean;
+  includeProfileBuilding?: boolean;
+  includeTop50Counselling?: boolean;
+  
+  // Phozos AI
+  phozosAiTier?: 'none' | 'basic' | 'pro' | 'ultra';
+  
+  // Financial & Scholarship Services
+  includeScholarshipPlanning?: boolean;
+  includeLoanAssistance?: boolean;
+  includeForexServices?: boolean;
+  
+  // Visa & Post-Admission
+  includeVisaSupport?: boolean;
+  includePreDepartureSession?: boolean;
+  includeMockInterview?: boolean;
+  includeFlightAccommodation?: boolean;
+  
+  // Phozos Prep
+  phozosPrepTier?: 'none' | 'basic' | 'pro' | 'ultra';
+  phozosPrepDescription?: string;
+  
+  // Existing fields
   isActive: boolean;
   displayOrder: number;
   tierLevel?: number;
@@ -293,8 +326,76 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                       </div>
                     </TableCell>
                     {comparisonPlans.map(plan => (
-                      <TableCell key={plan.id} className="text-center capitalize font-semibold">
-                        {plan.supportType}
+                      <TableCell key={plan.id} className="text-center">
+                        <div className="flex flex-wrap gap-1 justify-center">
+                          {plan.supportTypes && plan.supportTypes.length > 0 ? (
+                            plan.supportTypes.map((type) => (
+                              <Badge key={type} variant="secondary" className="text-xs capitalize">
+                                {type}
+                              </Badge>
+                            ))
+                          ) : plan.supportType ? (
+                            <Badge variant="secondary" className="text-xs capitalize">
+                              {plan.supportType}
+                            </Badge>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Email</span>
+                          )}
+                        </div>
+                      </TableCell>
+                    ))}
+                  </TableRow>
+
+                  <TableRow>
+                    <TableCell className="font-semibold sticky left-0 bg-background z-10">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">🤖</span>
+                        Phozos AI Tier
+                      </div>
+                    </TableCell>
+                    {comparisonPlans.map(plan => (
+                      <TableCell key={plan.id} className="text-center">
+                        {plan.phozosAiTier && plan.phozosAiTier !== 'none' ? (
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs font-semibold ${
+                              plan.phozosAiTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
+                              plan.phozosAiTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
+                              'border-green-500 text-green-700 dark:text-green-400'
+                            }`}
+                          >
+                            {plan.phozosAiTier.toUpperCase()}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Not included</span>
+                        )}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+
+                  <TableRow className="bg-muted/30">
+                    <TableCell className="font-semibold sticky left-0 bg-muted/30 z-10">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">📚</span>
+                        Phozos Prep Tier
+                      </div>
+                    </TableCell>
+                    {comparisonPlans.map(plan => (
+                      <TableCell key={plan.id} className="text-center">
+                        {plan.phozosPrepTier && plan.phozosPrepTier !== 'none' ? (
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs font-semibold ${
+                              plan.phozosPrepTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
+                              plan.phozosPrepTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
+                              'border-green-500 text-green-700 dark:text-green-400'
+                            }`}
+                          >
+                            {plan.phozosPrepTier.toUpperCase()}
+                          </Badge>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">Not included</span>
+                        )}
                       </TableCell>
                     ))}
                   </TableRow>

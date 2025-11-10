@@ -29,7 +29,40 @@ interface SubscriptionPlan {
   features: string[];
   maxUniversities: number;
   maxCountries: number;
-  supportType: string;
+  turnaroundDays?: number;
+  
+  // Support & Mentorship (modified from supportType to supportTypes)
+  supportType?: string; // Deprecated - for backward compatibility
+  supportTypes?: string[]; // New multi-select field
+  includeDedicatedManager?: boolean;
+  
+  // Core Application Services
+  includeCourseCountrySelection?: boolean;
+  includeUniversityShortlisting?: boolean;
+  includeExpertEditing?: boolean;
+  includeOneOnOneEditing?: boolean;
+  includeProfileBuilding?: boolean;
+  includeTop50Counselling?: boolean;
+  
+  // Phozos AI
+  phozosAiTier?: 'none' | 'basic' | 'pro' | 'ultra';
+  
+  // Financial & Scholarship Services
+  includeScholarshipPlanning?: boolean;
+  includeLoanAssistance?: boolean;
+  includeForexServices?: boolean;
+  
+  // Visa & Post-Admission
+  includeVisaSupport?: boolean;
+  includePreDepartureSession?: boolean;
+  includeMockInterview?: boolean;
+  includeFlightAccommodation?: boolean;
+  
+  // Phozos Prep
+  phozosPrepTier?: 'none' | 'basic' | 'pro' | 'ultra';
+  phozosPrepDescription?: string;
+  
+  // Existing fields
   isActive: boolean;
   displayOrder: number;
   tierLevel?: number;
@@ -356,13 +389,69 @@ export default function PublicPlans() {
                             {plan.maxCountries === 999 ? 'All' : plan.maxCountries}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between">
+                        
+                        {/* Support Types - Multiple Badges */}
+                        <div className="flex items-start justify-between">
                           <div className="flex items-center space-x-2">
-                            <Heart className="w-4 h-4 text-primary" />
+                            <Heart className="w-4 h-4 text-primary mt-1" />
                             <span className="text-sm text-muted-foreground">Support</span>
                           </div>
-                          <span className="font-semibold text-foreground capitalize">{plan.supportType}</span>
+                          <div className="flex flex-wrap gap-1 justify-end">
+                            {plan.supportTypes && plan.supportTypes.length > 0 ? (
+                              plan.supportTypes.map((type) => (
+                                <Badge key={type} variant="secondary" className="text-xs capitalize">
+                                  {type}
+                                </Badge>
+                              ))
+                            ) : plan.supportType ? (
+                              <Badge variant="secondary" className="text-xs capitalize">
+                                {plan.supportType}
+                              </Badge>
+                            ) : (
+                              <span className="font-semibold text-foreground text-sm">Email</span>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Phozos AI Tier - Only show if not 'none' */}
+                        {plan.phozosAiTier && plan.phozosAiTier !== 'none' && (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm">🤖</span>
+                              <span className="text-sm text-muted-foreground">Phozos AI</span>
+                            </div>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs font-semibold ${
+                                plan.phozosAiTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
+                                plan.phozosAiTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
+                                'border-green-500 text-green-700 dark:text-green-400'
+                              }`}
+                            >
+                              {plan.phozosAiTier.toUpperCase()}
+                            </Badge>
+                          </div>
+                        )}
+
+                        {/* Phozos Prep Tier - Only show if not 'none' */}
+                        {plan.phozosPrepTier && plan.phozosPrepTier !== 'none' && (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm">📚</span>
+                              <span className="text-sm text-muted-foreground">Phozos Prep</span>
+                            </div>
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs font-semibold ${
+                                plan.phozosPrepTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
+                                plan.phozosPrepTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
+                                'border-green-500 text-green-700 dark:text-green-400'
+                              }`}
+                            >
+                              {plan.phozosPrepTier.toUpperCase()}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                       
                       {/* Features */}
