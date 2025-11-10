@@ -124,7 +124,17 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         description: InputSanitizer.sanitizePlainText(plan.description),
         features: InputSanitizer.sanitizeArray(plan.features),
         universityTier: plan.universityTier ? InputSanitizer.sanitizePlainText(plan.universityTier) as any : plan.universityTier,
-        supportType: plan.supportType ? InputSanitizer.sanitizePlainText(plan.supportType) as any : plan.supportType
+        supportType: plan.supportType ? InputSanitizer.sanitizePlainText(plan.supportType) as any : plan.supportType,
+        
+        // Category 2: Sanitize supportTypes array
+        supportTypes: plan.supportTypes ? InputSanitizer.sanitizeArray(plan.supportTypes) : plan.supportTypes,
+        
+        // Category 3: Sanitize Phozos AI tier
+        phozosAiTier: plan.phozosAiTier ? InputSanitizer.sanitizePlainText(plan.phozosAiTier) as any : plan.phozosAiTier,
+        
+        // Category 6: Sanitize Phozos Prep fields
+        phozosPrepTier: plan.phozosPrepTier ? InputSanitizer.sanitizePlainText(plan.phozosPrepTier) as any : plan.phozosPrepTier,
+        phozosPrepDescription: plan.phozosPrepDescription ? InputSanitizer.sanitizePlainText(plan.phozosPrepDescription) : plan.phozosPrepDescription
       };
 
       const errors: Record<string, string> = {};
@@ -142,6 +152,52 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         const maxUnivValidation = CommonValidators.validatePositiveNumber(sanitizedPlan.maxUniversities, 'Max universities');
         if (!maxUnivValidation.valid) {
           errors.maxUniversities = maxUnivValidation.error!;
+        }
+      }
+
+      // Validate supportTypes array (no duplicates, at least 1 item if provided)
+      if (sanitizedPlan.supportTypes !== undefined && sanitizedPlan.supportTypes !== null) {
+        if (!Array.isArray(sanitizedPlan.supportTypes)) {
+          errors.supportTypes = 'Support types must be an array';
+        } else if (sanitizedPlan.supportTypes.length === 0) {
+          errors.supportTypes = 'At least one support type is required';
+        } else {
+          // Check for duplicates
+          const uniqueTypes = new Set(sanitizedPlan.supportTypes);
+          if (uniqueTypes.size !== sanitizedPlan.supportTypes.length) {
+            errors.supportTypes = 'Support types must not contain duplicates';
+          }
+          
+          // Validate enum values
+          const validSupportTypes = ['email', 'whatsapp', 'phone', 'premium'];
+          const invalidTypes = sanitizedPlan.supportTypes.filter(type => !validSupportTypes.includes(type));
+          if (invalidTypes.length > 0) {
+            errors.supportTypes = `Invalid support types: ${invalidTypes.join(', ')}. Valid values are: ${validSupportTypes.join(', ')}`;
+          }
+        }
+      }
+
+      // Validate phozosAiTier enum
+      if (sanitizedPlan.phozosAiTier !== undefined && sanitizedPlan.phozosAiTier !== null) {
+        const validAiTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validAiTiers.includes(sanitizedPlan.phozosAiTier)) {
+          errors.phozosAiTier = `Invalid Phozos AI tier. Valid values are: ${validAiTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepTier enum
+      if (sanitizedPlan.phozosPrepTier !== undefined && sanitizedPlan.phozosPrepTier !== null) {
+        const validPrepTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validPrepTiers.includes(sanitizedPlan.phozosPrepTier)) {
+          errors.phozosPrepTier = `Invalid Phozos Prep tier. Valid values are: ${validPrepTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepDescription length
+      if (sanitizedPlan.phozosPrepDescription !== undefined && sanitizedPlan.phozosPrepDescription !== null) {
+        const descValidation = CommonValidators.validateStringLength(sanitizedPlan.phozosPrepDescription, 0, 1000, 'Phozos Prep description');
+        if (!descValidation.valid) {
+          errors.phozosPrepDescription = descValidation.error!;
         }
       }
 
@@ -216,6 +272,24 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         sanitizedUpdates.supportType = InputSanitizer.sanitizePlainText(updates.supportType) as any;
       }
       
+      // Category 2: Sanitize supportTypes array
+      if (updates.supportTypes !== undefined) {
+        sanitizedUpdates.supportTypes = updates.supportTypes ? InputSanitizer.sanitizeArray(updates.supportTypes) : updates.supportTypes;
+      }
+      
+      // Category 3: Sanitize Phozos AI tier
+      if (updates.phozosAiTier !== undefined) {
+        sanitizedUpdates.phozosAiTier = updates.phozosAiTier ? InputSanitizer.sanitizePlainText(updates.phozosAiTier) as any : updates.phozosAiTier;
+      }
+      
+      // Category 6: Sanitize Phozos Prep fields
+      if (updates.phozosPrepTier !== undefined) {
+        sanitizedUpdates.phozosPrepTier = updates.phozosPrepTier ? InputSanitizer.sanitizePlainText(updates.phozosPrepTier) as any : updates.phozosPrepTier;
+      }
+      if (updates.phozosPrepDescription !== undefined) {
+        sanitizedUpdates.phozosPrepDescription = updates.phozosPrepDescription ? InputSanitizer.sanitizePlainText(updates.phozosPrepDescription) : updates.phozosPrepDescription;
+      }
+      
       const sanitizedChangeReason = changeReason ? InputSanitizer.sanitizePlainText(changeReason) : undefined;
 
       const errors: Record<string, string> = {};
@@ -235,6 +309,52 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         const maxUnivValidation = CommonValidators.validatePositiveNumber(sanitizedUpdates.maxUniversities, 'Max universities');
         if (!maxUnivValidation.valid) {
           errors.maxUniversities = maxUnivValidation.error!;
+        }
+      }
+
+      // Validate supportTypes array (no duplicates, at least 1 item if provided)
+      if (sanitizedUpdates.supportTypes !== undefined && sanitizedUpdates.supportTypes !== null) {
+        if (!Array.isArray(sanitizedUpdates.supportTypes)) {
+          errors.supportTypes = 'Support types must be an array';
+        } else if (sanitizedUpdates.supportTypes.length === 0) {
+          errors.supportTypes = 'At least one support type is required';
+        } else {
+          // Check for duplicates
+          const uniqueTypes = new Set(sanitizedUpdates.supportTypes);
+          if (uniqueTypes.size !== sanitizedUpdates.supportTypes.length) {
+            errors.supportTypes = 'Support types must not contain duplicates';
+          }
+          
+          // Validate enum values
+          const validSupportTypes = ['email', 'whatsapp', 'phone', 'premium'];
+          const invalidTypes = sanitizedUpdates.supportTypes.filter(type => !validSupportTypes.includes(type));
+          if (invalidTypes.length > 0) {
+            errors.supportTypes = `Invalid support types: ${invalidTypes.join(', ')}. Valid values are: ${validSupportTypes.join(', ')}`;
+          }
+        }
+      }
+
+      // Validate phozosAiTier enum
+      if (sanitizedUpdates.phozosAiTier !== undefined && sanitizedUpdates.phozosAiTier !== null) {
+        const validAiTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validAiTiers.includes(sanitizedUpdates.phozosAiTier)) {
+          errors.phozosAiTier = `Invalid Phozos AI tier. Valid values are: ${validAiTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepTier enum
+      if (sanitizedUpdates.phozosPrepTier !== undefined && sanitizedUpdates.phozosPrepTier !== null) {
+        const validPrepTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validPrepTiers.includes(sanitizedUpdates.phozosPrepTier)) {
+          errors.phozosPrepTier = `Invalid Phozos Prep tier. Valid values are: ${validPrepTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepDescription length
+      if (sanitizedUpdates.phozosPrepDescription !== undefined && sanitizedUpdates.phozosPrepDescription !== null) {
+        const descValidation = CommonValidators.validateStringLength(sanitizedUpdates.phozosPrepDescription, 0, 1000, 'Phozos Prep description');
+        if (!descValidation.valid) {
+          errors.phozosPrepDescription = descValidation.error!;
         }
       }
 

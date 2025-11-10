@@ -75,6 +75,13 @@ export const subscriptionStatusSchema = z.enum([
   'pending'
 ]);
 
+// Support type enum for validation
+const supportTypeEnum = z.enum(['email', 'whatsapp', 'phone', 'premium']);
+
+// AI and Prep tier enums
+const aiTierEnum = z.enum(['none', 'basic', 'pro', 'ultra']);
+const prepTierEnum = z.enum(['none', 'basic', 'pro', 'ultra']);
+
 export const subscriptionPlanSchema = z.object({
   name: z.string().min(1).max(255, 'Plan name must not exceed 255 characters'),
   price: z.number().nonnegative('Price must be non-negative'),
@@ -82,7 +89,38 @@ export const subscriptionPlanSchema = z.object({
   maxUniversities: z.number().int().positive('Max universities must be positive').optional(),
   maxCountries: z.number().int().positive('Max countries must be positive').optional(),
   turnaroundDays: z.number().int().positive('Turnaround days must be positive'),
-  tierLevel: z.number().int().positive('Tier level must be positive')
+  tierLevel: z.number().int().positive('Tier level must be positive'),
+  
+  // Category 1: Core Application Services
+  includeCourseCountrySelection: z.boolean().optional(),
+  includeUniversityShortlisting: z.boolean().optional(),
+  includeOneOnOneEditing: z.boolean().optional(),
+  includeProfileBuilding: z.boolean().optional(),
+  includeTop50Counselling: z.boolean().optional(),
+  
+  // Category 2: Student Support & Mentorship
+  supportTypes: z.array(supportTypeEnum)
+    .min(1, 'At least one support type is required')
+    .refine((types) => new Set(types).size === types.length, {
+      message: 'Support types must not contain duplicates'
+    })
+    .optional(),
+  
+  // Category 3: Phozos AI
+  phozosAiTier: aiTierEnum.optional(),
+  
+  // Category 4: Financial & Scholarship Services
+  includeForexServices: z.boolean().optional(),
+  
+  // Category 5: Visa & Post-Admission
+  includePreDepartureSession: z.boolean().optional(),
+  
+  // Category 6: Phozos Prep
+  phozosPrepTier: prepTierEnum.optional(),
+  phozosPrepDescription: z.string()
+    .max(1000, 'Phozos Prep description must not exceed 1000 characters')
+    .optional()
+    .nullable()
 });
 
 export const updateSubscriptionPlanBodySchema = subscriptionPlanSchema.partial().extend({
@@ -101,7 +139,38 @@ export const createPlanVersionSchema = z.object({
     turnaroundDays: z.number().int().positive().optional(),
     tierLevel: z.number().int().positive().optional(),
     isActive: z.boolean().optional(),
-    displayOrder: z.number().int().optional()
+    displayOrder: z.number().int().optional(),
+    
+    // Category 1: Core Application Services
+    includeCourseCountrySelection: z.boolean().optional(),
+    includeUniversityShortlisting: z.boolean().optional(),
+    includeOneOnOneEditing: z.boolean().optional(),
+    includeProfileBuilding: z.boolean().optional(),
+    includeTop50Counselling: z.boolean().optional(),
+    
+    // Category 2: Student Support & Mentorship
+    supportTypes: z.array(supportTypeEnum)
+      .min(1, 'At least one support type is required')
+      .refine((types) => new Set(types).size === types.length, {
+        message: 'Support types must not contain duplicates'
+      })
+      .optional(),
+    
+    // Category 3: Phozos AI
+    phozosAiTier: aiTierEnum.optional(),
+    
+    // Category 4: Financial & Scholarship Services
+    includeForexServices: z.boolean().optional(),
+    
+    // Category 5: Visa & Post-Admission
+    includePreDepartureSession: z.boolean().optional(),
+    
+    // Category 6: Phozos Prep
+    phozosPrepTier: prepTierEnum.optional(),
+    phozosPrepDescription: z.string()
+      .max(1000, 'Phozos Prep description must not exceed 1000 characters')
+      .optional()
+      .nullable()
   }),
   releaseNotes: z.string().min(1, 'Release notes are required').max(2000)
 });
