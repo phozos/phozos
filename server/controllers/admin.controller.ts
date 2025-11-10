@@ -2423,33 +2423,42 @@ export class AdminController extends BaseController {
     try {
       const { userId } = req.params;
       const { db } = await import('../db');
-      const { userSubscriptions, subscriptionPlans } = await import('@shared/schema');
-      const { eq, and, isNotNull } = await import('drizzle-orm');
+      const { payments, subscriptionPlans } = await import('@shared/schema');
+      const { eq, desc } = await import('drizzle-orm');
 
-      const paymentHistory = await db
+      const paymentHistoryData = await db
         .select({
-          subscriptionId: userSubscriptions.id,
-          planId: userSubscriptions.planId,
+          id: payments.id,
+          userId: payments.userId,
+          planId: payments.planId,
           planName: subscriptionPlans.name,
-          orderId: userSubscriptions.orderId,
-          paymentReference: userSubscriptions.paymentReference,
-          paymentGateway: userSubscriptions.paymentGateway,
-          amountPaid: userSubscriptions.amountPaid,
-          currency: userSubscriptions.currency,
-          paidAt: userSubscriptions.paidAt,
-          status: userSubscriptions.status,
-          startedAt: userSubscriptions.startedAt,
-          expiresAt: userSubscriptions.expiresAt,
+          paymentType: payments.paymentType,
+          amount: payments.amount,
+          currency: payments.currency,
+          orderId: payments.orderId,
+          paymentReference: payments.paymentReference,
+          paymentGateway: payments.paymentGateway,
+          paidAt: payments.paidAt,
         })
-        .from(userSubscriptions)
-        .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
-        .where(
-          and(
-            eq(userSubscriptions.userId, userId),
-            isNotNull(userSubscriptions.paidAt)
-          )
-        )
-        .orderBy(userSubscriptions.paidAt);
+        .from(payments)
+        .leftJoin(subscriptionPlans, eq(payments.planId, subscriptionPlans.id))
+        .where(eq(payments.userId, userId))
+        .orderBy(desc(payments.paidAt));
+
+      const paymentTypeLabels: Record<string, string> = {
+        'new_subscription': 'Initial Purchase',
+        'upgrade': 'Upgrade',
+        'renewal': 'Renewal',
+      };
+
+      const paymentHistory = paymentHistoryData.map(payment => ({
+        ...payment,
+        planId: payment.planId || '',
+        planName: payment.planName || 'Unknown Plan',
+        paymentType: payment.paymentType 
+          ? paymentTypeLabels[payment.paymentType] || 'Payment'
+          : 'Payment'
+      }));
 
       return this.sendSuccess(res, paymentHistory);
     } catch (error) {

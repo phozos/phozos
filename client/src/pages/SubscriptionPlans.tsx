@@ -98,18 +98,17 @@ interface UserSubscription {
 }
 
 interface PaymentHistory {
-  subscriptionId: string;
-  planId: string;
-  planName: string;
-  orderId: string | null;
-  paymentReference: string | null;
-  paymentGateway: string | null;
-  amountPaid: string | null;
-  currency: string | null;
-  paidAt: string | null;
-  status: string;
-  startedAt: string;
-  expiresAt: string | null;
+  id: string;
+  userId: string;
+  planId: string | null;
+  planName: string | null;
+  paymentType: string;
+  amount: string;
+  currency: string;
+  orderId: string;
+  paymentReference: string;
+  paymentGateway: string;
+  paidAt: string;
 }
 
 interface SubscriptionEvent {
@@ -950,7 +949,7 @@ export default function SubscriptionPlans() {
                             {sub.subscription.amountPaid ? (
                               <div>
                                 <span className="font-medium">
-                                  {formatCurrency(sub.subscription.amountPaid, sub.subscription.currency)}
+                                  {formatCurrency(sub.subscription.amountPaid, sub.subscription.currency || sub.plan.currency)}
                                 </span>
                                 {sub.subscription.isGrandfathered && (
                                   <div className="text-xs text-muted-foreground mt-1">
@@ -1082,7 +1081,7 @@ export default function SubscriptionPlans() {
                           <TableCell>
                             {payment.amount ? (
                               <span className="font-medium">
-                                {formatCurrency(payment.amount, payment.currency)}
+                                {formatCurrency(payment.amount, payment.currency || 'INR')}
                               </span>
                             ) : (
                               <span className="text-gray-400">N/A</span>
@@ -1128,7 +1127,7 @@ export default function SubscriptionPlans() {
       </Tabs>
 
       <Dialog open={paymentHistoryDialog.open} onOpenChange={(open) => !open && setPaymentHistoryDialog({ open: false, userId: null })}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Payment History</DialogTitle>
             <DialogDescription>View all payment transactions for this user</DialogDescription>
@@ -1137,7 +1136,7 @@ export default function SubscriptionPlans() {
             {paymentHistoryLoading ? (
               <div className="py-8 text-center">Loading payment history...</div>
             ) : paymentHistory.length === 0 ? (
-              <div className="py-8 text-center text-gray-500">No payment history found</div>
+              <div className="py-8 text-center text-gray-500">No payment history available</div>
             ) : (
               <Table>
                 <TableHeader>
@@ -1147,28 +1146,65 @@ export default function SubscriptionPlans() {
                     <TableHead>Amount</TableHead>
                     <TableHead>Payment Date</TableHead>
                     <TableHead>Gateway</TableHead>
+                    <TableHead>Type</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paymentHistory.map((payment) => (
-                    <TableRow key={payment.subscriptionId}>
-                      <TableCell className="font-medium">{payment.planName}</TableCell>
-                      <TableCell>
-                        <code className="text-xs bg-gray-100 px-2 py-1 rounded">
-                          {payment.orderId || "N/A"}
-                        </code>
-                      </TableCell>
-                      <TableCell>
-                        {formatCurrency(payment.amountPaid, payment.currency)}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {formatDateTime(payment.paidAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{payment.paymentGateway || "N/A"}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {paymentHistory.map((payment) => {
+                    const getBadgeVariant = (type: string): "default" | "secondary" | "destructive" | "outline" => {
+                      switch (type) {
+                        case 'Initial Purchase':
+                          return 'default';
+                        case 'Upgrade':
+                          return 'secondary';
+                        case 'Renewal':
+                          return 'outline';
+                        default:
+                          return 'outline';
+                      }
+                    };
+
+                    const getBadgeClassName = (type: string): string => {
+                      switch (type) {
+                        case 'Initial Purchase':
+                          return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
+                        case 'Upgrade':
+                          return 'bg-green-100 text-green-800 hover:bg-green-100';
+                        case 'Renewal':
+                          return 'bg-purple-100 text-purple-800 hover:bg-purple-100';
+                        default:
+                          return 'bg-gray-100 text-gray-800 hover:bg-gray-100';
+                      }
+                    };
+
+                    return (
+                      <TableRow key={payment.id}>
+                        <TableCell className="font-medium">{payment.planName || "Unknown Plan"}</TableCell>
+                        <TableCell>
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                            {payment.orderId || "N/A"}
+                          </code>
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {formatCurrency(payment.amount, payment.currency)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {formatDateTime(payment.paidAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{payment.paymentGateway || "N/A"}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={getBadgeVariant(payment.paymentType)}
+                            className={getBadgeClassName(payment.paymentType)}
+                          >
+                            {payment.paymentType}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
