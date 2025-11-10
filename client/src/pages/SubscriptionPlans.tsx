@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,7 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History, Inbox, Info } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History, Inbox, Info, BookOpen, MessageCircle, Brain, Banknote, Plane, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { PremiumBadgeSelector, PremiumBadgeDisplay, BadgeKey, premiumBadges } from "@/components/PremiumBadges";
@@ -55,6 +56,23 @@ interface SubscriptionPlan {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  
+  includeCourseCountrySelection?: boolean;
+  includeUniversityShortlisting?: boolean;
+  includeOneOnOneEditing?: boolean;
+  includeProfileBuilding?: boolean;
+  includeTop50Counselling?: boolean;
+  
+  supportTypes?: string[];
+  
+  phozosAiTier?: string;
+  
+  includeForexServices?: boolean;
+  
+  includePreDepartureSession?: boolean;
+  
+  phozosPrepTier?: string;
+  phozosPrepDescription?: string | null;
 }
 
 interface UserSubscription {
@@ -148,6 +166,13 @@ export default function SubscriptionPlans() {
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
   const [selectedBadge, setSelectedBadge] = useState<BadgeKey>("platinum");
   const [editSelectedBadge, setEditSelectedBadge] = useState<BadgeKey>("platinum");
+  
+  const [selectedSupportTypes, setSelectedSupportTypes] = useState<string[]>(["email"]);
+  const [editSupportTypes, setEditSupportTypes] = useState<string[]>(["email"]);
+  const [phozosAiTier, setPhozosAiTier] = useState<string>("none");
+  const [phozosPrepTier, setPhozosPrepTier] = useState<string>("none");
+  const [editPhozosAiTier, setEditPhozosAiTier] = useState<string>("none");
+  const [editPhozosPrepTier, setEditPhozosPrepTier] = useState<string>("none");
   
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [planFilter, setPlanFilter] = useState<string>("all");
@@ -255,6 +280,15 @@ export default function SubscriptionPlans() {
     }
   );
 
+  useEffect(() => {
+    if (editingPlan) {
+      setEditSelectedBadge(safeBadgeKey(editingPlan.logo));
+      setEditSupportTypes(editingPlan.supportTypes || [editingPlan.supportType] || ["email"]);
+      setEditPhozosAiTier(editingPlan.phozosAiTier || "none");
+      setEditPhozosPrepTier(editingPlan.phozosPrepTier || "none");
+    }
+  }, [editingPlan]);
+
   const getActiveSubscriberCount = (planId: string): number => {
     return subscriptions.filter(
       sub => sub.plan.id === planId && sub.subscription.status === 'active'
@@ -347,16 +381,34 @@ export default function SubscriptionPlans() {
       universityTier: formData.get("universityTier") as string,
       supportType: formData.get("supportType") as string,
       turnaroundDays: parseInt(formData.get("turnaroundDays") as string),
-      includeLoanAssistance: formData.get("includeLoanAssistance") === "on",
-      includeVisaSupport: formData.get("includeVisaSupport") === "on",
-      includeCounselorSession: formData.get("includeCounselorSession") === "on",
-      includeScholarshipPlanning: formData.get("includeScholarshipPlanning") === "on",
-      includeMockInterview: formData.get("includeMockInterview") === "on",
+      
+      includeCourseCountrySelection: formData.get("includeCourseCountrySelection") === "on",
+      includeUniversityShortlisting: formData.get("includeUniversityShortlisting") === "on",
       includeExpertEditing: formData.get("includeExpertEditing") === "on",
-      includePostAdmitSupport: formData.get("includePostAdmitSupport") === "on",
+      includeOneOnOneEditing: formData.get("includeOneOnOneEditing") === "on",
+      includeProfileBuilding: formData.get("includeProfileBuilding") === "on",
+      includeTop50Counselling: formData.get("includeTop50Counselling") === "on",
+      
+      supportTypes: selectedSupportTypes,
       includeDedicatedManager: formData.get("includeDedicatedManager") === "on",
-      includeNetworkingEvents: formData.get("includeNetworkingEvents") === "on",
+      
+      phozosAiTier,
+      
+      includeScholarshipPlanning: formData.get("includeScholarshipPlanning") === "on",
+      includeLoanAssistance: formData.get("includeLoanAssistance") === "on",
+      includeForexServices: formData.get("includeForexServices") === "on",
+      
+      includeVisaSupport: formData.get("includeVisaSupport") === "on",
+      includePreDepartureSession: formData.get("includePreDepartureSession") === "on",
+      includeMockInterview: formData.get("includeMockInterview") === "on",
       includeFlightAccommodation: formData.get("includeFlightAccommodation") === "on",
+      
+      phozosPrepTier,
+      phozosPrepDescription: formData.get("phozosPrepDescription") as string || null,
+      
+      includeCounselorSession: formData.get("includeCounselorSession") === "on",
+      includePostAdmitSupport: formData.get("includePostAdmitSupport") === "on",
+      includeNetworkingEvents: formData.get("includeNetworkingEvents") === "on",
       isBusinessFocused: formData.get("isBusinessFocused") === "on",
       tierLevel: parseInt(formData.get("tierLevel") as string),
       displayOrder: parseInt(formData.get("displayOrder") as string) || 0,
@@ -378,16 +430,34 @@ export default function SubscriptionPlans() {
       universityTier: formData.get("universityTier") as string,
       supportType: formData.get("supportType") as string,
       turnaroundDays: parseInt(formData.get("turnaroundDays") as string),
-      includeLoanAssistance: formData.get("includeLoanAssistance") === "on",
-      includeVisaSupport: formData.get("includeVisaSupport") === "on",
-      includeCounselorSession: formData.get("includeCounselorSession") === "on",
-      includeScholarshipPlanning: formData.get("includeScholarshipPlanning") === "on",
-      includeMockInterview: formData.get("includeMockInterview") === "on",
+      
+      includeCourseCountrySelection: formData.get("includeCourseCountrySelection") === "on",
+      includeUniversityShortlisting: formData.get("includeUniversityShortlisting") === "on",
       includeExpertEditing: formData.get("includeExpertEditing") === "on",
-      includePostAdmitSupport: formData.get("includePostAdmitSupport") === "on",
+      includeOneOnOneEditing: formData.get("includeOneOnOneEditing") === "on",
+      includeProfileBuilding: formData.get("includeProfileBuilding") === "on",
+      includeTop50Counselling: formData.get("includeTop50Counselling") === "on",
+      
+      supportTypes: editSupportTypes,
       includeDedicatedManager: formData.get("includeDedicatedManager") === "on",
-      includeNetworkingEvents: formData.get("includeNetworkingEvents") === "on",
+      
+      phozosAiTier: editPhozosAiTier,
+      
+      includeScholarshipPlanning: formData.get("includeScholarshipPlanning") === "on",
+      includeLoanAssistance: formData.get("includeLoanAssistance") === "on",
+      includeForexServices: formData.get("includeForexServices") === "on",
+      
+      includeVisaSupport: formData.get("includeVisaSupport") === "on",
+      includePreDepartureSession: formData.get("includePreDepartureSession") === "on",
+      includeMockInterview: formData.get("includeMockInterview") === "on",
       includeFlightAccommodation: formData.get("includeFlightAccommodation") === "on",
+      
+      phozosPrepTier: editPhozosPrepTier,
+      phozosPrepDescription: formData.get("phozosPrepDescription") as string || null,
+      
+      includeCounselorSession: formData.get("includeCounselorSession") === "on",
+      includePostAdmitSupport: formData.get("includePostAdmitSupport") === "on",
+      includeNetworkingEvents: formData.get("includeNetworkingEvents") === "on",
       isBusinessFocused: formData.get("isBusinessFocused") === "on",
       tierLevel: parseInt(formData.get("tierLevel") as string),
       displayOrder: parseInt(formData.get("displayOrder") as string) || 0,
@@ -507,135 +577,302 @@ export default function SubscriptionPlans() {
             <form onSubmit={(e) => {
               e.preventDefault();
               handleCreatePlan(new FormData(e.currentTarget));
-            }} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">Plan Name</Label>
-                  <Input id="name" name="name" required />
-                </div>
-                <div>
-                  <Label htmlFor="price">Price</Label>
-                  <Input id="price" name="price" type="number" step="0.01" required />
-                </div>
-                <div>
-                  <Label htmlFor="currency">Currency</Label>
-                  <Select name="currency" defaultValue="INR">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="INR">INR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="tierLevel">Tier Level</Label>
-                  <Input 
-                    id="tierLevel" 
-                    name="tierLevel" 
-                    type="number" 
-                    min="1"
-                    step="1"
-                    defaultValue={getNextTierLevel()} 
-                    required 
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Unique hierarchical level for this plan
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="displayOrder">Display Order</Label>
-                  <Input id="displayOrder" name="displayOrder" type="number" defaultValue="0" />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea id="description" name="description" />
-              </div>
-
-              <PremiumBadgeSelector 
-                selectedBadge={selectedBadge} 
-                onBadgeChange={setSelectedBadge} 
-              />
-
-              <div>
-                <Label htmlFor="features">Features (one per line)</Label>
-                <Textarea id="features" name="features" rows={6} />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="maxUniversities">Max Universities</Label>
-                  <Input id="maxUniversities" name="maxUniversities" type="number" required />
-                </div>
-                <div>
-                  <Label htmlFor="maxCountries">Max Countries</Label>
-                  <Input id="maxCountries" name="maxCountries" type="number" required />
-                </div>
-                <div>
-                  <Label htmlFor="turnaroundDays">Turnaround Days</Label>
-                  <Input id="turnaroundDays" name="turnaroundDays" type="number" required />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="universityTier">University Tier</Label>
-                  <Select name="universityTier" defaultValue="general">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="top500">Top 500</SelectItem>
-                      <SelectItem value="top200">Top 200</SelectItem>
-                      <SelectItem value="top100">Top 100</SelectItem>
-                      <SelectItem value="ivy_league">Ivy League</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="supportType">Support Type</Label>
-                  <Select name="supportType" defaultValue="email">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="email">Email</SelectItem>
-                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { key: "includeLoanAssistance", label: "Loan Assistance" },
-                  { key: "includeVisaSupport", label: "Visa Support" },
-                  { key: "includeCounselorSession", label: "Counselor Session" },
-                  { key: "includeScholarshipPlanning", label: "Scholarship Planning" },
-                  { key: "includeMockInterview", label: "Mock Interview" },
-                  { key: "includeExpertEditing", label: "Expert Editing" },
-                  { key: "includePostAdmitSupport", label: "Post-Admit Support" },
-                  { key: "includeDedicatedManager", label: "Dedicated Manager" },
-                  { key: "includeNetworkingEvents", label: "Networking Events" },
-                  { key: "includeFlightAccommodation", label: "Flight & Accommodation" },
-                  { key: "isBusinessFocused", label: "Business Focused" },
-                  { key: "isActive", label: "Active" },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center space-x-2">
-                    <input type="checkbox" id={item.key} name={item.key} />
-                    <Label htmlFor={item.key}>{item.label}</Label>
+              setIsCreateDialogOpen(false);
+              setSelectedSupportTypes(["email"]);
+              setPhozosAiTier("none");
+              setPhozosPrepTier("none");
+            }} className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="name">Plan Name</Label>
+                    <Input id="name" name="name" required />
                   </div>
-                ))}
+                  <div>
+                    <Label htmlFor="price">Price</Label>
+                    <Input id="price" name="price" type="number" step="0.01" required />
+                  </div>
+                  <div>
+                    <Label htmlFor="currency">Currency</Label>
+                    <Select name="currency" defaultValue="INR">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="INR">INR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="tierLevel">Tier Level</Label>
+                    <Input 
+                      id="tierLevel" 
+                      name="tierLevel" 
+                      type="number" 
+                      min="1"
+                      step="1"
+                      defaultValue={getNextTierLevel()} 
+                      required 
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Unique hierarchical level</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="displayOrder">Display Order</Label>
+                    <Input id="displayOrder" name="displayOrder" type="number" defaultValue="0" />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea id="description" name="description" />
+                </div>
+
+                <PremiumBadgeSelector 
+                  selectedBadge={selectedBadge} 
+                  onBadgeChange={setSelectedBadge} 
+                />
+
+                <div>
+                  <Label htmlFor="features">Features (one per line)</Label>
+                  <Textarea id="features" name="features" rows={4} />
+                </div>
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <Card className="border-blue-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-blue-600" />
+                    <CardTitle className="text-base">Category 1: Core Application Services</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="maxCountries">No. of Countries</Label>
+                      <Input id="maxCountries" name="maxCountries" type="number" required />
+                    </div>
+                    <div>
+                      <Label htmlFor="maxUniversities">No. of Universities</Label>
+                      <Input id="maxUniversities" name="maxUniversities" type="number" required />
+                    </div>
+                    <div>
+                      <Label htmlFor="turnaroundDays">Turnaround Days</Label>
+                      <Input id="turnaroundDays" name="turnaroundDays" type="number" required />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="universityTier">University Tier</Label>
+                    <Select name="universityTier" defaultValue="general">
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">General</SelectItem>
+                        <SelectItem value="top500">Top 500</SelectItem>
+                        <SelectItem value="top200">Top 200</SelectItem>
+                        <SelectItem value="top100">Top 100</SelectItem>
+                        <SelectItem value="ivy_league">Ivy League</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      { key: "includeCourseCountrySelection", label: "Course & Country Selection" },
+                      { key: "includeUniversityShortlisting", label: "University Shortlisting" },
+                      { key: "includeExpertEditing", label: "SOP, LOR, Resume, Essays Reviews" },
+                      { key: "includeOneOnOneEditing", label: "1:1 Document Editing" },
+                      { key: "includeProfileBuilding", label: "Comprehensive Profile-building" },
+                      { key: "includeTop50Counselling", label: "Top 50 University-specific Counselling" },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center space-x-2">
+                        <input type="checkbox" id={item.key} name={item.key} className="rounded" />
+                        <Label htmlFor={item.key} className="font-normal cursor-pointer">{item.label}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-green-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5 text-green-600" />
+                    <CardTitle className="text-base">Category 2: Student Support & Mentorship</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="mb-2 block">Support Channels (Select all that apply)</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: "email", label: "Email Support" },
+                        { value: "whatsapp", label: "WhatsApp Support" },
+                        { value: "phone", label: "Phone Support" },
+                        { value: "premium", label: "Premium Support" },
+                      ].map((support) => (
+                        <div key={support.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`support-${support.value}`}
+                            checked={selectedSupportTypes.includes(support.value)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedSupportTypes([...selectedSupportTypes, support.value]);
+                              } else {
+                                setSelectedSupportTypes(selectedSupportTypes.filter(t => t !== support.value));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`support-${support.value}`} className="font-normal cursor-pointer">
+                            {support.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    <input type="hidden" name="supportType" value={selectedSupportTypes[0] || "email"} />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input type="checkbox" id="includeDedicatedManager" name="includeDedicatedManager" className="rounded" />
+                    <Label htmlFor="includeDedicatedManager" className="font-normal cursor-pointer">Dedicated Manager</Label>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-purple-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-purple-600" />
+                    <CardTitle className="text-base">Category 3: Phozos AI</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Label className="mb-3 block">AI Tier</Label>
+                  <RadioGroup value={phozosAiTier} onValueChange={setPhozosAiTier} className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="none" id="ai-none" />
+                      <Label htmlFor="ai-none" className="font-normal cursor-pointer">None</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="basic" id="ai-basic" />
+                      <Label htmlFor="ai-basic" className="font-normal cursor-pointer">Basic</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="pro" id="ai-pro" />
+                      <Label htmlFor="ai-pro" className="font-normal cursor-pointer">Pro</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="ultra" id="ai-ultra" />
+                      <Label htmlFor="ai-ultra" className="font-normal cursor-pointer">Ultra</Label>
+                    </div>
+                  </RadioGroup>
+                </CardContent>
+              </Card>
+
+              <Card className="border-yellow-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Banknote className="h-5 w-5 text-yellow-600" />
+                    <CardTitle className="text-base">Category 4: Financial & Scholarship Services</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[
+                    { key: "includeScholarshipPlanning", label: "Scholarship Assistance" },
+                    { key: "includeLoanAssistance", label: "Phozos Finance (Loan Assistance)" },
+                    { key: "includeForexServices", label: "Forex Services" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center space-x-2">
+                      <input type="checkbox" id={item.key} name={item.key} className="rounded" />
+                      <Label htmlFor={item.key} className="font-normal cursor-pointer">{item.label}</Label>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-orange-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Plane className="h-5 w-5 text-orange-600" />
+                    <CardTitle className="text-base">Category 5: Visa & Post-Admission</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[
+                    { key: "includeVisaSupport", label: "Visa Guidance" },
+                    { key: "includePreDepartureSession", label: "Pre-departure Session" },
+                    { key: "includeMockInterview", label: "Mock Interview Classes" },
+                    { key: "includeFlightAccommodation", label: "Flight & Accommodation Services" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center space-x-2">
+                      <input type="checkbox" id={item.key} name={item.key} className="rounded" />
+                      <Label htmlFor={item.key} className="font-normal cursor-pointer">{item.label}</Label>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-indigo-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-indigo-600" />
+                    <CardTitle className="text-base">Category 6: Phozos Prep</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="mb-3 block">Prep Tier</Label>
+                    <RadioGroup value={phozosPrepTier} onValueChange={setPhozosPrepTier} className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="none" id="prep-none" />
+                        <Label htmlFor="prep-none" className="font-normal cursor-pointer">None</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="basic" id="prep-basic" />
+                        <Label htmlFor="prep-basic" className="font-normal cursor-pointer">Basic</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="pro" id="prep-pro" />
+                        <Label htmlFor="prep-pro" className="font-normal cursor-pointer">Pro</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ultra" id="prep-ultra" />
+                        <Label htmlFor="prep-ultra" className="font-normal cursor-pointer">Ultra</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  <div>
+                    <Label htmlFor="phozosPrepDescription">Description</Label>
+                    <Textarea 
+                      id="phozosPrepDescription" 
+                      name="phozosPrepDescription" 
+                      placeholder="Describe Phozos Prep benefits (optional)..." 
+                      rows={3}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold mb-3">Additional Settings</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: "includeCounselorSession", label: "Counselor Session (Legacy)" },
+                    { key: "includePostAdmitSupport", label: "Post-Admit Support (Legacy)" },
+                    { key: "includeNetworkingEvents", label: "Networking Events (Legacy)" },
+                    { key: "isBusinessFocused", label: "Business Focused" },
+                    { key: "isActive", label: "Active" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center space-x-2">
+                      <input type="checkbox" id={item.key} name={item.key} defaultChecked={item.key === "isActive"} className="rounded" />
+                      <Label htmlFor={item.key} className="font-normal cursor-pointer text-sm">{item.label}</Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                   Cancel
                 </Button>
@@ -1340,142 +1577,330 @@ export default function SubscriptionPlans() {
             <form onSubmit={(e) => {
               e.preventDefault();
               handleUpdatePlan(editingPlan, new FormData(e.currentTarget));
-            }} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-name">Plan Name</Label>
-                  <Input id="edit-name" name="name" defaultValue={editingPlan.name} required />
+              setEditingPlan(null);
+            }} className="space-y-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit-name">Plan Name</Label>
+                    <Input id="edit-name" name="name" defaultValue={editingPlan.name} required />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-price">Price</Label>
+                    <Input id="edit-price" name="price" type="number" step="0.01" defaultValue={editingPlan.price} required />
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-currency">Currency</Label>
+                    <Select name="currency" defaultValue={editingPlan.currency}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="INR">INR</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-tierLevel">Tier Level</Label>
+                    <Input 
+                      id="edit-tierLevel" 
+                      name="tierLevel" 
+                      type="number" 
+                      min="1"
+                      step="1"
+                      defaultValue={editingPlan.tierLevel} 
+                      required 
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Unique hierarchical level</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-displayOrder">Display Order</Label>
+                    <Input id="edit-displayOrder" name="displayOrder" type="number" defaultValue={editingPlan.displayOrder} />
+                  </div>
                 </div>
+                
                 <div>
-                  <Label htmlFor="edit-price">Price</Label>
-                  <Input id="edit-price" name="price" type="number" step="0.01" defaultValue={editingPlan.price} required />
+                  <Label htmlFor="edit-description">Description</Label>
+                  <Textarea id="edit-description" name="description" defaultValue={editingPlan.description} />
                 </div>
-                <div>
-                  <Label htmlFor="edit-currency">Currency</Label>
-                  <Select name="currency" defaultValue={editingPlan.currency}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                      <SelectItem value="INR">INR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="edit-tierLevel">Tier Level</Label>
-                  <Input 
-                    id="edit-tierLevel" 
-                    name="tierLevel" 
-                    type="number" 
-                    min="1"
-                    step="1"
-                    defaultValue={editingPlan.tierLevel} 
-                    required 
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-displayOrder">Display Order</Label>
-                  <Input id="edit-displayOrder" name="displayOrder" type="number" defaultValue={editingPlan.displayOrder} />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea id="edit-description" name="description" defaultValue={editingPlan.description} />
-              </div>
 
-              <PremiumBadgeSelector 
-                selectedBadge={editSelectedBadge} 
-                onBadgeChange={setEditSelectedBadge} 
-              />
-
-              <div>
-                <Label htmlFor="edit-features">Features (one per line)</Label>
-                <Textarea 
-                  id="edit-features" 
-                  name="features" 
-                  rows={6} 
-                  defaultValue={editingPlan.features.join("\n")} 
+                <PremiumBadgeSelector 
+                  selectedBadge={editSelectedBadge} 
+                  onBadgeChange={setEditSelectedBadge} 
                 />
-              </div>
 
-              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="edit-maxUniversities">Max Universities</Label>
-                  <Input id="edit-maxUniversities" name="maxUniversities" type="number" defaultValue={editingPlan.maxUniversities} required />
-                </div>
-                <div>
-                  <Label htmlFor="edit-maxCountries">Max Countries</Label>
-                  <Input id="edit-maxCountries" name="maxCountries" type="number" defaultValue={editingPlan.maxCountries} required />
-                </div>
-                <div>
-                  <Label htmlFor="edit-turnaroundDays">Turnaround Days</Label>
-                  <Input id="edit-turnaroundDays" name="turnaroundDays" type="number" defaultValue={editingPlan.turnaroundDays} required />
+                  <Label htmlFor="edit-features">Features (one per line)</Label>
+                  <Textarea id="edit-features" name="features" rows={4} defaultValue={editingPlan.features.join("\n")} />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="edit-universityTier">University Tier</Label>
-                  <Select name="universityTier" defaultValue={editingPlan.universityTier}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="top500">Top 500</SelectItem>
-                      <SelectItem value="top200">Top 200</SelectItem>
-                      <SelectItem value="top100">Top 100</SelectItem>
-                      <SelectItem value="ivy_league">Ivy League</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="edit-supportType">Support Type</Label>
-                  <Select name="supportType" defaultValue={editingPlan.supportType}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="email">Email</SelectItem>
-                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                      <SelectItem value="phone">Phone</SelectItem>
-                      <SelectItem value="premium">Premium</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <Card className="border-blue-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-blue-600" />
+                    <CardTitle className="text-base">Category 1: Core Application Services</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="edit-maxCountries">No. of Countries</Label>
+                      <Input id="edit-maxCountries" name="maxCountries" type="number" defaultValue={editingPlan.maxCountries} required />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-maxUniversities">No. of Universities</Label>
+                      <Input id="edit-maxUniversities" name="maxUniversities" type="number" defaultValue={editingPlan.maxUniversities} required />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit-turnaroundDays">Turnaround Days</Label>
+                      <Input id="edit-turnaroundDays" name="turnaroundDays" type="number" defaultValue={editingPlan.turnaroundDays} required />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-universityTier">University Tier</Label>
+                    <Select name="universityTier" defaultValue={editingPlan.universityTier}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">General</SelectItem>
+                        <SelectItem value="top500">Top 500</SelectItem>
+                        <SelectItem value="top200">Top 200</SelectItem>
+                        <SelectItem value="top100">Top 100</SelectItem>
+                        <SelectItem value="ivy_league">Ivy League</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    {[
+                      { key: "includeCourseCountrySelection", label: "Course & Country Selection" },
+                      { key: "includeUniversityShortlisting", label: "University Shortlisting" },
+                      { key: "includeExpertEditing", label: "SOP, LOR, Resume, Essays Reviews" },
+                      { key: "includeOneOnOneEditing", label: "1:1 Document Editing" },
+                      { key: "includeProfileBuilding", label: "Comprehensive Profile-building" },
+                      { key: "includeTop50Counselling", label: "Top 50 University-specific Counselling" },
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center space-x-2">
+                        <input 
+                          type="checkbox" 
+                          id={`edit-${item.key}`} 
+                          name={item.key} 
+                          defaultChecked={editingPlan[item.key as keyof SubscriptionPlan] as boolean || false}
+                          className="rounded" 
+                        />
+                        <Label htmlFor={`edit-${item.key}`} className="font-normal cursor-pointer">{item.label}</Label>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { key: "includeLoanAssistance", label: "Loan Assistance" },
-                  { key: "includeVisaSupport", label: "Visa Support" },
-                  { key: "includeCounselorSession", label: "Counselor Session" },
-                  { key: "includeScholarshipPlanning", label: "Scholarship Planning" },
-                  { key: "includeMockInterview", label: "Mock Interview" },
-                  { key: "includeExpertEditing", label: "Expert Editing" },
-                  { key: "includePostAdmitSupport", label: "Post-Admit Support" },
-                  { key: "includeDedicatedManager", label: "Dedicated Manager" },
-                  { key: "includeNetworkingEvents", label: "Networking Events" },
-                  { key: "includeFlightAccommodation", label: "Flight & Accommodation" },
-                  { key: "isBusinessFocused", label: "Business Focused" },
-                  { key: "isActive", label: "Active" },
-                ].map((item) => (
-                  <div key={item.key} className="flex items-center space-x-2">
+              <Card className="border-green-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="h-5 w-5 text-green-600" />
+                    <CardTitle className="text-base">Category 2: Student Support & Mentorship</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="mb-2 block">Support Channels (Select all that apply)</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { value: "email", label: "Email Support" },
+                        { value: "whatsapp", label: "WhatsApp Support" },
+                        { value: "phone", label: "Phone Support" },
+                        { value: "premium", label: "Premium Support" },
+                      ].map((support) => (
+                        <div key={support.value} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`edit-support-${support.value}`}
+                            checked={editSupportTypes.includes(support.value)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setEditSupportTypes([...editSupportTypes, support.value]);
+                              } else {
+                                setEditSupportTypes(editSupportTypes.filter(t => t !== support.value));
+                              }
+                            }}
+                          />
+                          <Label htmlFor={`edit-support-${support.value}`} className="font-normal cursor-pointer">
+                            {support.label}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    <input type="hidden" name="supportType" value={editSupportTypes[0] || editingPlan.supportType} />
+                  </div>
+                  <div className="flex items-center space-x-2">
                     <input 
                       type="checkbox" 
-                      id={`edit-${item.key}`} 
-                      name={item.key} 
-                      defaultChecked={editingPlan[item.key as keyof SubscriptionPlan] as boolean}
+                      id="edit-includeDedicatedManager" 
+                      name="includeDedicatedManager" 
+                      defaultChecked={editingPlan.includeDedicatedManager}
+                      className="rounded" 
                     />
-                    <Label htmlFor={`edit-${item.key}`}>{item.label}</Label>
+                    <Label htmlFor="edit-includeDedicatedManager" className="font-normal cursor-pointer">Dedicated Manager</Label>
                   </div>
-                ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-purple-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-purple-600" />
+                    <CardTitle className="text-base">Category 3: Phozos AI</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Label className="mb-3 block">AI Tier</Label>
+                  <RadioGroup value={editPhozosAiTier} onValueChange={setEditPhozosAiTier} className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="none" id="edit-ai-none" />
+                      <Label htmlFor="edit-ai-none" className="font-normal cursor-pointer">None</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="basic" id="edit-ai-basic" />
+                      <Label htmlFor="edit-ai-basic" className="font-normal cursor-pointer">Basic</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="pro" id="edit-ai-pro" />
+                      <Label htmlFor="edit-ai-pro" className="font-normal cursor-pointer">Pro</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="ultra" id="edit-ai-ultra" />
+                      <Label htmlFor="edit-ai-ultra" className="font-normal cursor-pointer">Ultra</Label>
+                    </div>
+                  </RadioGroup>
+                </CardContent>
+              </Card>
+
+              <Card className="border-yellow-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Banknote className="h-5 w-5 text-yellow-600" />
+                    <CardTitle className="text-base">Category 4: Financial & Scholarship Services</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[
+                    { key: "includeScholarshipPlanning", label: "Scholarship Assistance" },
+                    { key: "includeLoanAssistance", label: "Phozos Finance (Loan Assistance)" },
+                    { key: "includeForexServices", label: "Forex Services" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center space-x-2">
+                      <input 
+                        type="checkbox" 
+                        id={`edit-${item.key}`} 
+                        name={item.key} 
+                        defaultChecked={editingPlan[item.key as keyof SubscriptionPlan] as boolean || false}
+                        className="rounded" 
+                      />
+                      <Label htmlFor={`edit-${item.key}`} className="font-normal cursor-pointer">{item.label}</Label>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-orange-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <Plane className="h-5 w-5 text-orange-600" />
+                    <CardTitle className="text-base">Category 5: Visa & Post-Admission</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {[
+                    { key: "includeVisaSupport", label: "Visa Guidance" },
+                    { key: "includePreDepartureSession", label: "Pre-departure Session" },
+                    { key: "includeMockInterview", label: "Mock Interview Classes" },
+                    { key: "includeFlightAccommodation", label: "Flight & Accommodation Services" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center space-x-2">
+                      <input 
+                        type="checkbox" 
+                        id={`edit-${item.key}`} 
+                        name={item.key} 
+                        defaultChecked={editingPlan[item.key as keyof SubscriptionPlan] as boolean || false}
+                        className="rounded" 
+                      />
+                      <Label htmlFor={`edit-${item.key}`} className="font-normal cursor-pointer">{item.label}</Label>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              <Card className="border-indigo-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-indigo-600" />
+                    <CardTitle className="text-base">Category 6: Phozos Prep</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label className="mb-3 block">Prep Tier</Label>
+                    <RadioGroup value={editPhozosPrepTier} onValueChange={setEditPhozosPrepTier} className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="none" id="edit-prep-none" />
+                        <Label htmlFor="edit-prep-none" className="font-normal cursor-pointer">None</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="basic" id="edit-prep-basic" />
+                        <Label htmlFor="edit-prep-basic" className="font-normal cursor-pointer">Basic</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="pro" id="edit-prep-pro" />
+                        <Label htmlFor="edit-prep-pro" className="font-normal cursor-pointer">Pro</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="ultra" id="edit-prep-ultra" />
+                        <Label htmlFor="edit-prep-ultra" className="font-normal cursor-pointer">Ultra</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  <div>
+                    <Label htmlFor="edit-phozosPrepDescription">Description</Label>
+                    <Textarea 
+                      id="edit-phozosPrepDescription" 
+                      name="phozosPrepDescription" 
+                      placeholder="Describe Phozos Prep benefits (optional)..." 
+                      rows={3}
+                      defaultValue={editingPlan.phozosPrepDescription || ""}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-semibold mb-3">Additional Settings</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: "includeCounselorSession", label: "Counselor Session (Legacy)" },
+                    { key: "includePostAdmitSupport", label: "Post-Admit Support (Legacy)" },
+                    { key: "includeNetworkingEvents", label: "Networking Events (Legacy)" },
+                    { key: "isBusinessFocused", label: "Business Focused" },
+                    { key: "isActive", label: "Active" },
+                  ].map((item) => (
+                    <div key={item.key} className="flex items-center space-x-2">
+                      <input 
+                        type="checkbox" 
+                        id={`edit-${item.key}`} 
+                        name={item.key} 
+                        defaultChecked={editingPlan[item.key as keyof SubscriptionPlan] as boolean}
+                        className="rounded" 
+                      />
+                      <Label htmlFor={`edit-${item.key}`} className="font-normal cursor-pointer text-sm">{item.label}</Label>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="flex justify-end space-x-2">
+              <div className="flex justify-end space-x-2 pt-4 border-t">
                 <Button type="button" variant="outline" onClick={() => setEditingPlan(null)}>
                   Cancel
                 </Button>
