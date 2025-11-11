@@ -6,6 +6,15 @@ EduPath is an international education platform connecting students with global u
 
 ## Recent Changes
 
+### Phase 3: Subscription Plans Feature Display Overhaul (November 2025)
+- **Complete Feature Visibility:** Enhanced subscription plans page to display ALL 26 database features (up from 7), achieving 100% feature visibility. Features now organized into 6 logical categories: Access & Quotas, Application Support, Smart Tools, Financial Services, Visa & Travel, and Support & Mentorship.
+- **Icon-Free Design:** Completely removed all Lucide React icons (Star, Zap, Crown, Award, Globe, Users, Heart, etc.) from plans page and comparison table, replacing with clean text-based design using only emojis for category headers, achieving WCAG AA accessibility compliance.
+- **Feature Taxonomy System:** Created comprehensive feature management system (client/src/lib/plan-features.tsx) with 26 feature definitions, type-safe helper functions, custom formatters for tiers/arrays/booleans, and reusable components for consistent rendering across cards and tables.
+- **Enhanced Plan Cards:** Added expandable "View All Features" sections to plan cards showing all 26 features grouped by category with clear included (✓) and excluded (—) indicators, using collapsible UI for progressive disclosure without overwhelming users.
+- **Expanded Comparison Table:** Rebuilt comparison table to display all 26 features in 6 categorized sections with emoji headers, zebra striping for readability, sticky headers/columns for easy navigation, and responsive horizontal scroll for mobile devices.
+- **Alternative Visual Differentiation:** Replaced icon-based plan identification with color-coded gradients, accent borders (border-l-4), gradient typography, and enhanced shadows, maintaining clear visual hierarchy and brand distinction without icons.
+- **Industry Best Practices:** Implemented SaaS/education platform pricing page patterns including grouped features, clear access indicators, tier badges, formatted values (unlimited, tiers, support channels), and mobile-responsive design following Coursera/MasterClass/LinkedIn Learning standards.
+
 ### Phase 2: UX/UI Improvements (November 2025)
 - **Premium Badge System Removal:** Completely removed ornate SVG badge system (Platinum Elite, Aurum Luxury, etc.) from subscription plans, consolidating to simple icon-based logo selector. Created database migration (0025_map_premium_badges_to_icons.sql) with runbook to map legacy badge keys to modern icon keys. Added defensive fallback mapping in PlanLogoSelector for backward compatibility. Deleted PremiumBadges.tsx (564 lines) and updated all documentation files.
 - **Payment History Fix:** Refactored admin payment history query to use immutable `payments` ledger table instead of mutable `userSubscriptions` table, now displaying complete transaction history including initial purchases, upgrades, and renewals with color-coded payment type badges.
