@@ -4,74 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Check, X, Star, Zap, Crown, Award, Globe, Users, Heart, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/currency";
-
-interface SubscriptionPlan {
-  id: string;
-  name: string;
-  price: string;
-  currency: string;
-  description: string;
-  logo?: string;
-  features?: string[];
-  maxUniversities: number;
-  maxCountries: number;
-  turnaroundDays?: number;
-  
-  // Support & Mentorship (modified from supportType to supportTypes)
-  supportType?: string; // Deprecated - for backward compatibility
-  supportTypes?: string[]; // New multi-select field
-  includeDedicatedManager?: boolean;
-  
-  // Core Application Services
-  includeCourseCountrySelection?: boolean;
-  includeUniversityShortlisting?: boolean;
-  includeExpertEditing?: boolean;
-  includeOneOnOneEditing?: boolean;
-  includeProfileBuilding?: boolean;
-  includeTop50Counselling?: boolean;
-  
-  // Phozos AI
-  phozosAiTier?: 'none' | 'basic' | 'pro' | 'ultra';
-  
-  // Financial & Scholarship Services
-  includeScholarshipPlanning?: boolean;
-  includeLoanAssistance?: boolean;
-  includeForexServices?: boolean;
-  
-  // Visa & Post-Admission
-  includeVisaSupport?: boolean;
-  includePreDepartureSession?: boolean;
-  includeMockInterview?: boolean;
-  includeFlightAccommodation?: boolean;
-  
-  // Phozos Prep
-  phozosPrepTier?: 'none' | 'basic' | 'pro' | 'ultra';
-  phozosPrepDescription?: string;
-  
-  // Existing fields
-  isActive: boolean;
-  displayOrder: number;
-  tierLevel?: number;
-  isLifetime?: boolean;
-}
+import { 
+  getFeatureCategories, 
+  getFeatureValue, 
+  formatFeatureValue,
+  type SubscriptionPlan 
+} from "@/lib/plan-features";
 
 interface PlanComparisonTableProps {
   plans: SubscriptionPlan[];
   onSelectPlan?: (planId: string) => void;
 }
-
-const getPlanIcon = (planName: string) => {
-  switch (planName.toLowerCase()) {
-    case 'explorer': return Star;
-    case 'achiever': return Zap;
-    case 'champion': return Crown;
-    case 'legend': return Award;
-    default: return Star;
-  }
-};
 
 const getPlanColor = (planName: string) => {
   switch (planName.toLowerCase()) {
@@ -86,7 +31,6 @@ const getPlanColor = (planName: string) => {
 export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTableProps) {
   const [selectedPlans, setSelectedPlans] = useState<string[]>([]);
 
-  // Toggle plan selection
   const togglePlanSelection = (planId: string) => {
     setSelectedPlans(prev => {
       if (prev.includes(planId)) {
@@ -98,15 +42,15 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
     });
   };
 
-  // Clear all selections
   const clearSelection = () => {
     setSelectedPlans([]);
   };
 
-  // Get plans selected for comparison
   const comparisonPlans = useMemo(() => {
     return plans.filter(plan => selectedPlans.includes(plan.id));
   }, [plans, selectedPlans]);
+
+  const featureCategories = getFeatureCategories();
 
   return (
     <div className="space-y-8">
@@ -114,8 +58,7 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
       <Card className="border-2 border-primary/20 bg-gradient-to-br from-cream via-background to-primary/5">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2">
-            <ArrowRight className="w-6 h-6 text-primary" />
-            Compare Plans
+            → Compare Plans
           </CardTitle>
           <CardDescription>
             Select 2-4 plans to compare side by side. Choose the perfect plan for your journey.
@@ -128,7 +71,6 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                 .filter(plan => plan.isActive)
                 .sort((a, b) => parseFloat(a.price) - parseFloat(b.price))
                 .map(plan => {
-                  const PlanIcon = getPlanIcon(plan.name);
                   const gradientColor = getPlanColor(plan.name);
                   const isSelected = selectedPlans.includes(plan.id);
                   const isMaxSelected = selectedPlans.length >= 4 && !isSelected;
@@ -154,13 +96,10 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                           className="mt-1"
                         />
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-r ${gradientColor} p-0.5`}>
-                              <div className="w-full h-full rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center">
-                                <PlanIcon className="w-4 h-4 text-gray-700 dark:text-gray-300" />
-                              </div>
-                            </div>
-                            <span className="font-semibold text-foreground">{plan.name}</span>
+                          <div className="mb-2">
+                            <span className={`font-semibold text-lg bg-gradient-to-r ${gradientColor} bg-clip-text text-transparent`}>
+                              {plan.name}
+                            </span>
                           </div>
                           <div className="text-2xl font-bold text-primary">
                             {parseFloat(plan.price) === 0 ? (
@@ -199,39 +138,34 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
       {comparisonPlans.length >= 2 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl">Plan Comparison</CardTitle>
+            <CardTitle className="text-xl">Detailed Feature Comparison</CardTitle>
+            <CardDescription>
+              Compare all features across {comparisonPlans.length} selected plans
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[200px] lg:w-[300px] sticky left-0 bg-background z-10">
+                    <TableHead className="w-[200px] lg:w-[300px] sticky left-0 bg-background z-10 border-r">
                       Feature
                     </TableHead>
                     {comparisonPlans.map(plan => {
-                      const PlanIcon = getPlanIcon(plan.name);
                       const gradientColor = getPlanColor(plan.name);
 
                       return (
                         <TableHead key={plan.id} className="text-center min-w-[150px]">
                           <div className="space-y-2">
-                            <div className="flex justify-center">
-                              <div className={`w-10 h-10 rounded-lg bg-gradient-to-r ${gradientColor} p-0.5`}>
-                                <div className="w-full h-full rounded-lg bg-white dark:bg-gray-900 flex items-center justify-center">
-                                  <PlanIcon className="w-5 h-5 text-gray-700 dark:text-gray-300" />
-                                </div>
-                              </div>
+                            <div className={`font-bold text-lg bg-gradient-to-r ${gradientColor} bg-clip-text text-transparent`}>
+                              {plan.name}
                             </div>
-                            <div>
-                              <div className="font-semibold text-foreground">{plan.name}</div>
-                              <div className="text-lg font-bold text-primary">
-                                {parseFloat(plan.price) === 0 ? (
-                                  'Free'
-                                ) : (
-                                  `${formatCurrency(plan.price, plan.currency)}/yr`
-                                )}
-                              </div>
+                            <div className="text-lg font-bold text-primary">
+                              {parseFloat(plan.price) === 0 ? (
+                                'Free'
+                              ) : (
+                                `${formatCurrency(plan.price, plan.currency)}/yr`
+                              )}
                             </div>
                             {onSelectPlan && (
                               <Button
@@ -239,7 +173,7 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                                 className={`w-full bg-gradient-to-r ${gradientColor} text-white`}
                                 onClick={() => onSelectPlan(plan.id)}
                               >
-                                Select
+                                Select Plan
                               </Button>
                             )}
                           </div>
@@ -249,119 +183,64 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {/* Plan Details Rows */}
-                  <TableRow className="bg-muted/30">
-                    <TableCell className="font-semibold sticky left-0 bg-muted/30 z-10">
-                      <div className="flex items-center gap-2">
-                        <Globe className="w-4 h-4 text-primary" />
-                        Universities
-                      </div>
-                    </TableCell>
-                    {comparisonPlans.map(plan => (
-                      <TableCell key={plan.id} className="text-center font-semibold">
-                        {plan.maxUniversities === 999999 ? 'Unlimited' : plan.maxUniversities}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-
-                  <TableRow>
-                    <TableCell className="font-semibold sticky left-0 bg-background z-10">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-primary" />
-                        Countries
-                      </div>
-                    </TableCell>
-                    {comparisonPlans.map(plan => (
-                      <TableCell key={plan.id} className="text-center font-semibold">
-                        {plan.maxCountries === 999 ? 'All' : plan.maxCountries}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-
-                  <TableRow className="bg-muted/30">
-                    <TableCell className="font-semibold sticky left-0 bg-muted/30 z-10">
-                      <div className="flex items-center gap-2">
-                        <Heart className="w-4 h-4 text-primary" />
-                        Support Type
-                      </div>
-                    </TableCell>
-                    {comparisonPlans.map(plan => (
-                      <TableCell key={plan.id} className="text-center">
-                        <div className="flex flex-wrap gap-1 justify-center">
-                          {plan.supportTypes && plan.supportTypes.length > 0 ? (
-                            plan.supportTypes.map((type) => (
-                              <Badge key={type} variant="secondary" className="text-xs capitalize">
-                                {type}
-                              </Badge>
-                            ))
-                          ) : plan.supportType ? (
-                            <Badge variant="secondary" className="text-xs capitalize">
-                              {plan.supportType}
-                            </Badge>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">Email</span>
-                          )}
-                        </div>
-                      </TableCell>
-                    ))}
-                  </TableRow>
-
-                  <TableRow>
-                    <TableCell className="font-semibold sticky left-0 bg-background z-10">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">🤖</span>
-                        Phozos AI Tier
-                      </div>
-                    </TableCell>
-                    {comparisonPlans.map(plan => (
-                      <TableCell key={plan.id} className="text-center">
-                        {plan.phozosAiTier && plan.phozosAiTier !== 'none' ? (
-                          <Badge 
-                            variant="outline" 
-                            className={`text-xs font-semibold ${
-                              plan.phozosAiTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
-                              plan.phozosAiTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
-                              'border-green-500 text-green-700 dark:text-green-400'
-                            }`}
+                  {featureCategories.map((category, categoryIndex) => (
+                    <React.Fragment key={category.id}>
+                      {/* Category Header Row */}
+                      <TableRow className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-t-2 border-primary/20">
+                        <TableCell 
+                          colSpan={comparisonPlans.length + 1} 
+                          className="font-bold text-foreground py-4 sticky left-0 z-10"
+                        >
+                          <div className="flex items-center gap-3 text-lg">
+                            <span className="text-2xl">{category.emoji}</span>
+                            <span>{category.name}</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      
+                      {/* Feature Rows */}
+                      {category.features.map((feature, featureIndex) => {
+                        const isEvenRow = featureIndex % 2 === 0;
+                        
+                        return (
+                          <TableRow 
+                            key={feature.key}
+                            className={isEvenRow ? 'bg-muted/30' : ''}
                           >
-                            {plan.phozosAiTier.toUpperCase()}
-                          </Badge>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Not included</span>
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-
-                  <TableRow className="bg-muted/30">
-                    <TableCell className="font-semibold sticky left-0 bg-muted/30 z-10">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">📚</span>
-                        Phozos Prep Tier
+                            <TableCell className={`font-medium sticky left-0 z-10 border-r ${isEvenRow ? 'bg-muted/30' : 'bg-background'}`}>
+                              {feature.label}
+                            </TableCell>
+                            {comparisonPlans.map(plan => {
+                              const value = getFeatureValue(plan, feature.key);
+                              const formattedValue = formatFeatureValue(value, feature.key, feature);
+                              
+                              return (
+                                <TableCell key={plan.id} className="text-center">
+                                  {formattedValue}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                  
+                  {/* Additional Info Row */}
+                  <TableRow className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-t-2 border-primary/20">
+                    <TableCell 
+                      colSpan={comparisonPlans.length + 1} 
+                      className="font-bold text-foreground py-4 sticky left-0 z-10"
+                    >
+                      <div className="flex items-center gap-3 text-lg">
+                        <span className="text-2xl">ℹ️</span>
+                        <span>Additional Information</span>
                       </div>
                     </TableCell>
-                    {comparisonPlans.map(plan => (
-                      <TableCell key={plan.id} className="text-center">
-                        {plan.phozosPrepTier && plan.phozosPrepTier !== 'none' ? (
-                          <Badge 
-                            variant="outline" 
-                            className={`text-xs font-semibold ${
-                              plan.phozosPrepTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
-                              plan.phozosPrepTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
-                              'border-green-500 text-green-700 dark:text-green-400'
-                            }`}
-                          >
-                            {plan.phozosPrepTier.toUpperCase()}
-                          </Badge>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Not included</span>
-                        )}
-                      </TableCell>
-                    ))}
                   </TableRow>
-
-                  <TableRow>
-                    <TableCell className="font-semibold sticky left-0 bg-background z-10">
+                  
+                  <TableRow className="bg-muted/30">
+                    <TableCell className="font-medium sticky left-0 bg-muted/30 z-10 border-r">
                       Tier Level
                     </TableCell>
                     {comparisonPlans.map(plan => (
@@ -371,14 +250,14 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                     ))}
                   </TableRow>
 
-                  <TableRow className="bg-muted/30">
-                    <TableCell className="font-semibold sticky left-0 bg-muted/30 z-10">
+                  <TableRow>
+                    <TableCell className="font-medium sticky left-0 bg-background z-10 border-r">
                       Access Type
                     </TableCell>
                     {comparisonPlans.map(plan => (
                       <TableCell key={plan.id} className="text-center">
                         {plan.isLifetime ? (
-                          <Badge className="bg-green-600 text-white">Lifetime</Badge>
+                          <Badge className="bg-green-600 text-white">Lifetime Access</Badge>
                         ) : (
                           <Badge variant="secondary">Standard</Badge>
                         )}
@@ -394,9 +273,13 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
 
       {selectedPlans.length === 1 && (
         <Card className="border-2 border-dashed border-primary/30 bg-primary/5">
-          <CardContent className="py-8 text-center">
+          <CardContent className="py-12 text-center">
+            <div className="text-4xl mb-4">👉</div>
+            <p className="text-lg font-semibold text-foreground mb-2">
+              Select at least one more plan
+            </p>
             <p className="text-muted-foreground">
-              Select at least one more plan to start comparing features
+              Choose 2-4 plans to see a detailed feature comparison
             </p>
           </CardContent>
         </Card>
@@ -404,7 +287,11 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
 
       {selectedPlans.length === 0 && (
         <Card className="border-2 border-dashed border-border/50">
-          <CardContent className="py-8 text-center">
+          <CardContent className="py-12 text-center">
+            <div className="text-4xl mb-4">📊</div>
+            <p className="text-lg font-semibold text-foreground mb-2">
+              No plans selected
+            </p>
             <p className="text-muted-foreground">
               Select 2-4 plans above to see a detailed feature comparison
             </p>

@@ -1,11 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "wouter";
 import { useApiQuery } from "@/hooks/api-hooks";
-import { api } from "@/lib/api-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Star, Crown, Zap, Award, Sparkles, Globe, Users, Heart, Rocket, TrendingUp, CheckCircle2, ArrowUp } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -17,59 +16,15 @@ import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { UpgradeConfirmationDialog } from "@/components/UpgradeConfirmationDialog";
 import { PlanComparisonTable } from "@/components/public/PlanComparisonTable";
 import { formatCurrency, formatMonthlyFromYearly } from "@/lib/currency";
-
-interface SubscriptionPlan {
-  id: string;
-  name: string;
-  price: string;
-  currency: string;
-  description: string;
-  logo?: string;
-  features?: string[];
-  maxUniversities: number;
-  maxCountries: number;
-  turnaroundDays?: number;
-  
-  // Support & Mentorship (modified from supportType to supportTypes)
-  supportType?: string; // Deprecated - for backward compatibility
-  supportTypes?: string[]; // New multi-select field
-  includeDedicatedManager?: boolean;
-  
-  // Core Application Services
-  includeCourseCountrySelection?: boolean;
-  includeUniversityShortlisting?: boolean;
-  includeExpertEditing?: boolean;
-  includeOneOnOneEditing?: boolean;
-  includeProfileBuilding?: boolean;
-  includeTop50Counselling?: boolean;
-  
-  // Phozos AI
-  phozosAiTier?: 'none' | 'basic' | 'pro' | 'ultra';
-  
-  // Financial & Scholarship Services
-  includeScholarshipPlanning?: boolean;
-  includeLoanAssistance?: boolean;
-  includeForexServices?: boolean;
-  
-  // Visa & Post-Admission
-  includeVisaSupport?: boolean;
-  includePreDepartureSession?: boolean;
-  includeMockInterview?: boolean;
-  includeFlightAccommodation?: boolean;
-  
-  // Phozos Prep
-  phozosPrepTier?: 'none' | 'basic' | 'pro' | 'ultra';
-  phozosPrepDescription?: string;
-  
-  // Existing fields
-  isActive: boolean;
-  displayOrder: number;
-  tierLevel?: number;
-  isLifetime?: boolean;
-}
+import { 
+  getFeatureCategories, 
+  getPrimaryFeatures, 
+  getFeatureValue, 
+  formatFeatureValue,
+  type SubscriptionPlan 
+} from "@/lib/plan-features";
 
 export default function PublicPlans() {
-  // Fetch active subscription plans for public display
   const { data: plans = [], isLoading } = useApiQuery<SubscriptionPlan[]>(
     ["/api/subscription/plans"],
     '/api/subscription/plans'
@@ -88,7 +43,6 @@ export default function PublicPlans() {
 
   const handlePurchasePlan = async (plan: SubscriptionPlan) => {
     if (!user) {
-      // Redirect to login
       window.location.href = '/auth?redirect=/plans';
       return;
     }
@@ -97,7 +51,7 @@ export default function PublicPlans() {
       await initiatePayment(plan.id, plan.name, {
         name: `${user.firstName} ${user.lastName}`,
         email: user.email,
-        contact: undefined, // Phone not available on base User type
+        contact: undefined,
       });
     } catch (error) {
       console.error('Purchase failed:', error);
@@ -131,16 +85,6 @@ export default function PublicPlans() {
     }
   ];
 
-  const getPlanIcon = (planName: string) => {
-    switch (planName.toLowerCase()) {
-      case 'explorer': return Star;
-      case 'achiever': return Zap;
-      case 'champion': return Crown;
-      case 'legend': return Award;
-      default: return Star;
-    }
-  };
-
   const getPlanColor = (planName: string) => {
     switch (planName.toLowerCase()) {
       case 'explorer': return 'from-blue-500 to-cyan-500';
@@ -148,6 +92,16 @@ export default function PublicPlans() {
       case 'champion': return 'from-purple-500 to-pink-500';
       case 'legend': return 'from-amber-500 to-orange-500';
       default: return 'from-gray-500 to-slate-600';
+    }
+  };
+
+  const getPlanAccentColor = (planName: string) => {
+    switch (planName.toLowerCase()) {
+      case 'explorer': return 'border-l-blue-500';
+      case 'achiever': return 'border-l-emerald-500';
+      case 'champion': return 'border-l-purple-500';
+      case 'legend': return 'border-l-amber-500';
+      default: return 'border-l-gray-500';
     }
   };
 
@@ -200,7 +154,7 @@ export default function PublicPlans() {
         <AppShell />
         <Breadcrumbs items={[{ label: 'Plans', href: '/plans' }]} />
       
-      {/* Hero Section - Enhanced with homepage styling */}
+      {/* Hero Section */}
       <section className="relative min-h-[70vh] flex items-center justify-center overflow-hidden bg-gradient-to-br from-cream via-background to-primary/5">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23000000%22%20fill-opacity%3D%220.04%22%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2230%22%20r%3D%222%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-40"></div>
         
@@ -217,29 +171,26 @@ export default function PublicPlans() {
               and premium support for your study abroad dreams.
             </p>
             
-            {/* Enhanced CTA Section */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
               <Badge variant="secondary" className="px-6 py-3 text-base font-semibold">
-                <Sparkles className="mr-2 w-4 h-4" />
-                Annual Billing - Save 20%
+                ✨ Annual Billing - Save 20%
               </Badge>
               <Badge variant="outline" className="px-6 py-3 text-base font-semibold border-primary/20">
-                <Heart className="mr-2 w-4 h-4 text-red-500" />
-                Loved by 50K+ Students
+                ❤️ Loved by 50K+ Students
               </Badge>
             </div>
 
             {/* Quick Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto">
               {[
-                { value: "500+", label: "Universities", icon: Globe },
-                { value: "50K+", label: "Students", icon: Users },
-                { value: "95%", label: "Success Rate", icon: TrendingUp },
-                { value: "40+", label: "Countries", icon: Star },
+                { value: "500+", label: "Universities", emoji: "🌍" },
+                { value: "50K+", label: "Students", emoji: "👥" },
+                { value: "95%", label: "Success Rate", emoji: "📈" },
+                { value: "40+", label: "Countries", emoji: "⭐" },
               ].map((stat) => (
                 <div key={stat.label} className="text-center group hover:scale-105 transition-transform duration-200">
-                  <div className="mb-2 flex justify-center">
-                    <stat.icon className="w-8 h-8 text-primary group-hover:text-amber-500 transition-colors duration-200" />
+                  <div className="mb-2 text-4xl">
+                    {stat.emoji}
                   </div>
                   <div className="text-2xl md:text-3xl font-bold text-primary mb-1">
                     {stat.value}
@@ -257,10 +208,9 @@ export default function PublicPlans() {
         <div className="absolute top-1/2 left-1/4 w-16 h-16 bg-purple-500/20 rounded-full blur-xl animate-pulse-slow" style={{ animationDelay: "2s" }}></div>
       </section>
 
-      {/* Pricing Plans - Enhanced Design */}
+      {/* Pricing Plans */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-background relative">
         <div className="max-w-7xl mx-auto">
-          {/* Section Header */}
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
               Plans That Grow With Your
@@ -277,17 +227,19 @@ export default function PublicPlans() {
               .sort((a, b) => parseFloat(a.price) - parseFloat(b.price))
               .map((plan, index) => {
                 const gradientColor = getPlanColor(plan.name);
+                const accentColor = getPlanAccentColor(plan.name);
                 const backgroundGradient = getPlanBackgroundGradient(plan.name);
-                const PlanIcon = getPlanIcon(plan.name);
-                const isPopular = index === 1; // Make second plan (Achiever) most popular
+                const isPopular = index === 1;
                 const isFree = parseFloat(plan.price) === 0;
                 
-                // Determine subscription status
                 const currentPlanId = userSubscription?.subscription?.planId;
                 const currentTierLevel = userSubscription?.plan?.tierLevel || 0;
                 const isCurrentPlan = currentPlanId === plan.id;
                 const canUpgrade = user && currentPlanId && plan.tierLevel && plan.tierLevel > currentTierLevel;
                 const isLowerTier = user && currentPlanId && plan.tierLevel && plan.tierLevel <= currentTierLevel && !isCurrentPlan;
+                
+                const primaryFeatures = getPrimaryFeatures(plan);
+                const featureCategories = getFeatureCategories();
                 
                 return (
                   <Card 
@@ -296,32 +248,27 @@ export default function PublicPlans() {
                       relative overflow-hidden group hover:shadow-2xl transition-all duration-500 
                       ${isPopular ? 'ring-2 ring-primary shadow-2xl scale-105 z-10' : 'hover:scale-105'} 
                       ${backgroundGradient}
+                      border-l-4 ${accentColor}
                       border-2 ${isPopular ? 'border-primary/20' : 'border-border/50 hover:border-primary/20'}
                     `}
                     data-testid={`plan-card-${plan.name.toLowerCase()}`}
                   >
-                    {/* Glow Effect */}
                     <div className={`absolute inset-0 bg-gradient-to-r ${gradientColor} opacity-0 group-hover:opacity-10 transition-opacity duration-500`}></div>
                     
-                    {/* Popular Badge */}
                     {isPopular && (
                       <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-20">
                         <Badge className="bg-gradient-to-r from-primary to-amber-500 text-white px-6 py-2 font-semibold shadow-lg">
-                          <Sparkles className="mr-2 w-4 h-4" />
-                          Most Popular
+                          ✨ Most Popular
                         </Badge>
                       </div>
                     )}
                     
-                    {/* Current Plan Badge */}
                     {isCurrentPlan && (
                       <Badge className="absolute top-4 left-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white px-4 py-2 shadow-lg z-20 flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4" />
-                        Current Plan
+                        ✓ Current Plan
                       </Badge>
                     )}
                     
-                    {/* Lifetime Access Badge */}
                     {plan.isLifetime && !isCurrentPlan && (
                       <Badge className="absolute top-4 right-4 bg-green-600 text-white px-3 py-1">
                         Lifetime Access
@@ -329,23 +276,13 @@ export default function PublicPlans() {
                     )}
                     
                     <CardHeader className="text-center pb-6 relative z-10">
-                      {/* Plan Icon with Gradient Background */}
-                      <div className="mb-6 flex justify-center">
-                        <div className={`w-20 h-20 rounded-2xl bg-gradient-to-r ${gradientColor} p-0.5 group-hover:scale-110 transition-transform duration-300`}>
-                          <div className="w-full h-full rounded-2xl bg-white dark:bg-gray-900 flex items-center justify-center">
-                            <PlanIcon className="w-10 h-10 text-gray-700 dark:text-gray-300" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <CardTitle className="text-2xl font-bold mb-2 group-hover:text-primary transition-colors duration-300">
+                      <CardTitle className={`text-3xl font-bold mb-2 bg-gradient-to-r ${gradientColor} bg-clip-text text-transparent`}>
                         {plan.name}
                       </CardTitle>
                       <CardDescription className="text-muted-foreground mb-6">
                         {plan.description}
                       </CardDescription>
                       
-                      {/* Pricing */}
                       <div className="mb-6">
                         <div className="flex items-baseline justify-center">
                           {isFree ? (
@@ -368,90 +305,49 @@ export default function PublicPlans() {
                     </CardHeader>
 
                     <CardContent className="space-y-6 relative z-10">
-                      {/* Key Stats with Icons */}
+                      {/* Primary Features */}
                       <div className="space-y-3 pb-6 border-b border-border/50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Globe className="w-4 h-4 text-primary" />
-                            <span className="text-sm text-muted-foreground">Universities</span>
-                          </div>
-                          <span className="font-semibold text-foreground">
-                            {plan.maxUniversities === 999999 ? 'Unlimited' : plan.maxUniversities}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Users className="w-4 h-4 text-primary" />
-                            <span className="text-sm text-muted-foreground">Countries</span>
-                          </div>
-                          <span className="font-semibold text-foreground">
-                            {plan.maxCountries === 999 ? 'All' : plan.maxCountries}
-                          </span>
-                        </div>
-                        
-                        {/* Support Types - Multiple Badges */}
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center space-x-2">
-                            <Heart className="w-4 h-4 text-primary mt-1" />
-                            <span className="text-sm text-muted-foreground">Support</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1 justify-end">
-                            {plan.supportTypes && plan.supportTypes.length > 0 ? (
-                              plan.supportTypes.map((type) => (
-                                <Badge key={type} variant="secondary" className="text-xs capitalize">
-                                  {type}
-                                </Badge>
-                              ))
-                            ) : plan.supportType ? (
-                              <Badge variant="secondary" className="text-xs capitalize">
-                                {plan.supportType}
-                              </Badge>
-                            ) : (
-                              <span className="font-semibold text-foreground text-sm">Email</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Phozos AI Tier - Only show if not 'none' */}
-                        {plan.phozosAiTier && plan.phozosAiTier !== 'none' && (
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm">🤖</span>
-                              <span className="text-sm text-muted-foreground">Phozos AI</span>
+                        {primaryFeatures.map((feature, idx) => (
+                          <div key={idx} className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">{feature.label}</span>
+                            <div className="font-semibold text-foreground text-sm">
+                              {feature.value}
                             </div>
-                            <Badge 
-                              variant="outline" 
-                              className={`text-xs font-semibold ${
-                                plan.phozosAiTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
-                                plan.phozosAiTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
-                                'border-green-500 text-green-700 dark:text-green-400'
-                              }`}
-                            >
-                              {plan.phozosAiTier.toUpperCase()}
-                            </Badge>
                           </div>
-                        )}
-
-                        {/* Phozos Prep Tier - Only show if not 'none' */}
-                        {plan.phozosPrepTier && plan.phozosPrepTier !== 'none' && (
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-sm">📚</span>
-                              <span className="text-sm text-muted-foreground">Phozos Prep</span>
-                            </div>
-                            <Badge 
-                              variant="outline" 
-                              className={`text-xs font-semibold ${
-                                plan.phozosPrepTier === 'ultra' ? 'border-purple-500 text-purple-700 dark:text-purple-400' :
-                                plan.phozosPrepTier === 'pro' ? 'border-blue-500 text-blue-700 dark:text-blue-400' :
-                                'border-green-500 text-green-700 dark:text-green-400'
-                              }`}
-                            >
-                              {plan.phozosPrepTier.toUpperCase()}
-                            </Badge>
-                          </div>
-                        )}
+                        ))}
                       </div>
+
+                      {/* Expandable All Features */}
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full text-primary hover:text-primary/80">
+                            View All Features →
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-6 pt-4">
+                          {featureCategories.map((category) => (
+                            <div key={category.id} className="space-y-2">
+                              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                <span>{category.emoji}</span>
+                                {category.name}
+                              </h4>
+                              <div className="space-y-2 pl-6">
+                                {category.features.map((feature) => {
+                                  const value = getFeatureValue(plan, feature.key);
+                                  const formattedValue = formatFeatureValue(value, feature.key, feature);
+                                  
+                                  return (
+                                    <div key={feature.key} className="flex items-start justify-between text-xs">
+                                      <span className="text-muted-foreground flex-1">{feature.label}</span>
+                                      <div className="ml-2">{formattedValue}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </CollapsibleContent>
+                      </Collapsible>
 
                       {/* CTA Button */}
                       <Button 
@@ -473,25 +369,13 @@ export default function PublicPlans() {
                       >
                         <div className="flex items-center justify-center space-x-2">
                           {isCurrentPlan ? (
-                            <>
-                              <CheckCircle2 className="w-5 h-5" />
-                              <span>Current Plan</span>
-                            </>
+                            <span>✓ Current Plan</span>
                           ) : isLowerTier ? (
-                            <>
-                              <Rocket className="w-5 h-5" />
-                              <span>Lower Tier</span>
-                            </>
+                            <span>Lower Tier</span>
                           ) : canUpgrade ? (
-                            <>
-                              <ArrowUp className="w-5 h-5" />
-                              <span>Upgrade Now</span>
-                            </>
+                            <span>↑ Upgrade Now</span>
                           ) : (
-                            <>
-                              <Rocket className="w-5 h-5" />
-                              <span>{isProcessing ? 'Processing...' : (isFree ? 'Get Started Free' : 'Purchase Lifetime Access')}</span>
-                            </>
+                            <span>{isProcessing ? 'Processing...' : (isFree ? 'Get Started Free' : 'Purchase Lifetime Access')}</span>
                           )}
                         </div>
                         {(isPopular || canUpgrade) && !isCurrentPlan && !isLowerTier && (
@@ -521,9 +405,8 @@ export default function PublicPlans() {
         </div>
       </section>
 
-      {/* FAQ Section - Enhanced Design */}
+      {/* FAQ Section */}
       <section className="py-20 bg-gradient-to-br from-cream via-background to-primary/5 relative overflow-hidden">
-        {/* Background Pattern */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23000000%22%20fill-opacity%3D%220.02%22%3E%3Ccircle%20cx%3D%2230%22%20cy%3D%2230%22%20r%3D%222%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-60"></div>
         
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -542,32 +425,32 @@ export default function PublicPlans() {
               {
                 question: "Can I change my plan anytime?",
                 answer: "Absolutely! You can upgrade or downgrade your plan at any time. Changes take effect immediately, and we'll prorate any differences.",
-                icon: Rocket
+                emoji: "🚀"
               },
               {
                 question: "Is there a free trial?",
                 answer: "Our Explorer plan includes free features to get you started. Experience our platform before committing to premium features.",
-                icon: Star
+                emoji: "⭐"
               },
               {
                 question: "What payment methods do you accept?",
                 answer: "We accept all major credit cards, PayPal, and bank transfers for annual plans. All payments are secured and encrypted.",
-                icon: Crown
+                emoji: "👑"
               },
               {
                 question: "Do you offer student discounts?",
                 answer: "Yes! We offer 20% student discounts on all plans. Simply contact our support team with your valid student ID to get started.",
-                icon: Heart
+                emoji: "❤️"
               },
               {
                 question: "What if I need to cancel?",
                 answer: "You can cancel anytime with no hidden fees. We offer a 30-day money-back guarantee if you're not completely satisfied.",
-                icon: Check
+                emoji: "✓"
               },
               {
                 question: "How does the university matching work?",
                 answer: "Our AI analyzes your profile, grades, preferences, and goals to recommend the best-fit universities with high acceptance probability.",
-                icon: Zap
+                emoji: "⚡"
               }
             ].map((faq, index) => (
               <Card 
@@ -577,8 +460,8 @@ export default function PublicPlans() {
               >
                 <CardContent className="p-6">
                   <div className="flex items-start space-x-4">
-                    <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-primary/10 to-amber-500/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
-                      <faq.icon className="w-6 h-6 text-primary group-hover:text-amber-500 transition-colors duration-300" />
+                    <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-primary/10 to-amber-500/10 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 text-2xl">
+                      {faq.emoji}
                     </div>
                     <div className="flex-1">
                       <h3 className="font-semibold text-foreground mb-3 group-hover:text-primary transition-colors duration-300">
@@ -592,7 +475,6 @@ export default function PublicPlans() {
             ))}
           </div>
 
-          {/* CTA Section */}
           <div className="text-center mt-16">
             <div className="bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm rounded-2xl p-8 border border-border/50">
               <h3 className="text-2xl font-bold text-foreground mb-4">
@@ -602,14 +484,12 @@ export default function PublicPlans() {
                 Our support team is here to help you find the perfect plan for your educational journey.
               </p>
               <Button size="lg" className="px-8 py-4 bg-gradient-to-r from-primary to-amber-500 hover:from-primary/90 hover:to-amber-500/90 text-white font-semibold shadow-lg">
-                <Heart className="mr-2 w-5 h-5" />
-                Contact Support
+                ❤️ Contact Support
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Floating Elements */}
         <div className="absolute top-10 right-10 w-20 h-20 bg-amber-500/10 rounded-full blur-xl animate-pulse-slow"></div>
         <div className="absolute bottom-10 left-10 w-16 h-16 bg-primary/10 rounded-full blur-xl animate-pulse-slow" style={{ animationDelay: "1.5s" }}></div>
       </section>
@@ -629,8 +509,8 @@ export default function PublicPlans() {
               <Card className="group h-full border-2 hover:border-primary/50 hover:shadow-xl transition-all duration-300 cursor-pointer">
                 <CardContent className="p-8">
                   <div className="flex items-start gap-4 mb-4">
-                    <div className="w-16 h-16 bg-gradient-to-r from-primary to-purple-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
-                      <Globe className="w-8 h-8 text-white" />
+                    <div className="w-16 h-16 bg-gradient-to-r from-primary to-purple-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 text-3xl">
+                      🌍
                     </div>
                     <div className="flex-1">
                       <h3 className="text-2xl font-bold mb-2 group-hover:text-primary transition-colors">
@@ -652,8 +532,8 @@ export default function PublicPlans() {
               <Card className="group h-full border-2 hover:border-primary/50 hover:shadow-xl transition-all duration-300 cursor-pointer">
                 <CardContent className="p-8">
                   <div className="flex items-start gap-4 mb-4">
-                    <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300">
-                      <TrendingUp className="w-8 h-8 text-white" />
+                    <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform duration-300 text-3xl">
+                      📈
                     </div>
                     <div className="flex-1">
                       <h3 className="text-2xl font-bold mb-2 group-hover:text-primary transition-colors">
@@ -677,7 +557,6 @@ export default function PublicPlans() {
       <Footer />
       </div>
 
-      {/* Upgrade Confirmation Dialog */}
       <UpgradeConfirmationDialog
         open={showUpgradeDialog}
         onOpenChange={cancelUpgrade}
