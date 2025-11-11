@@ -38,7 +38,8 @@ interface PlanVersion {
   activeSubscribers: number;
   createdAt: string;
   deprecatedAt: string | null;
-  features: string[];
+  features?: string[] | null;
+  logo?: string | null;
   maxUniversities?: number;
   maxCountries?: number;
   universityTier?: string;
@@ -352,7 +353,7 @@ export default function PlanVersionHistory({ basePlanId, onVersionSelect }: Plan
                     Price: {rollbackDialog.currentVersion.currency || 'INR'} {rollbackDialog.currentVersion.price} → {rollbackDialog.targetVersion.currency || 'INR'} {rollbackDialog.targetVersion.price}
                   </li>
                 )}
-                {JSON.stringify(rollbackDialog.currentVersion.features) !== JSON.stringify(rollbackDialog.targetVersion.features) && (
+                {JSON.stringify(rollbackDialog.currentVersion.features ?? null) !== JSON.stringify(rollbackDialog.targetVersion.features ?? null) && (
                   <li>Features will be reverted to v{rollbackDialog.targetVersion.version}</li>
                 )}
                 {rollbackDialog.currentVersion.maxUniversities !== rollbackDialog.targetVersion.maxUniversities && (

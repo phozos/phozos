@@ -841,8 +841,10 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   currency: text("currency").notNull().default("INR"),
   description: text("description"),
-  logo: text("logo").default("graduation-cap"), // Plan logo identifier
-  features: jsonb("features").$type<string[]>().notNull(),
+  // @deprecated (2025-11-11) Logo field is deprecated and will be removed in a future version. UI no longer displays plan logos.
+  logo: text("logo").default("graduation-cap"),
+  // @deprecated (2025-11-11) Features field is deprecated and will be removed in a future version. Plan features are now represented through granular boolean fields.
+  features: jsonb("features").$type<string[]>(),
   tierLevel: integer("tier_level").notNull(),
   isLifetime: boolean("is_lifetime").default(true),
   maxUniversities: integer("max_universities").notNull(),

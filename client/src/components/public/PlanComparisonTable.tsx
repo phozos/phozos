@@ -14,8 +14,8 @@ interface SubscriptionPlan {
   price: string;
   currency: string;
   description: string;
-  logo: string;
-  features: string[];
+  logo?: string;
+  features?: string[];
   maxUniversities: number;
   maxCountries: number;
   turnaroundDays?: number;
@@ -85,7 +85,6 @@ const getPlanColor = (planName: string) => {
 
 export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTableProps) {
   const [selectedPlans, setSelectedPlans] = useState<string[]>([]);
-  const [showOnlyDifferences, setShowOnlyDifferences] = useState(false);
 
   // Toggle plan selection
   const togglePlanSelection = (planId: string) => {
@@ -104,40 +103,10 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
     setSelectedPlans([]);
   };
 
-  // Get all unique features from selected plans
-  const getAllFeatures = (comparePlans: SubscriptionPlan[]): string[] => {
-    const featureSet = new Set<string>();
-    comparePlans.forEach(plan => {
-      plan.features.forEach(feature => featureSet.add(feature));
-    });
-    return Array.from(featureSet).sort();
-  };
-
-  // Check if a plan has a specific feature
-  const planHasFeature = (plan: SubscriptionPlan, feature: string): boolean => {
-    return plan.features.includes(feature);
-  };
-
-  // Check if a feature differs across selected plans
-  const featureDiffers = (feature: string, comparePlans: SubscriptionPlan[]): boolean => {
-    if (comparePlans.length < 2) return false;
-    const firstPlanHasIt = planHasFeature(comparePlans[0], feature);
-    return comparePlans.some(plan => planHasFeature(plan, feature) !== firstPlanHasIt);
-  };
-
   // Get plans selected for comparison
   const comparisonPlans = useMemo(() => {
     return plans.filter(plan => selectedPlans.includes(plan.id));
   }, [plans, selectedPlans]);
-
-  // Get all features to display
-  const allFeatures = useMemo(() => {
-    const features = getAllFeatures(comparisonPlans);
-    if (showOnlyDifferences) {
-      return features.filter(feature => featureDiffers(feature, comparisonPlans));
-    }
-    return features;
-  }, [comparisonPlans, showOnlyDifferences]);
 
   return (
     <div className="space-y-8">
@@ -230,16 +199,7 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
       {comparisonPlans.length >= 2 && (
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl">Feature Comparison</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowOnlyDifferences(!showOnlyDifferences)}
-              >
-                {showOnlyDifferences ? 'Show All Features' : 'Show Only Differences'}
-              </Button>
-            </div>
+            <CardTitle className="text-xl">Plan Comparison</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -425,65 +385,6 @@ export function PlanComparisonTable({ plans, onSelectPlan }: PlanComparisonTable
                       </TableCell>
                     ))}
                   </TableRow>
-
-                  {/* Features Rows */}
-                  {allFeatures.length > 0 && (
-                    <TableRow>
-                      <TableCell colSpan={comparisonPlans.length + 1} className="bg-primary/5 font-semibold text-primary">
-                        Features & Benefits
-                      </TableCell>
-                    </TableRow>
-                  )}
-
-                  {allFeatures.map((feature, index) => {
-                    const differs = featureDiffers(feature, comparisonPlans);
-
-                    return (
-                      <TableRow
-                        key={feature}
-                        className={cn(
-                          index % 2 === 0 ? 'bg-muted/20' : 'bg-background',
-                          differs && 'border-l-4 border-l-amber-500'
-                        )}
-                      >
-                        <TableCell className={cn(
-                          "sticky left-0 z-10",
-                          index % 2 === 0 ? 'bg-muted/20' : 'bg-background'
-                        )}>
-                          {feature}
-                        </TableCell>
-                        {comparisonPlans.map(plan => {
-                          const hasFeature = planHasFeature(plan, feature);
-
-                          return (
-                            <TableCell key={plan.id} className="text-center">
-                              {hasFeature ? (
-                                <div className="flex justify-center">
-                                  <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                                    <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="flex justify-center">
-                                  <div className="w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                                    <X className="w-4 h-4 text-gray-400" />
-                                  </div>
-                                </div>
-                              )}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })}
-
-                  {showOnlyDifferences && allFeatures.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={comparisonPlans.length + 1} className="text-center py-8 text-muted-foreground">
-                        All features are identical across selected plans. Toggle to show all features.
-                      </TableCell>
-                    </TableRow>
-                  )}
                 </TableBody>
               </Table>
             </div>

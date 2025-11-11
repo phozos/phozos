@@ -18,7 +18,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History, Inbox, Info, BookOpen, MessageCircle, Brain, Banknote, Plane, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
-import { PlanLogoSelector, PlanLogoDisplay } from "@/components/PlanLogoSelector";
 import { useAuth } from "@/hooks/useAuth";
 import PlanVersionHistory from "@/components/admin/PlanVersionHistory";
 import PriceUpdateDialog from "@/components/admin/PriceUpdateDialog";
@@ -33,8 +32,8 @@ interface SubscriptionPlan {
   price: string;
   currency: string;
   description: string;
-  logo: string;
-  features: string[];
+  logo?: string;
+  features?: string[];
   maxUniversities: number;
   maxCountries: number;
   universityTier: string;
@@ -164,8 +163,6 @@ interface FailedPayment {
 export default function SubscriptionPlans() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
-  const [selectedLogo, setSelectedLogo] = useState<string>("diamond");
-  const [editSelectedLogo, setEditSelectedLogo] = useState<string>("diamond");
   
   const [selectedSupportTypes, setSelectedSupportTypes] = useState<string[]>(["email"]);
   const [editSupportTypes, setEditSupportTypes] = useState<string[]>(["email"]);
@@ -374,8 +371,6 @@ export default function SubscriptionPlans() {
       price: formData.get("price") as string,
       currency: formData.get("currency") as string,
       description: formData.get("description") as string,
-      logo: selectedLogo,
-      features: (formData.get("features") as string).split("\n").filter(f => f.trim()),
       maxUniversities: parseInt(formData.get("maxUniversities") as string),
       maxCountries: parseInt(formData.get("maxCountries") as string),
       universityTier: formData.get("universityTier") as string,
@@ -423,8 +418,6 @@ export default function SubscriptionPlans() {
       price: formData.get("price") as string,
       currency: formData.get("currency") as string,
       description: formData.get("description") as string,
-      logo: editSelectedLogo,
-      features: (formData.get("features") as string).split("\n").filter(f => f.trim()),
       maxUniversities: parseInt(formData.get("maxUniversities") as string),
       maxCountries: parseInt(formData.get("maxCountries") as string),
       universityTier: formData.get("universityTier") as string,
@@ -623,16 +616,6 @@ export default function SubscriptionPlans() {
                 <div>
                   <Label htmlFor="description">Description</Label>
                   <Textarea id="description" name="description" />
-                </div>
-
-                <PlanLogoSelector 
-                  selectedLogo={selectedLogo} 
-                  onLogoChange={setSelectedLogo} 
-                />
-
-                <div>
-                  <Label htmlFor="features">Features (one per line)</Label>
-                  <Textarea id="features" name="features" rows={4} />
                 </div>
               </div>
 
@@ -910,10 +893,7 @@ export default function SubscriptionPlans() {
               <Card key={plan.id} className={`relative ${!plan.isActive ? 'opacity-60' : ''}`}>
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <PlanLogoDisplay logo={plan.logo || "diamond"} className="w-10 h-10" showGradient={true} />
-                      <CardTitle className="text-lg">{plan.name}</CardTitle>
-                    </div>
+                    <CardTitle className="text-lg">{plan.name}</CardTitle>
                     <Badge className={getSupportBadgeColor(plan.supportType)}>
                       {plan.supportType}
                     </Badge>
@@ -933,21 +913,6 @@ export default function SubscriptionPlans() {
                       Turnaround: <span className="font-semibold">{plan.turnaroundDays} days</span>
                     </div>
                   </div>
-                  
-                  <div className="space-y-1">
-                    <h4 className="font-semibold text-sm">Features:</h4>
-                    <ul className="text-xs space-y-1">
-                      {plan.features.slice(0, 3).map((feature, index) => (
-                        <li key={index} className="flex items-start">
-                          <span className="text-green-500 mr-1">✓</span>
-                          {feature}
-                        </li>
-                      ))}
-                      {plan.features.length > 3 && (
-                        <li className="text-gray-500">+{plan.features.length - 3} more features</li>
-                      )}
-                    </ul>
-                  </div>
 
                   <div className="flex flex-col space-y-2 pt-2">
                     <div className="flex space-x-2">
@@ -956,7 +921,6 @@ export default function SubscriptionPlans() {
                         variant="outline"
                         onClick={() => {
                           setEditingPlan(plan);
-                          setEditSelectedLogo(plan.logo || "diamond");
                         }}
                         className="flex-1"
                       >
@@ -1620,16 +1584,6 @@ export default function SubscriptionPlans() {
                 <div>
                   <Label htmlFor="edit-description">Description</Label>
                   <Textarea id="edit-description" name="description" defaultValue={editingPlan.description} />
-                </div>
-
-                <PlanLogoSelector 
-                  selectedLogo={editSelectedLogo} 
-                  onLogoChange={setEditSelectedLogo} 
-                />
-
-                <div>
-                  <Label htmlFor="edit-features">Features (one per line)</Label>
-                  <Textarea id="edit-features" name="features" rows={4} defaultValue={editingPlan.features.join("\n")} />
                 </div>
               </div>
 

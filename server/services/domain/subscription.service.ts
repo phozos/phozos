@@ -115,14 +115,21 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
 
   async createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan> {
     try {
-      this.validateRequired(plan, ['name', 'price', 'features', 'maxUniversities', 'maxCountries', 'turnaroundDays']);
+      this.validateRequired(plan, ['name', 'price', 'maxUniversities', 'maxCountries', 'turnaroundDays']);
 
       // P0.5: Sanitize user inputs to prevent XSS attacks
       const sanitizedPlan: InsertSubscriptionPlan = {
         ...plan,
         name: InputSanitizer.sanitizePlainText(plan.name),
         description: InputSanitizer.sanitizePlainText(plan.description),
-        features: InputSanitizer.sanitizeArray(plan.features),
+        // Sanitize features array only if provided, keep undefined if not provided (migration-safe)
+        features: plan.features !== undefined && plan.features !== null 
+          ? InputSanitizer.sanitizeArray(plan.features) 
+          : undefined,
+        // Sanitize logo only if provided, keep undefined if not provided (migration-safe)
+        logo: plan.logo !== undefined && plan.logo !== null
+          ? InputSanitizer.sanitizePlainText(plan.logo)
+          : undefined,
         universityTier: plan.universityTier ? InputSanitizer.sanitizePlainText(plan.universityTier) as any : plan.universityTier,
         supportType: plan.supportType ? InputSanitizer.sanitizePlainText(plan.supportType) as any : plan.supportType,
         
@@ -262,8 +269,17 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
       if (updates.description !== undefined) {
         sanitizedUpdates.description = InputSanitizer.sanitizePlainText(updates.description);
       }
+      // Sanitize features array only if provided and not null (migration-safe)
       if (updates.features !== undefined) {
-        sanitizedUpdates.features = InputSanitizer.sanitizeArray(updates.features);
+        sanitizedUpdates.features = updates.features !== null 
+          ? InputSanitizer.sanitizeArray(updates.features)
+          : undefined;
+      }
+      // Sanitize logo only if provided and not null (migration-safe)
+      if (updates.logo !== undefined) {
+        sanitizedUpdates.logo = updates.logo !== null
+          ? InputSanitizer.sanitizePlainText(updates.logo)
+          : undefined;
       }
       if (updates.universityTier !== undefined) {
         sanitizedUpdates.universityTier = InputSanitizer.sanitizePlainText(updates.universityTier) as any;

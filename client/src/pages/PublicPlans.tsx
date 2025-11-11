@@ -9,7 +9,6 @@ import { Check, Star, Crown, Zap, Award, Sparkles, Globe, Users, Heart, Rocket, 
 import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
-import { PlanLogoDisplay } from "@/components/PlanLogoSelector";
 import { SEO } from "@/components/SEO";
 import { FAQSchema } from "@/components/StructuredData";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
@@ -25,8 +24,8 @@ interface SubscriptionPlan {
   price: string;
   currency: string;
   description: string;
-  logo: string;
-  features: string[];
+  logo?: string;
+  features?: string[];
   maxUniversities: number;
   maxCountries: number;
   turnaroundDays?: number;
@@ -450,25 +449,6 @@ export default function PublicPlans() {
                             >
                               {plan.phozosPrepTier.toUpperCase()}
                             </Badge>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Features */}
-                      <div className="space-y-3">
-                        {plan.features.slice(0, 6).map((feature, featureIndex) => (
-                          <div key={featureIndex} className="flex items-start space-x-3">
-                            <div className={`w-5 h-5 rounded-full bg-gradient-to-r ${gradientColor} p-0.5 mt-0.5 flex-shrink-0`}>
-                              <div className="w-full h-full rounded-full bg-white dark:bg-gray-900 flex items-center justify-center">
-                                <Check className="w-3 h-3 text-green-600" />
-                              </div>
-                            </div>
-                            <span className="text-sm text-muted-foreground leading-relaxed">{feature}</span>
-                          </div>
-                        ))}
-                        {plan.features.length > 6 && (
-                          <div className="text-sm text-muted-foreground pl-8 italic">
-                            + {plan.features.length - 6} more amazing features
                           </div>
                         )}
                       </div>
