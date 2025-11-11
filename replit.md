@@ -7,11 +7,11 @@ EduPath is an international education platform connecting students with global u
 ## Recent Changes
 
 ### Phase 2: UX/UI Improvements (November 2025)
+- **Premium Badge System Removal:** Completely removed ornate SVG badge system (Platinum Elite, Aurum Luxury, etc.) from subscription plans, consolidating to simple icon-based logo selector. Created database migration (0025_map_premium_badges_to_icons.sql) with runbook to map legacy badge keys to modern icon keys. Added defensive fallback mapping in PlanLogoSelector for backward compatibility. Deleted PremiumBadges.tsx (564 lines) and updated all documentation files.
 - **Payment History Fix:** Refactored admin payment history query to use immutable `payments` ledger table instead of mutable `userSubscriptions` table, now displaying complete transaction history including initial purchases, upgrades, and renewals with color-coded payment type badges.
 - **Comprehensive Tooltips:** Added helpful tooltips throughout admin interfaces including price update dialogs, plan deprecation dialogs, and version history views to guide admins through complex operations.
 - **Standardized Date Formatting:** Created centralized `formatDate` utility function with support for short, long, and relative date formats for consistency across the application.
 - **Empty State Messaging:** Added informative empty states for subscription plans and subscriptions tabs with clear guidance and actionable next steps.
-- **Badge Naming Consistency:** Standardized premium badge display names and labels across all contexts for better user experience.
 - **Migration Workflow Integration:** Wired deprecation dialog migration checkbox to backend, enabling automatic migration workflow creation when plans are deprecated.
 - **Backend Price Validation:** Enhanced server-side validation to reject same-price updates with clear error messages, preventing no-op version creation.
 - **Rate Limiter Fixes:** Resolved IPv6 compatibility issues in admin route rate limiters by using authenticated user IDs instead of IP-based fallbacks.
