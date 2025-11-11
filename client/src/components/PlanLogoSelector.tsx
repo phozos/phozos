@@ -2,6 +2,21 @@ import { GraduationCap, Rocket, Star, Crown, Trophy, Diamond, Shield, Target, Aw
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
+const BADGE_TO_ICON_MAP: Record<string, string> = {
+  'platinum': 'diamond',
+  'gold': 'crown',
+  'brilliance': 'gem',
+  'majesty': 'crown',
+  'fortress': 'shield',
+  'voltage': 'zap',
+  'prismatic': 'gem',
+  'apex': 'target',
+};
+
+function normalizeLogoKey(logo: string): string {
+  return BADGE_TO_ICON_MAP[logo] || logo;
+}
+
 export const planLogos = {
   'graduation-cap': {
     icon: GraduationCap,
@@ -109,7 +124,8 @@ export function PlanLogoSelector({ selectedLogo, onLogoChange }: PlanLogoSelecto
 }
 
 export function PlanLogoDisplay({ logo, className = "w-8 h-8", showGradient = false }: { logo: string; className?: string; showGradient?: boolean }) {
-  const logoData = planLogos[logo as keyof typeof planLogos];
+  const normalizedLogo = normalizeLogoKey(logo);
+  const logoData = planLogos[normalizedLogo as keyof typeof planLogos];
   if (!logoData) return <GraduationCap className={className} />;
   
   const IconComponent = logoData.icon;

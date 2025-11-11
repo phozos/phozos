@@ -18,7 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Plus, Edit, Trash2, DollarSign, Users, Crown, Eye, XCircle, TrendingUp, AlertTriangle, FileText, Clock, Mail, Bell, History, Inbox, Info, BookOpen, MessageCircle, Brain, Banknote, Plane, GraduationCap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
-import { PremiumBadgeSelector, PremiumBadgeDisplay, BadgeKey, premiumBadges } from "@/components/PremiumBadges";
+import { PlanLogoSelector, PlanLogoDisplay } from "@/components/PlanLogoSelector";
 import { useAuth } from "@/hooks/useAuth";
 import PlanVersionHistory from "@/components/admin/PlanVersionHistory";
 import PriceUpdateDialog from "@/components/admin/PriceUpdateDialog";
@@ -164,8 +164,8 @@ interface FailedPayment {
 export default function SubscriptionPlans() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
-  const [selectedBadge, setSelectedBadge] = useState<BadgeKey>("platinum");
-  const [editSelectedBadge, setEditSelectedBadge] = useState<BadgeKey>("platinum");
+  const [selectedLogo, setSelectedLogo] = useState<string>("diamond");
+  const [editSelectedLogo, setEditSelectedLogo] = useState<string>("diamond");
   
   const [selectedSupportTypes, setSelectedSupportTypes] = useState<string[]>(["email"]);
   const [editSupportTypes, setEditSupportTypes] = useState<string[]>(["email"]);
@@ -282,7 +282,7 @@ export default function SubscriptionPlans() {
 
   useEffect(() => {
     if (editingPlan) {
-      setEditSelectedBadge(safeBadgeKey(editingPlan.logo));
+      setEditSelectedLogo(editingPlan.logo || "diamond");
       setEditSupportTypes(editingPlan.supportTypes || [editingPlan.supportType] || ["email"]);
       setEditPhozosAiTier(editingPlan.phozosAiTier || "none");
       setEditPhozosPrepTier(editingPlan.phozosPrepTier || "none");
@@ -374,7 +374,7 @@ export default function SubscriptionPlans() {
       price: formData.get("price") as string,
       currency: formData.get("currency") as string,
       description: formData.get("description") as string,
-      logo: selectedBadge,
+      logo: selectedLogo,
       features: (formData.get("features") as string).split("\n").filter(f => f.trim()),
       maxUniversities: parseInt(formData.get("maxUniversities") as string),
       maxCountries: parseInt(formData.get("maxCountries") as string),
@@ -423,7 +423,7 @@ export default function SubscriptionPlans() {
       price: formData.get("price") as string,
       currency: formData.get("currency") as string,
       description: formData.get("description") as string,
-      logo: editSelectedBadge,
+      logo: editSelectedLogo,
       features: (formData.get("features") as string).split("\n").filter(f => f.trim()),
       maxUniversities: parseInt(formData.get("maxUniversities") as string),
       maxCountries: parseInt(formData.get("maxCountries") as string),
@@ -466,11 +466,6 @@ export default function SubscriptionPlans() {
     updatePlanMutation.mutate({ id: plan.id, updates });
   };
 
-  const safeBadgeKey = (badge: string | undefined | null): BadgeKey => {
-    if (!badge) return 'platinum';
-    if (badge in premiumBadges) return badge as BadgeKey;
-    return 'platinum';
-  };
 
   const getPlanIcon = (tier: string) => {
     switch (tier) {
@@ -630,9 +625,9 @@ export default function SubscriptionPlans() {
                   <Textarea id="description" name="description" />
                 </div>
 
-                <PremiumBadgeSelector 
-                  selectedBadge={selectedBadge} 
-                  onBadgeChange={setSelectedBadge} 
+                <PlanLogoSelector 
+                  selectedLogo={selectedLogo} 
+                  onLogoChange={setSelectedLogo} 
                 />
 
                 <div>
@@ -916,7 +911,7 @@ export default function SubscriptionPlans() {
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <PremiumBadgeDisplay badge={safeBadgeKey(plan.logo)} className="w-10 h-10" showTooltip={true} />
+                      <PlanLogoDisplay logo={plan.logo || "diamond"} className="w-10 h-10" showGradient={true} />
                       <CardTitle className="text-lg">{plan.name}</CardTitle>
                     </div>
                     <Badge className={getSupportBadgeColor(plan.supportType)}>
@@ -961,7 +956,7 @@ export default function SubscriptionPlans() {
                         variant="outline"
                         onClick={() => {
                           setEditingPlan(plan);
-                          setEditSelectedBadge(safeBadgeKey(plan.logo));
+                          setEditSelectedLogo(plan.logo || "diamond");
                         }}
                         className="flex-1"
                       >
@@ -1627,9 +1622,9 @@ export default function SubscriptionPlans() {
                   <Textarea id="edit-description" name="description" defaultValue={editingPlan.description} />
                 </div>
 
-                <PremiumBadgeSelector 
-                  selectedBadge={editSelectedBadge} 
-                  onBadgeChange={setEditSelectedBadge} 
+                <PlanLogoSelector 
+                  selectedLogo={editSelectedLogo} 
+                  onLogoChange={setEditSelectedLogo} 
                 />
 
                 <div>

@@ -9,7 +9,7 @@ import { Check, Star, Crown, Zap, Award, Sparkles, Globe, Users, Heart, Rocket, 
 import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import Breadcrumbs from "@/components/Breadcrumbs";
-import { PremiumBadgeDisplay } from "@/components/PremiumBadges";
+import { PlanLogoDisplay } from "@/components/PlanLogoSelector";
 import { SEO } from "@/components/SEO";
 import { FAQSchema } from "@/components/StructuredData";
 import { useRazorpayCheckout } from "@/hooks/useRazorpayCheckout";
