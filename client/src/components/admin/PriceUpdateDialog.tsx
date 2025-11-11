@@ -87,6 +87,15 @@ export default function PriceUpdateDialog({
   const onSubmit = (data: PriceUpdateFormData) => {
     if (!plan) return;
     
+    if (!plan.basePlanId) {
+      toast({
+        title: "Invalid Plan",
+        description: "This plan cannot be versioned. Missing base plan reference.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     // Validate that the new price is different from the current price
     const currentPrice = parseFloat(plan.price);
     if (data.newPrice === currentPrice) {
@@ -100,7 +109,7 @@ export default function PriceUpdateDialog({
     
     priceUpdateMutation.mutate(
       { 
-        basePlanId: plan.basePlanId || plan.id, 
+        basePlanId: plan.basePlanId, 
         data 
       },
       {

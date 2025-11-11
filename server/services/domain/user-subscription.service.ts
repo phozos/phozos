@@ -309,7 +309,10 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
 
       // PHASE 3: Check if planId is the latest version, redirect if not
       if (!plan.isLatestVersion) {
-        const basePlanId = plan.basePlanId || plan.id;
+        if (!plan.basePlanId) {
+          throw new InvalidOperationError('subscribe to plan', 'Plan is missing base plan reference');
+        }
+        const basePlanId = plan.basePlanId;
         const latestVersion = await this.subscriptionPlanRepo.findLatestVersion(basePlanId);
         
         if (latestVersion && latestVersion.id !== planId) {

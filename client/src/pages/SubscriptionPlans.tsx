@@ -72,6 +72,12 @@ interface SubscriptionPlan {
   
   phozosPrepTier?: string;
   phozosPrepDescription?: string | null;
+  
+  basePlanId?: string;
+  version?: number;
+  isLatestVersion?: boolean;
+  versionName?: string;
+  deprecatedAt?: string | null;
 }
 
 interface UserSubscription {
@@ -931,7 +937,15 @@ export default function SubscriptionPlans() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setSelectedPlanForVersions(plan.id);
+                          if (!plan.basePlanId) {
+                            toast({
+                              title: "Error",
+                              description: "Cannot view version history. Missing base plan reference.",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
+                          setSelectedPlanForVersions(plan.basePlanId);
                         }}
                         className="flex-1"
                         title="View Version History"
@@ -953,6 +967,14 @@ export default function SubscriptionPlans() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
+                          if (!plan.basePlanId) {
+                            toast({
+                              title: "Error",
+                              description: "This plan cannot be versioned. Missing base plan reference.",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
                           setEditingPlan(plan);
                           setPriceUpdateDialogOpen(true);
                         }}
@@ -965,6 +987,14 @@ export default function SubscriptionPlans() {
                         size="sm"
                         variant="outline"
                         onClick={() => {
+                          if (!plan.basePlanId) {
+                            toast({
+                              title: "Error",
+                              description: "This plan cannot be deprecated. Missing base plan reference.",
+                              variant: "destructive"
+                            });
+                            return;
+                          }
                           setEditingPlan(plan);
                           setDeprecationDialogOpen(true);
                         }}
@@ -977,7 +1007,17 @@ export default function SubscriptionPlans() {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => setCreateVersionDialog({ open: true, plan, newPrice: plan.price })}
+                      onClick={() => {
+                        if (!plan.basePlanId) {
+                          toast({
+                            title: "Error",
+                            description: "This plan cannot be versioned. Missing base plan reference.",
+                            variant: "destructive"
+                          });
+                          return;
+                        }
+                        setCreateVersionDialog({ open: true, plan, newPrice: plan.price });
+                      }}
                       className="w-full"
                     >
                       <TrendingUp className="h-3 w-3 mr-1" />
