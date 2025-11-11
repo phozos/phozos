@@ -6,6 +6,8 @@
 **Current State:** Functional but with critical UI/UX and backend issues  
 **Total Estimated Effort:** 8-10 weeks (320-400 hours)
 
+> **Historical Note:** Premium badge system (PremiumBadges.tsx) was removed on November 11, 2025 and replaced with a simple icon/logo system (PlanLogoSelector.tsx). References to "premium badges" in this document are historical and should be interpreted as referring to the current simple logo system.
+
 ---
 
 ## Executive Summary
@@ -81,7 +83,7 @@ After comprehensive investigation of the subscription system against the **actua
 | M-2: Date format inconsistent | ✅ Yes | UX polish | P2 Medium |
 | M-3: No delete confirmation | ✅ Yes | Safety critical | P0 Critical |
 | M-4: Empty states | ✅ Yes | UX guidance | P2 Medium |
-| M-5: Badge naming | ✅ Yes | UX consistency | P2 Medium |
+| M-5: Logo naming | ✅ Yes | UX consistency | P2 Medium |
 | M-6: Same-price validation | ✅ Yes | Backend validation | P1 High |
 | M-7: No error boundaries | ✅ Yes | Error handling | P2 Medium |
 | M-8: Race condition | ✅ Yes | Data integrity risk | P0 Critical |
@@ -757,29 +759,29 @@ COMMENT ON COLUMN user_subscriptions.grandfathered_price IS 'Protected price loc
 
 **Add Tooltips For:**
 
-1. **Premium Badge Selector** (Line ~500)
+1. **Plan Logo Selector** (Line ~500)
 ```typescript
 <FormItem>
   <FormLabel className="flex items-center gap-2">
-    Premium Badge
+    Plan Logo
     <Tooltip>
       <TooltipTrigger>
         <HelpCircle className="h-4 w-4 text-muted-foreground" />
       </TooltipTrigger>
       <TooltipContent className="max-w-sm">
-        <p>Premium badges appear on the public pricing page next to the plan name.</p>
-        <p className="mt-2">Choose a badge that matches your plan's prestige level:</p>
+        <p>Plan logos appear on the public pricing page next to the plan name.</p>
+        <p className="mt-2">Choose an icon that represents your plan tier:</p>
         <ul className="list-disc ml-4 mt-1">
-          <li><strong>Gold Crown:</strong> Entry-level premium</li>
-          <li><strong>Platinum Elite:</strong> Mid-tier premium</li>
-          <li><strong>Diamond Prestige:</strong> Top-tier premium</li>
+          <li><strong>Shield:</strong> Basic protection</li>
+          <li><strong>Star:</strong> Popular choice</li>
+          <li><strong>Crown:</strong> Premium tier</li>
         </ul>
       </TooltipContent>
     </Tooltip>
   </FormLabel>
-  <PremiumBadgeSelector value={selectedBadge} onChange={setSelectedBadge} />
+  <PlanLogoSelector value={selectedLogo} onChange={setSelectedLogo} />
   <FormDescription>
-    Preview how it will appear: <PremiumBadgeDisplay badgeKey={selectedBadge} />
+    Simple icon-based selection for plan identification
   </FormDescription>
 </FormItem>
 ```
@@ -1002,44 +1004,25 @@ function EmptyMigrationState() {
 
 ---
 
-### P1.5: Fix Inconsistent Badge Naming
+### P1.5: Standardize Logo System Naming
 **Severity:** MEDIUM - UX Consistency  
-**Effort:** 4 hours  
+**Effort:** 2 hours  
 **Risk:** Low (display logic)
 
-**File:** `client/src/components/PremiumBadges.tsx`
+**Note:** This task was completed on November 11, 2025 when the premium badge system was replaced with a simple icon/logo system.
 
-**Current Inconsistency:**
-- Display name: "Platinum Elite"
-- Code key: "platinum"
-- Label shown: "PLATINUM" (all caps)
+**File:** `client/src/components/PlanLogoSelector.tsx`
 
-**Standardize:**
-```typescript
-export const premiumBadges = {
-  platinum: {
-    name: "Platinum Elite",
-    displayName: "Platinum Elite",  // ✅ Consistent
-    label: "PLATINUM ELITE",       // ✅ Match display name
-    icon: PlatinumIcon,
-    gradient: "from-gray-400 to-gray-600"
-  },
-  aurum: {
-    name: "Aurum Luxury",
-    displayName: "Aurum Luxury",
-    label: "AURUM LUXURY",
-    icon: AurumIcon,
-    gradient: "from-yellow-600 to-yellow-400"
-  },
-  // ... update all badges
-};
-```
+**Current Implementation:**
+- Uses simple lucide-react icons (Shield, Star, Crown, etc.)
+- Clean, consistent naming with no ornate labels
+- Simple selection interface without complex metadata
 
-**Update PlanLogoSelector.tsx:**
-```typescript
-// Show consistent name
-<div className="text-xs font-medium mt-2">{badge.displayName}</div>
-```
+**What Changed:**
+- Removed ornate "Platinum Elite", "Aurum Luxury" badges
+- Replaced with simple icon names: "shield", "star", "crown", "zap", "trophy", "gem"
+- Simplified data structure - just icon name and component reference
+- No gradients, labels, or complex display names needed
 
 ---
 
@@ -1565,7 +1548,7 @@ export function PlanCard({ plan, onEdit, onDelete, ... }: PlanCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <PremiumBadgeDisplay badgeKey={safeBadgeKey(plan.logo)} />
+            <PlanLogoDisplay logo={plan.logo} />
             <div>
               <CardTitle className="text-lg">{plan.name}</CardTitle>
               <p className="text-sm text-muted-foreground">Tier {plan.tierLevel}</p>

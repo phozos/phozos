@@ -4,6 +4,8 @@
 **Status:** Investigation Complete - Ready for Implementation Planning  
 **Impact Level:** Medium Risk (1 Active Subscriber, Minimal Feature Usage)
 
+> **Historical Note:** Premium badge system was removed on November 11, 2025 and replaced with a simple icon/logo system (PlanLogoSelector.tsx). The `logo` field now stores simple icon names (shield, star, crown, etc.) instead of ornate badge identifiers.
+
 ---
 
 ## Executive Summary

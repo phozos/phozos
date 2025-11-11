@@ -4,6 +4,8 @@
 **Scope:** Admin Dashboard Subscription Management UI & Backend  
 **Analyzed Components:** Screenshots (1243-1251), React Frontend, Node.js Backend Services
 
+> **Historical Note:** Premium badge system (PremiumBadges.tsx, PremiumBadgeSelector) was removed on November 11, 2025 and replaced with a simple icon/logo system (PlanLogoSelector.tsx). References to "premium badges" in this investigation report are historical and reflect the system state as of November 8, 2025.
+
 ---
 
 ## Executive Summary
@@ -94,10 +96,10 @@ defaultValues: {
 **Locations:** Multiple dialogs and forms  
 **Issues Identified:**
 
-1. **Premium Badge Selector (Screenshot 1247):**
-   - No explanation of what badges represent
-   - No preview of how badges appear to customers
-   - Badge names inconsistent: "Platinum Elite" vs "PLATINUM" label
+1. **Plan Logo Selector (Screenshot 1247):** *(Historical - replaced with simple icon system on 2025-11-11)*
+   - No explanation of what logos represent
+   - No preview of how logos appear to customers
+   - Logo naming was inconsistent in the old badge system
 
 2. **Tier Level Field (Screenshot 1247):**
    - Shows "Unique hierarchical level for this plan" but doesn't explain:
@@ -243,30 +245,28 @@ const formatDate = (dateString: string | null | undefined) => {
 
 ---
 
-#### M-5: Inconsistent Badge Styling and Naming
-**Severity:** MAJOR  
-**Location:** Premium Badge Selector (Screenshots 1247, 1248)  
+#### M-5: Inconsistent Logo System Naming *(RESOLVED - 2025-11-11)*
+**Severity:** MAJOR (Historical)  
+**Location:** Premium Badge Selector (Screenshots 1247, 1248) - *Now replaced with PlanLogoSelector*
 
-**Issues:**
+**Historical Issues (Fixed by badge system removal):**
 1. **Visual Names vs Code Names:**
-   - UI shows: "Platinum Elite" but code uses "platinum"
-   - UI shows: "Aurum Luxury" but code uses "aurum"
+   - Old system showed ornate names like "Platinum Elite" with code key "platinum"
+   - Created confusion between display names and internal keys
    
 2. **Badge Label Inconsistency:**
-   ```typescript
-   // Screenshot shows "PLATINUM" (all caps) under the badge
-   // vs "Platinum Elite" as the display name
-   ```
+   - Screenshot showed "PLATINUM" (all caps) vs "Platinum Elite" display name
+   - Multiple representations of the same badge
 
-3. **No Badge Preview for Customers:**
-   - Admin sees badge selector but no preview of how it appears on the public pricing page
+3. **No Preview for Customers:**
+   - Admins couldn't see how badges appeared on public pages
 
-**Evidence from Screenshot 1247:**
-- Shows 8 different premium badges with ornate icons
-- Labels use ALL CAPS (PLATINUM, AURUM, BRILLIANCE, MAJESTY)
-- But display names are Title Case with descriptors
-
-**Impact:** Admins may be confused about which badge maps to which public display.
+**Resolution (November 11, 2025):**
+- Removed entire ornate badge system (PremiumBadges.tsx)
+- Replaced with simple icon system using lucide-react icons
+- New system: PlanLogoSelector with simple names (shield, star, crown, zap, trophy, gem)
+- Clean, consistent naming with no ornate labels or gradients
+- Direct mapping: code name = display name = icon name
 
 ---
 
@@ -855,8 +855,8 @@ export interface RevenueMetrics {
 ```typescript
 const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
-const [selectedBadge, setSelectedBadge] = useState<BadgeKey>("platinum");
-const [editSelectedBadge, setEditSelectedBadge] = useState<BadgeKey>("platinum");
+const [selectedLogo, setSelectedLogo] = useState<string>("shield");  // Updated: was selectedBadge
+const [editSelectedLogo, setEditSelectedLogo] = useState<string>("shield");  // Updated: was editSelectedBadge
 const [statusFilter, setStatusFilter] = useState<string>("all");
 const [planFilter, setPlanFilter] = useState<string>("all");
 const [searchText, setSearchText] = useState("");

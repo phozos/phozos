@@ -6,6 +6,8 @@
 **Scope:** Complete UI/UX implementation for subscription plan versioning and grandfathering  
 **Estimated Duration:** 2-3 weeks
 
+> **Historical Note:** Premium badge components (PremiumBadgeSelector, PremiumBadgeDisplay) were removed on November 11, 2025 and replaced with a simple icon system (PlanLogoSelector). This document reflects the architecture as of November 8, 2025. Where badge components are mentioned, they now refer to the simplified logo system.
+
 ---
 
 ## Table of Contents
@@ -39,12 +41,12 @@
   - Select dropdowns: universityTier, supportType
   - Textarea: features (one per line), description
   - Checkboxes: 11 feature flags (includeLoanAssistance, includeVisaSupport, etc.)
-  - Custom component: PremiumBadgeSelector (logo selection)
+  - Custom component: PlanLogoSelector (simple icon selection) *(updated from PremiumBadgeSelector)*
 
 **Plan Update Form (Lines 1182-1336):**
 - Same structure as creation form
 - Pre-populated with `defaultValue` attributes
-- Separate state for editing: `editingPlan` and `editSelectedBadge`
+- Separate state for editing: `editingPlan` and `editSelectedLogo` *(updated from editSelectedBadge)*
 
 #### Current State Management
 
@@ -52,8 +54,8 @@
 // Local State (Lines 142-159)
 const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
-const [selectedBadge, setSelectedBadge] = useState<BadgeKey>("platinum");
-const [editSelectedBadge, setEditSelectedBadge] = useState<BadgeKey>("platinum");
+const [selectedLogo, setSelectedLogo] = useState<string>("shield");  // Updated: was selectedBadge with BadgeKey type
+const [editSelectedLogo, setEditSelectedLogo] = useState<string>("shield");  // Updated: was editSelectedBadge
 
 // Filter/Sort State
 const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -168,7 +170,7 @@ const createVersionMutation = useApiMutation(
 - Checkbox
 
 **Custom Components:**
-- PremiumBadgeSelector, PremiumBadgeDisplay (from @/components/PremiumBadges)
+- PlanLogoSelector (from @/components/PlanLogoSelector) *(replaced PremiumBadgeSelector/Display on 2025-11-11)*
 - useAuth hook
 - useToast hook
 
