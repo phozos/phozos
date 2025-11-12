@@ -62,6 +62,18 @@ import {
   quotaUsageRepository,
   IFeatureUsageRepository,
   featureUsageRepository,
+  IPartnerProfileRepository,
+  partnerProfileRepository,
+  IPartnerReferralLinkRepository,
+  partnerReferralLinkRepository,
+  IReferralClickRepository,
+  referralClickRepository,
+  IPartnerStudentReferralRepository,
+  partnerStudentReferralRepository,
+  IPartnerCommissionRepository,
+  partnerCommissionRepository,
+  IPartnerPayoutRepository,
+  partnerPayoutRepository,
 } from '../repositories';
 import { jwtService } from '../security/jwtService';
 import { validationService } from './infrastructure/validation.service';
@@ -114,6 +126,12 @@ export const TYPES = {
   IStaffInvitationRepository: Symbol.for('IStaffInvitationRepository'),
   IQuotaUsageRepository: Symbol.for('IQuotaUsageRepository'),
   IFeatureUsageRepository: Symbol.for('IFeatureUsageRepository'),
+  IPartnerProfileRepository: Symbol.for('IPartnerProfileRepository'),
+  IPartnerReferralLinkRepository: Symbol.for('IPartnerReferralLinkRepository'),
+  IReferralClickRepository: Symbol.for('IReferralClickRepository'),
+  IPartnerStudentReferralRepository: Symbol.for('IPartnerStudentReferralRepository'),
+  IPartnerCommissionRepository: Symbol.for('IPartnerCommissionRepository'),
+  IPartnerPayoutRepository: Symbol.for('IPartnerPayoutRepository'),
   
   // Infrastructure Service Tokens (Phase 5.4)
   WebSocketService: Symbol.for('WebSocketService'),
@@ -146,6 +164,13 @@ export const TYPES = {
   IFeatureChangeNotificationService: Symbol.for('IFeatureChangeNotificationService'),
   IQuotaManagementService: Symbol.for('IQuotaManagementService'),
   IFeatureAnalyticsService: Symbol.for('IFeatureAnalyticsService'),
+  
+  // Partner Service Tokens
+  IPartnerService: Symbol.for('IPartnerService'),
+  IReferralLinkService: Symbol.for('IReferralLinkService'),
+  IReferralTrackingService: Symbol.for('IReferralTrackingService'),
+  ICommissionService: Symbol.for('ICommissionService'),
+  IPayoutService: Symbol.for('IPayoutService'),
   
   // Admin Service Tokens (Phase 3)
   IAdminAnalyticsService: Symbol.for('IAdminAnalyticsService'),
@@ -207,6 +232,12 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IStaffInvitationRepository, staffInvitationRepository);
     this.bindings.set(TYPES.IQuotaUsageRepository, quotaUsageRepository);
     this.bindings.set(TYPES.IFeatureUsageRepository, featureUsageRepository);
+    this.bindings.set(TYPES.IPartnerProfileRepository, partnerProfileRepository);
+    this.bindings.set(TYPES.IPartnerReferralLinkRepository, partnerReferralLinkRepository);
+    this.bindings.set(TYPES.IReferralClickRepository, referralClickRepository);
+    this.bindings.set(TYPES.IPartnerStudentReferralRepository, partnerStudentReferralRepository);
+    this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
+    this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
     
     // Bind security services
     this.bindings.set(TYPES.JwtService, jwtService);
@@ -292,6 +323,12 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IStaffInvitationRepository, staffInvitationRepository);
     this.bindings.set(TYPES.IQuotaUsageRepository, quotaUsageRepository);
     this.bindings.set(TYPES.IFeatureUsageRepository, featureUsageRepository);
+    this.bindings.set(TYPES.IPartnerProfileRepository, partnerProfileRepository);
+    this.bindings.set(TYPES.IPartnerReferralLinkRepository, partnerReferralLinkRepository);
+    this.bindings.set(TYPES.IReferralClickRepository, referralClickRepository);
+    this.bindings.set(TYPES.IPartnerStudentReferralRepository, partnerStudentReferralRepository);
+    this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
+    this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
     this.bindings.set(TYPES.JwtService, jwtService);
   }
   
@@ -337,6 +374,12 @@ class Container implements IContainer {
     
     const { aiMatchingService } = await import('./integration/ai-matching.service');
     
+    const { partnerService } = await import('./domain/partner.service');
+    const { referralLinkService } = await import('./domain/referral-link.service');
+    const { referralTrackingService } = await import('./domain/referral-tracking.service');
+    const { commissionService } = await import('./domain/commission.service');
+    const { payoutService } = await import('./domain/payout.service');
+    
     // Bind domain services
     this.bindings.set(TYPES.IAuthService, authService);
     this.bindings.set(TYPES.IApplicationService, applicationService);
@@ -375,6 +418,13 @@ class Container implements IContainer {
     
     // Bind integration services
     this.bindings.set(TYPES.IAIMatchingService, aiMatchingService);
+    
+    // Bind partner services
+    this.bindings.set(TYPES.IPartnerService, partnerService);
+    this.bindings.set(TYPES.IReferralLinkService, referralLinkService);
+    this.bindings.set(TYPES.IReferralTrackingService, referralTrackingService);
+    this.bindings.set(TYPES.ICommissionService, commissionService);
+    this.bindings.set(TYPES.IPayoutService, payoutService);
   }
 }
 
