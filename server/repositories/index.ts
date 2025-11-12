@@ -27,6 +27,12 @@ export * from './forum-reports.repository';
 export * from './staff-invitation.repository';
 export * from './quota-usage.repository';
 export * from './feature-usage.repository';
+export * from './partner-profile.repository';
+export * from './partner-referral-link.repository';
+export * from './referral-click.repository';
+export * from './partner-student-referral.repository';
+export * from './partner-commission.repository';
+export * from './partner-payout.repository';
 
 import { userRepository } from './user.repository';
 import { studentRepository } from './student.repository';
@@ -55,6 +61,12 @@ import { forumReportsRepository } from './forum-reports.repository';
 import { staffInvitationRepository } from './staff-invitation.repository';
 import { quotaUsageRepository } from './quota-usage.repository';
 import { featureUsageRepository } from './feature-usage.repository';
+import { partnerProfileRepository } from './partner-profile.repository';
+import { partnerReferralLinkRepository } from './partner-referral-link.repository';
+import { referralClickRepository } from './referral-click.repository';
+import { partnerStudentReferralRepository } from './partner-student-referral.repository';
+import { partnerCommissionRepository } from './partner-commission.repository';
+import { partnerPayoutRepository } from './partner-payout.repository';
 
 export const repositories = {
   user: userRepository,
@@ -85,5 +97,11 @@ export const repositories = {
   forumReports: forumReportsRepository,
   staffInvitation: staffInvitationRepository,
   quotaUsage: quotaUsageRepository,
-  featureUsage: featureUsageRepository
+  featureUsage: featureUsageRepository,
+  partnerProfile: partnerProfileRepository,
+  partnerReferralLink: partnerReferralLinkRepository,
+  referralClick: referralClickRepository,
+  partnerStudentReferral: partnerStudentReferralRepository,
+  partnerCommission: partnerCommissionRepository,
+  partnerPayout: partnerPayoutRepository
 };
