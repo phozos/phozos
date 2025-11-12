@@ -20,7 +20,7 @@ export interface RegisterStudentDTO {
 
 export interface IRegistrationService {
   registerStudent(data: InsertUser & { profile: InsertStudentProfile }): Promise<{ user: User }>;
-  registerStudentComplete(email: string, password: string, firstName: string, lastName: string, phone: string): Promise<RegisterStudentDTO>;
+  registerStudentComplete(email: string, password: string, firstName: string, lastName: string, phone: string, referralCode?: string, clickId?: string): Promise<RegisterStudentDTO>;
   createCompanyProfile(data: InsertUser & { companyName?: string; description?: string }): Promise<{ user: User; temporaryPassword?: string }>;
   registerStaffWithInvite(data: { email: string; password: string; firstName: string; lastName: string; teamRole: string; invitationToken: string }): Promise<{ user: User }>;
   validateRegistrationData(email: string, password: string): void;
