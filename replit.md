@@ -6,6 +6,21 @@ EduPath is an international education platform connecting students with global u
 
 ## Recent Changes
 
+### Partner Account System - Phase 1: Database Foundation (November 2025)
+- **Partner User Type Extension:** Extended userTypeEnum to include 'partner' type for dedicated partner accounts separate from team members and customers.
+- **Comprehensive Partner Tables:** Created 6 new database tables with full schema definitions:
+  - `partner_profiles` (32 fields): Business information, commission structure (percentage/fixed), payout settings (bank/PayPal), performance metrics, KYC verification status
+  - `partner_referral_links` (15 fields): Unique referral codes, campaign tracking (source/medium), performance metrics (clicks/conversions), expiration management
+  - `referral_clicks` (14 fields): Click tracking with IP/user-agent fingerprinting, geolocation data, session tracking, conversion attribution
+  - `partner_student_referrals` (20 fields): Student-to-partner attribution with multiple methods (link_click/manual/promo_code), commission eligibility, status workflow
+  - `partner_commissions` (16 fields): Automated commission calculations, approval workflow, payout linkage, multi-currency support
+  - `partner_payouts` (18 fields): Batch payout processing, period aggregation, multiple payment methods, attachment storage for receipts
+- **Student Profile Attribution:** Added referredByPartnerId and referralLinkId fields to studentProfiles table for tracking referral sources.
+- **TypeScript Integration:** Created full type-safe schemas with insert schemas (excluding auto-generated fields) and exported types for all partner tables using Drizzle ORM and Zod validation.
+- **Performance Optimization:** Implemented 16 strategic indexes on foreign keys, status fields, fingerprints, and link codes for efficient query performance.
+- **Database Migration:** Created comprehensive migration (0027_create_partner_system.sql) with proper enum extension, table creation, circular dependency resolution (partner_commissions ↔ partner_payouts), and index creation.
+- **Architectural Alignment:** Followed existing DDD patterns with snake_case naming, UUID primary keys, timestamp auditing, JSONB for nested data (address, bank details), and cascading delete behaviors.
+
 ### Phase 3: Subscription Plans Feature Display Overhaul (November 2025)
 - **Complete Feature Visibility:** Enhanced subscription plans page to display ALL 26 database features (up from 7), achieving 100% feature visibility. Features now organized into 6 logical categories: Access & Quotas, Application Support, Smart Tools, Financial Services, Visa & Travel, and Support & Mentorship.
 - **Icon-Free Design:** Completely removed all Lucide React icons (Star, Zap, Crown, Award, Globe, Users, Heart, etc.) from plans page and comparison table, replacing with clean text-based design using only emojis for category headers, achieving WCAG AA accessibility compliance.

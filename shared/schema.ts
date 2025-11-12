@@ -15,7 +15,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Enums
-export const userTypeEnum = pgEnum("user_type", ["customer", "team_member", "company_profile"]);
+export const userTypeEnum = pgEnum("user_type", ["customer", "team_member", "company_profile", "partner"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "counselor"]);
 export const accountStatusEnum = pgEnum("account_status", ["active", "inactive", "pending_approval", "suspended", "rejected"]);
 export const applicationStatusEnum = pgEnum("application_status", ["draft", "submitted", "under_review", "accepted", "rejected", "waitlisted"]);
@@ -210,6 +210,171 @@ export const studentProfiles = pgTable("student_profiles", {
   }>(),
   
   notes: text("notes"),
+  referredByPartnerId: uuid("referred_by_partner_id"),
+  referralLinkId: uuid("referral_link_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Profiles
+export const partnerProfiles = pgTable("partner_profiles", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull().unique(),
+  companyName: text("company_name").notNull(),
+  businessType: text("business_type"),
+  registrationNumber: text("registration_number"),
+  taxId: text("tax_id"),
+  contactPerson: text("contact_person").notNull(),
+  phone: text("phone").notNull(),
+  whatsappNumber: text("whatsapp_number"),
+  website: text("website"),
+  address: jsonb("address").$type<{
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+  }>(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).notNull().default("10.00"),
+  commissionType: text("commission_type").notNull().default("percentage"),
+  fixedCommissionAmount: decimal("fixed_commission_amount", { precision: 10, scale: 2 }),
+  payoutMethod: text("payout_method").notNull().default("bank_transfer"),
+  bankDetails: jsonb("bank_details").$type<{
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    bankName?: string;
+    branchName?: string;
+    swiftCode?: string;
+  }>(),
+  paypalEmail: text("paypal_email"),
+  minimumPayoutAmount: decimal("minimum_payout_amount", { precision: 10, scale: 2 }).default("1000.00"),
+  totalReferrals: integer("total_referrals").default(0),
+  totalConversions: integer("total_conversions").default(0),
+  totalCommissionEarned: decimal("total_commission_earned", { precision: 12, scale: 2 }).default("0.00"),
+  totalCommissionPaid: decimal("total_commission_paid", { precision: 12, scale: 2 }).default("0.00"),
+  isActive: boolean("is_active").default(true),
+  isVerified: boolean("is_verified").default(false),
+  verifiedAt: timestamp("verified_at"),
+  verifiedBy: uuid("verified_by").references(() => users.id),
+  logo: text("logo"),
+  bio: text("bio"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Referral Links
+export const partnerReferralLinks = pgTable("partner_referral_links", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  linkCode: varchar("link_code", { length: 16 }).notNull().unique(),
+  linkUrl: text("link_url").notNull(),
+  campaignName: varchar("campaign_name", { length: 255 }),
+  campaignSource: varchar("campaign_source", { length: 100 }),
+  campaignMedium: varchar("campaign_medium", { length: 100 }),
+  description: text("description"),
+  clickCount: integer("click_count").default(0),
+  uniqueClickCount: integer("unique_click_count").default(0),
+  conversionCount: integer("conversion_count").default(0),
+  lastClickedAt: timestamp("last_clicked_at"),
+  isActive: boolean("is_active").default(true),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Referral Clicks
+export const referralClicks = pgTable("referral_clicks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  referralLinkId: uuid("referral_link_id").references(() => partnerReferralLinks.id, { onDelete: 'cascade' }).notNull(),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'set null' }),
+  ipAddress: varchar("ip_address", { length: 45 }).notNull(),
+  userAgent: text("user_agent"),
+  referer: text("referer"),
+  country: varchar("country", { length: 2 }),
+  city: varchar("city", { length: 100 }),
+  sessionId: varchar("session_id", { length: 64 }),
+  fingerprint: varchar("fingerprint", { length: 64 }),
+  isUnique: boolean("is_unique").default(true),
+  convertedToRegistration: boolean("converted_to_registration").default(false),
+  convertedToPayment: boolean("converted_to_payment").default(false),
+  convertedAt: timestamp("converted_at"),
+  clickedAt: timestamp("clicked_at").defaultNow(),
+});
+
+// Partner Student Referrals
+export const partnerStudentReferrals = pgTable("partner_student_referrals", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  studentId: uuid("student_id").references(() => studentProfiles.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  referralLinkId: uuid("referral_link_id").references(() => partnerReferralLinks.id, { onDelete: 'set null' }),
+  clickId: uuid("click_id").references(() => referralClicks.id, { onDelete: 'set null' }),
+  attributionMethod: varchar("attribution_method", { length: 50 }).notNull(),
+  promoCode: varchar("promo_code", { length: 50 }),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  statusReason: text("status_reason"),
+  commissionEligible: boolean("commission_eligible").default(true),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }),
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }),
+  commissionStatus: varchar("commission_status", { length: 50 }).default("pending"),
+  commissionPaidAt: timestamp("commission_paid_at"),
+  registeredAt: timestamp("registered_at"),
+  convertedAt: timestamp("converted_at"),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'set null' }),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'set null' }),
+  notes: text("notes"),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Commissions
+export const partnerCommissions = pgTable("partner_commissions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  referralId: uuid("referral_id").references(() => partnerStudentReferrals.id, { onDelete: 'cascade' }).notNull(),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'cascade' }).notNull(),
+  baseAmount: decimal("base_amount", { precision: 10, scale: 2 }).notNull(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).notNull(),
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  statusReason: text("status_reason"),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: timestamp("approved_at"),
+  rejectedBy: uuid("rejected_by").references(() => users.id, { onDelete: 'set null' }),
+  rejectedAt: timestamp("rejected_at"),
+  payoutId: uuid("payout_id").references(() => partnerPayouts.id, { onDelete: 'set null' }),
+  paidAt: timestamp("paid_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Payouts
+export const partnerPayouts = pgTable("partner_payouts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  payoutAmount: decimal("payout_amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  commissionCount: integer("commission_count").notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  payoutMethod: varchar("payout_method", { length: 50 }).notNull(),
+  bankTransferReference: varchar("bank_transfer_reference", { length: 255 }),
+  bankTransferDate: timestamp("bank_transfer_date"),
+  paypalTransactionId: varchar("paypal_transaction_id", { length: 255 }),
+  paypalEmail: varchar("paypal_email", { length: 255 }),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  statusReason: text("status_reason"),
+  processedBy: uuid("processed_by").references(() => users.id, { onDelete: 'set null' }),
+  processedAt: timestamp("processed_at"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  attachments: text("attachments").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1202,6 +1367,44 @@ export const insertFeatureUsageEventSchema = createInsertSchema(featureUsageEven
 export const insertFeatureUsageSummarySchema = createInsertSchema(featureUsageSummary).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertFeatureDeprecationScheduleSchema = createInsertSchema(featureDeprecationSchedules).omit({ id: true, createdAt: true, updatedAt: true });
 
+// Partner insert schemas
+export const insertPartnerProfileSchema = createInsertSchema(partnerProfiles).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  totalReferrals: true,
+  totalConversions: true,
+  totalCommissionEarned: true,
+  totalCommissionPaid: true,
+});
+export const insertPartnerReferralLinkSchema = createInsertSchema(partnerReferralLinks).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  clickCount: true,
+  uniqueClickCount: true,
+  conversionCount: true,
+});
+export const insertReferralClickSchema = createInsertSchema(referralClicks).omit({ 
+  id: true, 
+  clickedAt: true 
+});
+export const insertPartnerStudentReferralSchema = createInsertSchema(partnerStudentReferrals).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export const insertPartnerCommissionSchema = createInsertSchema(partnerCommissions).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export const insertPartnerPayoutSchema = createInsertSchema(partnerPayouts).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
 // Company forum post schema already exists above, no need to redefine
@@ -1247,4 +1450,18 @@ export type FeatureUsageSummary = typeof featureUsageSummary.$inferSelect;
 export type InsertFeatureUsageSummary = z.infer<typeof insertFeatureUsageSummarySchema>;
 export type FeatureDeprecationSchedule = typeof featureDeprecationSchedules.$inferSelect;
 export type InsertFeatureDeprecationSchedule = z.infer<typeof insertFeatureDeprecationScheduleSchema>;
+
+// Partner type exports
+export type PartnerProfile = typeof partnerProfiles.$inferSelect;
+export type InsertPartnerProfile = z.infer<typeof insertPartnerProfileSchema>;
+export type PartnerReferralLink = typeof partnerReferralLinks.$inferSelect;
+export type InsertPartnerReferralLink = z.infer<typeof insertPartnerReferralLinkSchema>;
+export type ReferralClick = typeof referralClicks.$inferSelect;
+export type InsertReferralClick = z.infer<typeof insertReferralClickSchema>;
+export type PartnerStudentReferral = typeof partnerStudentReferrals.$inferSelect;
+export type InsertPartnerStudentReferral = z.infer<typeof insertPartnerStudentReferralSchema>;
+export type PartnerCommission = typeof partnerCommissions.$inferSelect;
+export type InsertPartnerCommission = z.infer<typeof insertPartnerCommissionSchema>;
+export type PartnerPayout = typeof partnerPayouts.$inferSelect;
+export type InsertPartnerPayout = z.infer<typeof insertPartnerPayoutSchema>;
 
