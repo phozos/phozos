@@ -285,7 +285,6 @@ export default function SubscriptionPlans() {
 
   useEffect(() => {
     if (editingPlan) {
-      setEditSelectedLogo(editingPlan.logo || "diamond");
       setEditSupportTypes(editingPlan.supportTypes || [editingPlan.supportType] || ["email"]);
       setEditPhozosAiTier(editingPlan.phozosAiTier || "none");
       setEditPhozosPrepTier(editingPlan.phozosPrepTier || "none");
