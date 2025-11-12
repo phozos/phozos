@@ -346,6 +346,22 @@ export function useDeactivatePartner() {
 }
 
 // ============================================================================
+// ADMIN ANALYTICS HOOKS
+// ============================================================================
+
+/**
+ * Fetch partner analytics (Admin only)
+ */
+export function usePartnerAnalytics() {
+  return useApiQuery<any>(
+    ['/api/admin/partners/analytics'],
+    '/api/admin/partners/analytics',
+    undefined,
+    { staleTime: 2 * 60 * 1000 }
+  );
+}
+
+// ============================================================================
 // ADMIN COMMISSION HOOKS
 // ============================================================================
 

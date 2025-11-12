@@ -50,6 +50,7 @@ const FeatureManagementDashboard = lazy(() => import("@/pages/admin/FeatureManag
 const PartnerManagement = lazy(() => import("@/pages/admin/PartnerManagement"));
 const CommissionManagement = lazy(() => import("@/pages/admin/CommissionManagement"));
 const PayoutProcessing = lazy(() => import("@/pages/admin/PayoutProcessing"));
+const PartnerAnalytics = lazy(() => import("@/pages/admin/PartnerAnalytics"));
 const StudentChat = lazy(() => import("@/pages/StudentChat"));
 const CompanyDashboard = lazy(() => import("@/pages/CompanyDashboard"));
 // Feature-heavy pages that aren't critical for initial render
@@ -186,6 +187,14 @@ function AppContent() {
           <ProtectedRoute {...adminOnly}>
             <Suspense fallback={<LoadingFallback />}>
               <PayoutProcessing />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/partner-analytics">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PartnerAnalytics />
             </Suspense>
           </ProtectedRoute>
         </Route>

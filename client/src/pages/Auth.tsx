@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { GraduationCap, Users, Shield, Eye, EyeOff, AlertTriangle, Phone } from "lucide-react";
+import { GraduationCap, Users, Shield, Eye, EyeOff, AlertTriangle, Phone, UserCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import MathCaptcha from "@/components/MathCaptcha";
@@ -14,10 +14,29 @@ import { api } from "@/lib/api-client";
 import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
 import { SEO } from "@/components/SEO";
 
+/**
+ * Helper function to read cookie by name
+ */
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    const cookieValue = parts.pop()?.split(';').shift();
+    return cookieValue || null;
+  }
+  return null;
+}
+
 // Interface for security settings to ensure proper typing
 interface SecuritySettings {
   visible?: boolean;
   secretCode?: string;
+}
+
+// Interface for referral information
+interface ReferralInfo {
+  code: string | null;
+  clickId: string | null;
 }
 
 export default function Auth() {
@@ -41,6 +60,8 @@ export default function Auth() {
   const [phoneCountry, setPhoneCountry] = useState<string | null>(null);
   const [phoneValid, setPhoneValid] = useState<boolean | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasReferral, setHasReferral] = useState(false);
+  const [referralInfo, setReferralInfo] = useState<ReferralInfo>({ code: null, clickId: null });
 
   // Handle phone number validation and country detection
   const handlePhoneChange = (phoneNumber: string) => {
@@ -146,6 +167,18 @@ export default function Auth() {
     }
   }, [location]);
 
+  // Check for referral cookies on page load
+  useEffect(() => {
+    const referralCode = getCookie('referral_code');
+    const clickId = getCookie('click_id');
+    
+    if (referralCode) {
+      setHasReferral(true);
+      setReferralInfo({ code: referralCode, clickId });
+      console.log('📎 Referral detected:', { referralCode, clickId });
+    }
+  }, []);
+
   const handleStudentAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -164,14 +197,15 @@ export default function Auth() {
     
     const endpoint = isSignup ? "/api/auth/student-register" : "/api/auth/student-login";
     
-    // For signup, include anti-spam data
+    // For signup, include anti-spam data and referral info
     const payload = isSignup 
       ? { 
           ...formData, 
           mathChallenge,
           mathAnswer,
           formStartTime: formStartTime.toString(),
-          honeypot: "" // Hidden field for bot detection
+          honeypot: "", // Hidden field for bot detection
+          referralClickId: referralInfo.clickId || undefined // Include referral click ID if present
         } 
       : { email: formData.email, password: formData.password };
     
@@ -399,6 +433,16 @@ export default function Auth() {
               </CardDescription>
             </CardHeader>
           <CardContent className="space-y-6">
+            {/* Referral Badge - Display when user came from a partner referral link */}
+            {hasReferral && isSignup && (
+              <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-100">
+                  <strong>Welcome!</strong> You were referred by a Phozos partner. You'll receive priority support and exclusive benefits!
+                </AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleStudentAuth} className="space-y-4">
               {isSignup && (
                 <div className="grid grid-cols-2 gap-4">
