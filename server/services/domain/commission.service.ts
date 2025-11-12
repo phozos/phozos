@@ -3,7 +3,7 @@ import {
   IPartnerCommissionRepository,
   IPartnerProfileRepository,
   IPartnerStudentReferralRepository,
-  IPaymentRepository
+  IPaymentRecordRepository
 } from '../../repositories';
 import { container, TYPES } from '../container';
 import { PartnerCommission } from '@shared/schema';
@@ -29,7 +29,7 @@ export class CommissionService extends BaseService implements ICommissionService
     private commissionRepo: IPartnerCommissionRepository = container.get<IPartnerCommissionRepository>(TYPES.IPartnerCommissionRepository),
     private partnerProfileRepo: IPartnerProfileRepository = container.get<IPartnerProfileRepository>(TYPES.IPartnerProfileRepository),
     private partnerStudentReferralRepo: IPartnerStudentReferralRepository = container.get<IPartnerStudentReferralRepository>(TYPES.IPartnerStudentReferralRepository),
-    private paymentRepo: IPaymentRepository = container.get<IPaymentRepository>(TYPES.IPaymentRepository)
+    private paymentRecordRepo: IPaymentRecordRepository = container.get<IPaymentRecordRepository>(TYPES.IPaymentRecordRepository)
   ) {
     super();
   }
@@ -80,7 +80,7 @@ export class CommissionService extends BaseService implements ICommissionService
       const referral = await this.partnerStudentReferralRepo.findById(referralId);
 
       // Get payment details to get the actual payment amount
-      const payment = await this.paymentRepo.findById(paymentId);
+      const payment = await this.paymentRecordRepo.findById(paymentId);
 
       // Calculate commission based on payment amount
       const calculation = await this.calculateCommission(
