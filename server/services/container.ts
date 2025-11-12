@@ -74,6 +74,8 @@ import {
   partnerCommissionRepository,
   IPartnerPayoutRepository,
   partnerPayoutRepository,
+  IPaymentRecordRepository,
+  paymentRecordRepository,
 } from '../repositories';
 import { jwtService } from '../security/jwtService';
 import { validationService } from './infrastructure/validation.service';
@@ -132,6 +134,7 @@ export const TYPES = {
   IPartnerStudentReferralRepository: Symbol.for('IPartnerStudentReferralRepository'),
   IPartnerCommissionRepository: Symbol.for('IPartnerCommissionRepository'),
   IPartnerPayoutRepository: Symbol.for('IPartnerPayoutRepository'),
+  IPaymentRecordRepository: Symbol.for('IPaymentRecordRepository'),
   
   // Infrastructure Service Tokens (Phase 5.4)
   WebSocketService: Symbol.for('WebSocketService'),
@@ -238,6 +241,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPartnerStudentReferralRepository, partnerStudentReferralRepository);
     this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
     this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
+    this.bindings.set(TYPES.IPaymentRecordRepository, paymentRecordRepository);
     
     // Bind security services
     this.bindings.set(TYPES.JwtService, jwtService);
@@ -329,6 +333,7 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPartnerStudentReferralRepository, partnerStudentReferralRepository);
     this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
     this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
+    this.bindings.set(TYPES.IPaymentRecordRepository, paymentRecordRepository);
     this.bindings.set(TYPES.JwtService, jwtService);
   }
   
