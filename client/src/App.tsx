@@ -47,6 +47,9 @@ const SubscriptionAnalytics = lazy(() => import("@/pages/admin/SubscriptionAnaly
 const PlanAnalytics = lazy(() => import("@/pages/admin/PlanAnalytics"));
 const PlanMigrations = lazy(() => import("@/pages/admin/PlanMigrations"));
 const FeatureManagementDashboard = lazy(() => import("@/pages/admin/FeatureManagementDashboard"));
+const PartnerManagement = lazy(() => import("@/pages/admin/PartnerManagement"));
+const CommissionManagement = lazy(() => import("@/pages/admin/CommissionManagement"));
+const PayoutProcessing = lazy(() => import("@/pages/admin/PayoutProcessing"));
 const StudentChat = lazy(() => import("@/pages/StudentChat"));
 const CompanyDashboard = lazy(() => import("@/pages/CompanyDashboard"));
 // Feature-heavy pages that aren't critical for initial render
@@ -160,6 +163,30 @@ function AppContent() {
         <Route path="/dashboard/admin/profile">
           <ProtectedRoute {...adminOnly}>
             <AdminProfile />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/partners">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PartnerManagement />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/commissions">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <CommissionManagement />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/payouts">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PayoutProcessing />
+            </Suspense>
           </ProtectedRoute>
         </Route>
 

@@ -126,7 +126,12 @@ export default function AppShell() {
       { href: "/applications", label: "Applications" },
       { href: "/documents", label: "Documents" },
     ] : []),
-    ...(user.teamRole === "admin" ? [{ href: "/dashboard/admin", label: "Admin Dashboard" }] : []),
+    ...(user.teamRole === "admin" ? [
+      { href: "/dashboard/admin", label: "Admin Dashboard" },
+      { href: "/dashboard/admin/partners", label: "Partner Management" },
+      { href: "/dashboard/admin/commissions", label: "Commission Management" },
+      { href: "/dashboard/admin/payouts", label: "Payout Processing" },
+    ] : []),
     ...(user.teamRole === "counselor" ? [{ href: "/dashboard/team", label: "Counselor Dashboard" }] : []),
     ...(user.userType === "company_profile" ? [{ href: "/dashboard/company", label: "Company Dashboard" }] : []),
     ...(user.userType === "partner" ? [

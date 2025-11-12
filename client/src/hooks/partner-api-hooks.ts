@@ -344,3 +344,191 @@ export function useDeactivatePartner() {
     }
   );
 }
+
+// ============================================================================
+// ADMIN COMMISSION HOOKS
+// ============================================================================
+
+/**
+ * Approve commissions (Admin only)
+ */
+export function useApproveCommissions() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { commissionIds: string[]; notes?: string }>(
+    async (data) => {
+      await api.post('/api/admin/commissions/approve', data);
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/commissions'] });
+        toast({
+          title: 'Success',
+          description: 'Commissions approved successfully',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to approve commissions',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+/**
+ * Reject commissions (Admin only)
+ */
+export function useRejectCommissions() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { commissionIds: string[]; reason: string }>(
+    async (data) => {
+      await api.post('/api/admin/commissions/reject', data);
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/commissions'] });
+        toast({
+          title: 'Success',
+          description: 'Commissions rejected',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to reject commissions',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+// ============================================================================
+// ADMIN PAYOUT HOOKS
+// ============================================================================
+
+/**
+ * Process bank payout (Admin only)
+ */
+export function useProcessBankPayout() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { payoutId: string; referenceId: string }>(
+    async ({ payoutId, referenceId }) => {
+      await api.post(`/api/admin/payouts/${payoutId}/process-bank`, { referenceId });
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/payouts'] });
+        toast({
+          title: 'Success',
+          description: 'Bank payout processing started',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to process bank payout',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+/**
+ * Process PayPal payout (Admin only)
+ */
+export function useProcessPaypalPayout() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { payoutId: string; referenceId: string }>(
+    async ({ payoutId, referenceId }) => {
+      await api.post(`/api/admin/payouts/${payoutId}/process-paypal`, { referenceId });
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/payouts'] });
+        toast({
+          title: 'Success',
+          description: 'PayPal payout processing started',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to process PayPal payout',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+/**
+ * Complete payout (Admin only)
+ */
+export function useCompletePayout() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, string>(
+    async (payoutId) => {
+      await api.post(`/api/admin/payouts/${payoutId}/complete`, {});
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/payouts'] });
+        toast({
+          title: 'Success',
+          description: 'Payout marked as completed',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to complete payout',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+/**
+ * Cancel payout (Admin only)
+ */
+export function useCancelPayout() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { payoutId: string; reason: string }>(
+    async ({ payoutId, reason }) => {
+      await api.post(`/api/admin/payouts/${payoutId}/cancel`, { reason });
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/payouts'] });
+        toast({
+          title: 'Success',
+          description: 'Payout cancelled',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to cancel payout',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
