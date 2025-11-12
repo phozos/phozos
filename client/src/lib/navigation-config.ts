@@ -6,7 +6,7 @@
  * preventing 404 errors.
  */
 
-export type UserType = 'customer' | 'team_member' | 'company_profile';
+export type UserType = 'customer' | 'team_member' | 'company_profile' | 'partner';
 export type TeamRole = 'admin' | 'counselor' | null;
 
 interface User {
@@ -23,6 +23,7 @@ export const NAVIGATION_PATHS = {
     company_profile: '/dashboard/company/profile',
     admin: '/dashboard/admin/profile',
     counselor: '/dashboard/counselor/profile',
+    partner: '/dashboard/partner/profile',
   },
   dashboard: {
     customer: '/dashboard/student',
@@ -30,6 +31,7 @@ export const NAVIGATION_PATHS = {
     admin: '/dashboard/admin',
     counselor: '/dashboard/team',
     team_member: '/dashboard/team',
+    partner: '/dashboard/partner',
   },
 } as const;
 
@@ -52,6 +54,10 @@ export function getProfilePath(user: User | null): string {
   
   if (user.userType === 'company_profile') {
     return NAVIGATION_PATHS.profile.company_profile;
+  }
+  
+  if (user.userType === 'partner') {
+    return NAVIGATION_PATHS.profile.partner;
   }
   
   if (user.userType === 'team_member') {
@@ -85,6 +91,10 @@ export function getDashboardPath(user: User | null): string {
   
   if (user.userType === 'company_profile') {
     return NAVIGATION_PATHS.dashboard.company_profile;
+  }
+  
+  if (user.userType === 'partner') {
+    return NAVIGATION_PATHS.dashboard.partner;
   }
   
   if (user.userType === 'team_member') {

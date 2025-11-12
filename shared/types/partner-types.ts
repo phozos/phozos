@@ -14,6 +14,16 @@ import type {
   PartnerPayout 
 } from '../schema';
 
+// Re-export schema types for external use
+export type {
+  PartnerProfile,
+  PartnerReferralLink,
+  ReferralClick,
+  PartnerStudentReferral,
+  PartnerCommission,
+  PartnerPayout
+};
+
 // ============================================================================
 // BUSINESS TYPES & ENUMS
 // ============================================================================

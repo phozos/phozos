@@ -128,7 +128,13 @@ export default function AppShell() {
     ] : []),
     ...(user.teamRole === "admin" ? [{ href: "/dashboard/admin", label: "Admin Dashboard" }] : []),
     ...(user.teamRole === "counselor" ? [{ href: "/dashboard/team", label: "Counselor Dashboard" }] : []),
-    ...(user.userType === "company_profile" ? [{ href: "/dashboard/company", label: "Company Dashboard" }] : [])
+    ...(user.userType === "company_profile" ? [{ href: "/dashboard/company", label: "Company Dashboard" }] : []),
+    ...(user.userType === "partner" ? [
+      { href: "/dashboard/partner", label: "Dashboard" },
+      { href: "/dashboard/partner/referral-links", label: "Referral Links" },
+      { href: "/dashboard/partner/commissions", label: "Commissions" },
+      { href: "/dashboard/partner/payouts", label: "Payouts" },
+    ] : [])
   ] : [];
 
   const allNavigationItems = user 

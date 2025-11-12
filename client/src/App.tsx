@@ -18,6 +18,12 @@ import TeamDashboard from "@/pages/TeamDashboard";
 import AdminProfile from "@/pages/AdminProfile";
 import CounselorProfile from "@/pages/CounselorProfile";
 import CompanyProfile from "@/pages/CompanyProfile";
+import PartnerDashboard from "@/pages/PartnerDashboard";
+import PartnerProfile from "@/pages/PartnerProfile";
+import PartnerRegistration from "@/pages/PartnerRegistration";
+import PartnerReferralLinks from "@/pages/PartnerReferralLinks";
+import PartnerCommissions from "@/pages/PartnerCommissions";
+import PartnerPayouts from "@/pages/PartnerPayouts";
 import Auth from "@/pages/Auth";
 import StaffInvite from "@/pages/StaffInvite";
 import StudentProfileDetail from "@/pages/StudentProfileDetail";
@@ -65,12 +71,13 @@ function AppContent() {
   const { user } = useAuth();
 
   // Phase 4: Consolidated protection patterns for cleaner routing
-  const customerOnly = { allowedUserTypes: ['customer'] as ('customer' | 'team_member' | 'company_profile')[] };
-  const companyOnly = { allowedUserTypes: ['company_profile'] as ('customer' | 'team_member' | 'company_profile')[] };
-  const teamMemberOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile')[] };
-  const adminOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile')[], allowedRoles: ['admin'] };
-  const counselorOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile')[], allowedRoles: ['counselor'] };
-  const anyAuth = { allowedUserTypes: ['customer', 'team_member', 'company_profile'] as ('customer' | 'team_member' | 'company_profile')[] };
+  const customerOnly = { allowedUserTypes: ['customer'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const companyOnly = { allowedUserTypes: ['company_profile'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const teamMemberOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const partnerOnly = { allowedUserTypes: ['partner'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const adminOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[], allowedRoles: ['admin'] };
+  const counselorOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[], allowedRoles: ['counselor'] };
+  const anyAuth = { allowedUserTypes: ['customer', 'team_member', 'company_profile', 'partner'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -166,6 +173,41 @@ function AppContent() {
           <ProtectedRoute {...companyOnly}>
             <CompanyProfile />
           </ProtectedRoute>
+        </Route>
+
+        {/* Partner Routes */}
+        <Route path="/dashboard/partner">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerDashboard />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/profile">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerProfile />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/referral-links">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerReferralLinks />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/commissions">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerCommissions />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/payouts">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerPayouts />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/partner/register">
+          <PartnerRegistration />
         </Route>
 
         <Route path="/test/conversions">
