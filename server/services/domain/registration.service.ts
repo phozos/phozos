@@ -121,13 +121,19 @@ export class RegistrationService extends BaseService implements IRegistrationSer
   /**
    * Complete student registration with cooling period info
    * Handles all business logic including email normalization, profile creation, and cooling period calculation
+   * 
+   * Phase 6.2: Referral Tracking Integration
+   * @param referralCode - Optional referral link code from cookie
+   * @param clickId - Optional click ID from cookie for attribution
    */
   async registerStudentComplete(
     email: string,
     password: string,
     firstName: string,
     lastName: string,
-    phone: string
+    phone: string,
+    referralCode?: string,
+    clickId?: string
   ): Promise<RegisterStudentDTO> {
     try {
       const emailLower = email.toLowerCase();
@@ -142,6 +148,36 @@ export class RegistrationService extends BaseService implements IRegistrationSer
         accountStatus: 'active',
         profile
       });
+
+      // Phase 6.2: Attribute to partner if referral code exists
+      if (referralCode) {
+        try {
+          const { container, TYPES } = await import('../container');
+          const { IReferralTrackingService } = await import('./referral-tracking.service');
+          
+          const referralTrackingService = container.get<typeof IReferralTrackingService>(TYPES.IReferralTrackingService);
+          const studentProfile = await this.studentRepo.findByUserId(result.user.id);
+          
+          if (studentProfile) {
+            // Get referral link to find partner
+            const { partnerReferralLinkRepository } = await import('../../repositories');
+            const referralLink = await partnerReferralLinkRepository.findByLinkCode(referralCode);
+            
+            if (referralLink) {
+              await referralTrackingService.attributeStudentToPartner(
+                studentProfile.id,
+                referralLink.partnerId,
+                'link_click',
+                clickId,
+                undefined
+              );
+            }
+          }
+        } catch (referralError) {
+          // Log but don't fail registration if referral attribution fails
+          console.error('Failed to attribute referral:', referralError);
+        }
+      }
 
       // Import authService to check cooling period
       const { authService } = await import('./auth.service');

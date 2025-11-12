@@ -33,6 +33,7 @@ export * from './referral-click.repository';
 export * from './partner-student-referral.repository';
 export * from './partner-commission.repository';
 export * from './partner-payout.repository';
+export * from './payment-record.repository';
 
 import { userRepository } from './user.repository';
 import { studentRepository } from './student.repository';
@@ -67,6 +68,7 @@ import { referralClickRepository } from './referral-click.repository';
 import { partnerStudentReferralRepository } from './partner-student-referral.repository';
 import { partnerCommissionRepository } from './partner-commission.repository';
 import { partnerPayoutRepository } from './partner-payout.repository';
+import { paymentRecordRepository } from './payment-record.repository';
 
 export const repositories = {
   user: userRepository,
@@ -103,5 +105,6 @@ export const repositories = {
   referralClick: referralClickRepository,
   partnerStudentReferral: partnerStudentReferralRepository,
   partnerCommission: partnerCommissionRepository,
-  partnerPayout: partnerPayoutRepository
+  partnerPayout: partnerPayoutRepository,
+  paymentRecord: paymentRecordRepository
 };

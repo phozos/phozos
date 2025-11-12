@@ -74,6 +74,11 @@ export class AuthController extends BaseController {
   /**
    * Register a new student account
    * 
+   * Phase 6.3: Referral Tracking Integration
+   * - Extracts referral_code and click_id from cookies
+   * - Passes to registration service for partner attribution
+   * - Clears referral cookies after successful attribution
+   * 
    * @route POST /api/auth/student-register
    * @access Public
    * @param {Request} req - Express request object containing registration data
@@ -97,14 +102,26 @@ export class AuthController extends BaseController {
     try {
       const validatedData = registerSchema.parse(req.body);
 
+      // Phase 6.3: Extract referral tracking from cookies
+      const referralCode = req.cookies['referral_code'];
+      const clickId = req.cookies['click_id'];
+
       const registrationService = getService<IRegistrationService>(TYPES.IRegistrationService);
       const result = await registrationService.registerStudentComplete(
         validatedData.email,
         validatedData.password,
         validatedData.firstName,
         validatedData.lastName,
-        validatedData.phone
+        validatedData.phone,
+        referralCode,
+        clickId
       );
+
+      // Phase 6.3: Clear referral cookies after attribution
+      if (referralCode) {
+        res.clearCookie('referral_code');
+        res.clearCookie('click_id');
+      }
 
       res.status(201);
       return this.sendSuccess(res, result);

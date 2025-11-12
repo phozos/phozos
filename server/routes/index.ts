@@ -21,6 +21,8 @@ import testimonialRoutes from './testimonial.routes';
 import systemRoutes from './system.routes';
 import paymentRoutes from './payment.routes';
 import partnerRoutes from './partner.routes';
+import { publicReferralController } from '../controllers/public-referral.controller';
+import { referralClickRateLimit } from '../middleware/security';
 import { WebSocketService } from '../services/infrastructure/websocket';
 import { WebSocketEventHandlers } from '../services/infrastructure/websocket-handlers';
 import { adminSecurityService } from '../services/domain/admin';
@@ -77,6 +79,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // Database Health Check Endpoint (before global middleware)
   apiRouter.get('/health', healthCheckEndpoint);
+
+  // Phase 6.1: Public referral handler (NO authentication required)
+  // Must be before checkMaintenanceMode to allow referral clicks during maintenance
+  apiRouter.get('/ref/:linkCode',
+    referralClickRateLimit,
+    (req: Request, res: Response) => publicReferralController.handleReferralClick(req, res)
+  );
 
   // Apply global middleware
   apiRouter.use(checkMaintenanceMode);

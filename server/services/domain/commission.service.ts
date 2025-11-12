@@ -62,17 +62,34 @@ export class CommissionService extends BaseService implements ICommissionService
     }
   }
 
+  /**
+   * Phase 7.3: Create commission for a referral
+   * 
+   * Logic flow:
+   * 1. Get referral and payment details
+   * 2. Get partner profile for commission rate
+   * 3. Calculate commission amount from payment
+   * 4. Create commission record with 'pending' status
+   * 5. Update partner.totalCommissionEarned
+   * 6. Update referral commission fields
+   * 7. Log commission creation event
+   */
   async createCommission(referralId: string, paymentId: string): Promise<PartnerCommission> {
     try {
+      // Get referral details
       const referral = await this.partnerStudentReferralRepo.findById(referralId);
 
-      if (referral.status !== 'converted') {
-        throw new InvalidOperationError('create commission', 'Referral must be in converted status');
-      }
+      // Get payment details to get the actual payment amount
+      const payment = await this.paymentRepo.findById(paymentId);
 
-      const calculation = await this.calculateCommission(referral.partnerId, Number(referral.commissionAmount || 0));
+      // Calculate commission based on payment amount
+      const calculation = await this.calculateCommission(
+        referral.partnerId,
+        Number(payment.amount)
+      );
 
       const commission = await db.transaction(async (tx) => {
+        // Create commission record
         const newCommission = await this.commissionRepo.create({
           partnerId: referral.partnerId,
           referralId: referral.id,
@@ -84,12 +101,14 @@ export class CommissionService extends BaseService implements ICommissionService
           status: 'pending'
         });
 
+        // Update referral with commission details
         await this.partnerStudentReferralRepo.updateCommission(
           referral.id,
           calculation.commissionAmount,
           'pending'
         );
 
+        // Update partner profile stats
         await this.partnerProfileRepo.updateCommissionEarned(
           referral.partnerId,
           calculation.commissionAmount

@@ -574,9 +574,94 @@ export class PaymentController extends BaseController {
     }
   }
 
+  /**
+   * Phase 7.1: Handle payment.captured webhook with commission creation
+   * 
+   * Logic flow:
+   * 1. Look up payment by paymentReference (Razorpay payment ID)
+   * 2. Find student profile by payment.userId
+   * 3. Check if student has referredByPartnerId
+   * 4. If yes, find referral record by studentId
+   * 5. Verify commissionEligible flag
+   * 6. Call commissionService.createCommission
+   * 7. Update referral status to 'converted'
+   * 8. Link subscriptionId and paymentId
+   */
   private async handlePaymentCaptured(payment: any) {
-    console.log('Payment captured:', payment.id);
-    // Additional logging or processing if needed
+    logger.info('Payment captured webhook received', {
+      paymentId: payment.id,
+      orderId: payment.order_id,
+      amount: payment.amount,
+      currency: payment.currency
+    });
+
+    try {
+      // Phase 7.1: Check if this payment is from a referred student
+      const { paymentRepository } = await import('../repositories');
+      const { studentRepository } = await import('../repositories');
+      const { partnerStudentReferralRepository } = await import('../repositories');
+      const { getService, TYPES } = await import('../services/container');
+      
+      // Look up payment by paymentReference (Razorpay payment ID)
+      const paymentRecord = await paymentRepository.findByPaymentReference(payment.id);
+      
+      if (paymentRecord && paymentRecord.userId) {
+        // Find student profile by userId
+        const studentProfile = await studentRepository.findByUserId(paymentRecord.userId);
+        
+        if (studentProfile && studentProfile.referredByPartnerId) {
+          logger.info('Found referred student for commission creation', {
+            paymentId: payment.id,
+            studentId: studentProfile.id,
+            partnerId: studentProfile.referredByPartnerId
+          });
+          
+          // Find referral record by studentId
+          const referral = await partnerStudentReferralRepository.findByStudentId(studentProfile.id);
+          
+          if (referral && referral.commissionEligible) {
+            logger.info('Creating commission for eligible referral', {
+              referralId: referral.id,
+              paymentId: paymentRecord.id,
+              partnerId: referral.partnerId
+            });
+            
+            // Get commission service
+            const { ICommissionService } = await import('../services/domain/commission.service');
+            const commissionService = getService<typeof ICommissionService>(TYPES.ICommissionService);
+            
+            // Create commission
+            await commissionService.createCommission(referral.id, paymentRecord.id);
+            
+            // Update referral status to 'converted'
+            await partnerStudentReferralRepository.update(referral.id, {
+              status: 'converted',
+              convertedAt: new Date(),
+              subscriptionId: paymentRecord.subscriptionId || null,
+              paymentId: paymentRecord.id
+            });
+            
+            logger.info('Commission created successfully', {
+              referralId: referral.id,
+              paymentId: paymentRecord.id,
+              partnerId: referral.partnerId
+            });
+          } else {
+            logger.info('Referral found but not commission eligible', {
+              referralId: referral?.id,
+              commissionEligible: referral?.commissionEligible,
+              paymentId: payment.id
+            });
+          }
+        }
+      }
+    } catch (commissionError) {
+      // Log error but don't fail the webhook processing
+      logger.error('Failed to create commission for payment', {
+        error: commissionError instanceof Error ? commissionError.message : 'Unknown error',
+        paymentId: payment.id
+      });
+    }
   }
 
   private async handlePaymentFailed(payment: any) {
