@@ -123,7 +123,11 @@ export default function PartnerReferralLinks() {
   }, [editingLink, editForm]);
 
   const handleCreateLink = async (data: ReferralLinkForm) => {
-    createLinkMutation.mutate(data, {
+    const payload = {
+      ...data,
+      expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+    };
+    createLinkMutation.mutate(payload, {
       onSuccess: () => {
         setCreateDialogOpen(false);
         createForm.reset();
@@ -134,8 +138,12 @@ export default function PartnerReferralLinks() {
   const handleUpdateLink = async (data: ReferralLinkForm) => {
     if (!editingLink) return;
 
+    const updates = {
+      ...data,
+      expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+    };
     updateLinkMutation.mutate(
-      { linkId: editingLink.id, updates: data },
+      { linkId: editingLink.id, updates },
       {
         onSuccess: () => {
           setEditingLink(null);
@@ -257,22 +265,22 @@ export default function PartnerReferralLinks() {
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
                             <Eye className="w-4 h-4 text-muted-foreground" />
-                            {link.stats?.totalClicks || 0}
+                            {link.clickCount || 0}
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
                             <CheckCircle className="w-4 h-4 text-green-600" />
-                            {link.stats?.totalConversions || 0}
+                            {link.conversionCount || 0}
                           </div>
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-1">
                             <TrendingUp className="w-4 h-4 text-purple-600" />
-                            {link.stats?.conversionRate?.toFixed(1) || 0}%
+                            {link.conversionRate?.toFixed(1) || 0}%
                           </div>
                         </TableCell>
-                        <TableCell>{format(new Date(link.createdAt), 'MMM d, yyyy')}</TableCell>
+                        <TableCell>{link.createdAt ? format(new Date(link.createdAt), 'MMM d, yyyy') : 'N/A'}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

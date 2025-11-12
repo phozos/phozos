@@ -90,10 +90,7 @@ export default function PartnerCommissions() {
                   <User className="w-4 h-4 text-muted-foreground" />
                   <div>
                     <div className="font-medium">
-                      {commission.details?.studentName || 'N/A'}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {commission.details?.studentEmail}
+                      {commission.referral?.studentName || 'N/A'}
                     </div>
                   </div>
                 </div>
@@ -101,15 +98,15 @@ export default function PartnerCommissions() {
               <TableCell>
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-muted-foreground" />
-                  {commission.details?.planName || 'N/A'}
+                  Subscription
                 </div>
               </TableCell>
               <TableCell>
-                ₹{commission.paymentAmount?.toLocaleString('en-IN') || 0}
+                ₹{commission.payment?.amount?.toLocaleString('en-IN') || 0}
               </TableCell>
               <TableCell>
                 <div className="font-semibold text-green-600">
-                  ₹{commission.commissionAmount?.toLocaleString('en-IN') || 0}
+                  ₹{(typeof commission.commissionAmount === 'number' ? commission.commissionAmount : 0).toLocaleString('en-IN')}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {commission.commissionRate}% rate
@@ -130,13 +127,13 @@ export default function PartnerCommissions() {
   };
 
   const totalPending = pendingCommissions.reduce(
-    (sum, c) => sum + (c.commissionAmount || 0), 
+    (sum, c) => sum + (typeof c.commissionAmount === 'number' ? c.commissionAmount : 0), 
     0
   );
   
   const totalEarned = commissionHistory
     .filter(c => c.status === 'approved' || c.status === 'paid')
-    .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
+    .reduce((sum, c) => sum + (typeof c.commissionAmount === 'number' ? c.commissionAmount : 0), 0);
 
   return (
     <>
