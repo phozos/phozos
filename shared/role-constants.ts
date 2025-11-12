@@ -5,7 +5,7 @@
  * These constants must match the database enum definitions in shared/schema.ts
  */
 
-export const USER_TYPES = ['customer', 'team_member', 'company_profile'] as const;
+export const USER_TYPES = ['customer', 'team_member', 'company_profile', 'partner'] as const;
 export const TEAM_ROLES = ['admin', 'counselor'] as const;
 
 export type UserType = typeof USER_TYPES[number];
@@ -31,4 +31,12 @@ export const isCounselor = (userType: UserType, teamRole: TeamRole | null): bool
 
 export const isTeamMember = (userType: UserType): boolean => {
   return userType === 'team_member';
+};
+
+export const isPartner = (userType: UserType): boolean => {
+  return userType === 'partner';
+};
+
+export const canManagePartners = (userType: UserType, teamRole: TeamRole | null): boolean => {
+  return userType === 'team_member' && teamRole === 'admin';
 };
