@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { adminController } from '../controllers/admin.controller';
+import { adminPartnerController } from '../controllers/admin-partner.controller';
 import { requireAdmin } from '../middleware/authentication';
 import { csrfProtection } from '../middleware/csrf';
 import { asyncHandler } from '../middleware/error-handler';
@@ -211,5 +212,32 @@ router.put('/features/deprecations/update', csrfProtection, asyncHandler((req: A
 router.post('/features/deprecations/:scheduleId/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelDeprecationSchedule(req, res)));
 router.get('/features/deprecations/:scheduleId/impact', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationImpact(req, res)));
 router.get('/features/deprecations/:scheduleId/timeline', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationTimeline(req, res)));
+
+// ============================================================================
+// PARTNER MANAGEMENT (Phase 5)
+// ============================================================================
+
+// Partner Management
+router.get('/partners', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllPartners(req, res)));
+router.get('/partners/:partnerId', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPartnerDetails(req, res)));
+router.post('/partners/verify', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.verifyPartner(req, res)));
+router.post('/partners/deactivate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.deactivatePartner(req, res)));
+
+// Partner Referral Management
+router.get('/partners/referrals', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllReferrals(req, res)));
+router.post('/partners/referrals/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.approveReferral(req, res)));
+router.post('/partners/referrals/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectReferral(req, res)));
+
+// Partner Commission Management
+router.get('/partners/commissions/pending', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPendingCommissions(req, res)));
+router.post('/partners/commissions/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.approveCommissions(req, res)));
+router.post('/partners/commissions/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectCommissions(req, res)));
+
+// Partner Payout Management
+router.get('/partners/payouts/pending', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPendingPayouts(req, res)));
+router.post('/partners/payouts/process-bank-transfer', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutBankTransfer(req, res)));
+router.post('/partners/payouts/process-paypal', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutPayPal(req, res)));
+router.post('/partners/payouts/complete', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.completePayout(req, res)));
+router.post('/partners/payouts/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.cancelPayout(req, res)));
 
 export default router;

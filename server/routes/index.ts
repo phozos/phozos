@@ -20,6 +20,7 @@ import subscriptionRoutes from './subscription.routes';
 import testimonialRoutes from './testimonial.routes';
 import systemRoutes from './system.routes';
 import paymentRoutes from './payment.routes';
+import partnerRoutes from './partner.routes';
 import { WebSocketService } from '../services/infrastructure/websocket';
 import { WebSocketEventHandlers } from '../services/infrastructure/websocket-handlers';
 import { adminSecurityService } from '../services/domain/admin';
@@ -113,6 +114,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   apiRouter.use('/subscription', subscriptionRoutes);
   apiRouter.use('/testimonials', testimonialRoutes);
   apiRouter.use('/payment', paymentRoutes);
+  apiRouter.use('/partner', partnerRoutes);
   apiRouter.use('/', systemRoutes);
 
   return apiRouter;
@@ -139,6 +141,7 @@ export function createModularRoutes(): Router {
   router.use('/chat', chatRoutes);
   router.use('/analytics', analyticsRoutes);
   router.use('/student', studentRoutes);
+  router.use('/partner', partnerRoutes);
 
   return router;
 }
@@ -162,7 +165,8 @@ export {
   companyRoutes,
   subscriptionRoutes,
   testimonialRoutes,
-  systemRoutes
+  systemRoutes,
+  partnerRoutes
 };
 
 /**
