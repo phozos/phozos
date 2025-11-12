@@ -24,6 +24,7 @@ import { useTheme } from "@/components/ui/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useApiQuery } from "@/hooks/api-hooks";
+import { getProfilePath, getDashboardPath } from "@/lib/navigation-config";
 import { 
   Bell, 
   Moon, 
@@ -31,7 +32,6 @@ import {
   Menu, 
   GraduationCap,
   User,
-  Settings,
   LogOut,
   Search,
   ChevronDown,
@@ -74,17 +74,8 @@ export default function AppShell() {
       return;
     }
 
-    if (user.userType === 'customer') {
-      navigate('/dashboard/student');
-    } else if (user.userType === 'company_profile') {
-      navigate('/dashboard/company');
-    } else if (user.teamRole === 'admin') {
-      navigate('/dashboard/admin');
-    } else if (user.teamRole) {
-      navigate('/dashboard/team');
-    } else {
-      navigate('/');
-    }
+    const dashboardPath = getDashboardPath(user);
+    navigate(dashboardPath);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -158,12 +149,7 @@ export default function AppShell() {
   };
 
   const getUserProfileLink = () => {
-    if (!user) return "/profile";
-    if (user.userType === 'customer') return "/profile";
-    if (user.userType === 'company_profile') return "/profile/company";
-    if (user.teamRole === 'admin') return "/profile/admin";
-    if (user.teamRole === 'counselor') return "/profile/counselor";
-    return "/profile";
+    return getProfilePath(user);
   };
 
   return (
@@ -351,10 +337,6 @@ export default function AppShell() {
                   <DropdownMenuItem onClick={() => navigate(getUserProfileLink())}>
                     <User className="mr-2 h-4 w-4" />
                     Profile
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/settings")}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 

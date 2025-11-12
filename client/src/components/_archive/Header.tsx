@@ -1,3 +1,16 @@
+/**
+ * ARCHIVED COMPONENT - DO NOT USE
+ * 
+ * This component has been archived and replaced by AppShell.tsx
+ * 
+ * Reason: Legacy header component that was superseded by the more comprehensive
+ * AppShell component which provides better navigation, mobile support, and
+ * consistent layout across the application.
+ * 
+ * Archived on: November 12, 2025
+ * Replaced by: client/src/components/AppShell.tsx
+ */
+
 import { GraduationCap, LogOut, Search, Settings, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
