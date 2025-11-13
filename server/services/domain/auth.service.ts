@@ -24,6 +24,12 @@ export interface LoginTeamDTO {
   refreshToken: string;
 }
 
+export interface LoginPartnerDTO {
+  user: any;
+  token: string;
+  refreshToken: string;
+}
+
 export interface TeamLoginVisibilityDTO {
   visible: boolean;
 }
@@ -33,6 +39,7 @@ export interface IAuthService {
   loginWithType(email: string, password: string, allowedTypes: string[]): Promise<{ user: User }>;
   loginStudentComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginStudentDTO>;
   loginTeamComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginTeamDTO>;
+  loginPartnerComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginPartnerDTO>;
   refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null>;
   getTeamLoginVisibilityStatus(): Promise<TeamLoginVisibilityDTO>;
   validatePassword(userId: string, password: string): Promise<boolean>;
@@ -254,6 +261,42 @@ export class AuthService extends BaseService implements IAuthService {
       };
     } catch (error) {
       return this.handleError(error, 'AuthService.loginTeamComplete');
+    }
+  }
+
+  /**
+   * Complete partner login with JWT token
+   * Handles all business logic including email normalization, authentication, token generation
+   * Phase 2: Generates short-lived access token (15 min) and long-lived refresh token (30 days)
+   */
+  async loginPartnerComplete(email: string, password: string, deviceInfo?: string, ipAddress?: string): Promise<LoginPartnerDTO> {
+    try {
+      const emailLower = email.toLowerCase();
+      const result = await this.login(emailLower, password, 'partner');
+      const user = result.user;
+
+      // Generate short-lived access token (15 minutes)
+      const accessToken = jwtService.sign(
+        { userId: user.id, userType: user.userType },
+        { expiresIn: '15m', subject: user.id }
+      );
+
+      // Generate long-lived refresh token (30 days)
+      const refreshToken = refreshTokenService.generateToken();
+      await refreshTokenService.createRefreshToken(user.id, refreshToken, deviceInfo, ipAddress);
+
+      const sanitizedUser = this.sanitizeUser(user);
+
+      return {
+        user: {
+          ...sanitizedUser,
+          token: accessToken
+        },
+        token: accessToken,
+        refreshToken
+      };
+    } catch (error) {
+      return this.handleError(error, 'AuthService.loginPartnerComplete');
     }
   }
 

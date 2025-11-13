@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { GraduationCap, Users, Shield, Eye, EyeOff, AlertTriangle, Phone, UserCheck } from "lucide-react";
+import { GraduationCap, Users, Shield, Eye, EyeOff, AlertTriangle, Phone, UserCheck, Building2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import MathCaptcha from "@/components/MathCaptcha";
@@ -42,7 +42,7 @@ interface ReferralInfo {
 export default function Auth() {
   const [location, navigate] = useLocation();
   const { login, getCsrfToken } = useAuth();
-  const [loginType, setLoginType] = useState<"student" | "admin" | null>(null);
+  const [loginType, setLoginType] = useState<"student" | "admin" | "partner" | null>(null);
   const [isSignup, setIsSignup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mathChallenge, setMathChallenge] = useState<string>("");
@@ -303,6 +303,39 @@ export default function Auth() {
     }
   };
 
+  const handlePartnerLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    
+    // Ensure CSRF token is available before making request
+    const csrfToken = await getCsrfToken();
+    if (!csrfToken) {
+      setError("Unable to establish secure connection. This may be due to network issues or browser restrictions. Please try: 1) Refreshing the page, 2) Clearing browser cache, or 3) Using a different browser.");
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      // API client now auto-unwraps the envelope, so we get the login response directly
+      const response = await api.post("/api/auth/partner-login", {
+        email: formData.email,
+        password: formData.password,
+      }) as any;
+      
+      // Wait for login state to be properly set
+      await login(response.user, response.token);
+      
+      // Navigate to partner dashboard after login completion
+      navigate("/dashboard/partner");
+    } catch (error) {
+      console.error("Partner login error:", error);
+      setError("Login failed. Please check your credentials and try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetToMain = () => {
     setLoginType(null);
     setIsSignup(false);
@@ -384,6 +417,26 @@ export default function Auth() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Partner Access */}
+            <Card 
+              className="cursor-pointer hover:shadow-md transition-all duration-200 hover:bg-accent/50"
+              onClick={() => setLoginType("partner")}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg">Partner Access</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Education consultants and partner organizations
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Secret Search Input - only show if team login is not visible by default */}
             {Boolean(securitySettings && !(securitySettings as SecuritySettings)?.visible) && (
@@ -685,6 +738,118 @@ export default function Auth() {
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Partner Login
+  if (loginType === "partner") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-background to-emerald-50/30 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-4">
+          {/* Back to Home Button */}
+          <div className="flex justify-start">
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate("/")}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              ← Back to Home
+            </Button>
+          </div>
+
+          <Card className="w-full">
+            <CardHeader className="text-center space-y-2">
+              <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mx-auto">
+                <Building2 className="w-6 h-6 text-white" />
+              </div>
+              <CardTitle className="text-2xl">Partner Access</CardTitle>
+              <CardDescription>
+                Education consultant and partner organization login
+              </CardDescription>
+            </CardHeader>
+          <CardContent className="space-y-6">
+            {error && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <form onSubmit={handlePartnerLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your partner email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({...formData, password: e.target.value})}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing In..." : "Sign In"}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  New partner?
+                </span>
+              </div>
+            </div>
+
+            <div className="text-center space-y-2">
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={() => navigate("/partner/register")}
+              >
+                Register as Partner
+              </Button>
+              <Button 
+                variant="link" 
+                onClick={resetToMain}
+                className="text-sm"
+              >
+                Back to login options
+              </Button>
+            </div>
           </CardContent>
         </Card>
         </div>

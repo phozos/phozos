@@ -6,6 +6,7 @@ import { csrfProtection, csrfTokenProvider, csrfTokenEndpoint } from '../middlew
 import { asyncHandler } from '../middleware/error-handler';
 import { AuthenticatedRequest } from '../types/auth';
 import rateLimit from 'express-rate-limit';
+import { getClientIp } from '../middleware/security';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ const partnerApiLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: any) => {
     const authReq = req as AuthenticatedRequest;
-    return authReq.user?.id || req.ip || 'unauthenticated';
+    return authReq.user?.id || getClientIp(req);
   }
 });
 
@@ -35,7 +36,7 @@ const registrationRateLimit = rateLimit({
   message: 'Too many registration attempts. Please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip || 'unknown'
+  keyGenerator: (req) => getClientIp(req)
 });
 
 // ============================================================================

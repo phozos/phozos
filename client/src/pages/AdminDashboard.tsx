@@ -69,7 +69,8 @@ import {
   ChevronRight,
   X,
   TestTube,
-  History
+  History,
+  Wallet
 } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -109,6 +110,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
 
 // Extract dialog components outside to prevent re-creation on every render
@@ -2094,6 +2096,46 @@ export default function AdminDashboard() {
               <Settings className="w-4 h-4 mr-3" />
               Settings
             </button>
+
+            <Separator className="my-4" />
+
+            <div className="px-3 mb-2">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Partner System
+              </h3>
+            </div>
+
+            <Link 
+              href="/dashboard/admin/partners"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <Building2 className="w-4 h-4 mr-3" />
+              Partners
+            </Link>
+
+            <Link 
+              href="/dashboard/admin/partner-analytics"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <BarChart3 className="w-4 h-4 mr-3" />
+              Partner Analytics
+            </Link>
+
+            <Link 
+              href="/dashboard/admin/commissions"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <DollarSign className="w-4 h-4 mr-3" />
+              Commissions
+            </Link>
+
+            <Link 
+              href="/dashboard/admin/payouts"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <Wallet className="w-4 h-4 mr-3" />
+              Payouts
+            </Link>
           </nav>
         </div>
 
