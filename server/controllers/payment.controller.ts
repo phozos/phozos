@@ -111,6 +111,43 @@ export class PaymentController extends BaseController {
             status: upgradedSubscription.status,
           });
 
+          // Track conversion for zero-cost upgrades
+          try {
+            const { studentRepository } = await import('../repositories');
+            const { paymentRecordRepository } = await import('../repositories');
+            const { referralTrackingService } = await import('../services/domain/referral-tracking.service');
+            
+            const studentProfile = await studentRepository.findByUserId(userId);
+            
+            if (studentProfile) {
+              // Query payments table to get most recent payment record for this subscription
+              const paymentRecords = await paymentRecordRepository.findBySubscriptionId(upgradedSubscription.id);
+              
+              if (paymentRecords && paymentRecords.length > 0) {
+                // Use the most recent payment record
+                const paymentRecord = paymentRecords[paymentRecords.length - 1];
+                
+                await referralTrackingService.trackConversion(
+                  studentProfile.id,
+                  upgradedSubscription.id,
+                  paymentRecord.id
+                );
+                
+                logger.info('Zero-cost upgrade conversion tracked', {
+                  studentId: studentProfile.id,
+                  subscriptionId: upgradedSubscription.id,
+                  paymentId: paymentRecord.id
+                });
+              }
+            }
+          } catch (conversionError) {
+            logger.error('Failed to track zero-cost upgrade conversion', {
+              error: conversionError,
+              userId,
+              subscriptionId: upgradedSubscription.id
+            });
+          }
+
           return this.sendSuccess(res, {
             subscription: upgradedSubscription,
             message: 'Upgraded successfully without additional payment',
@@ -395,7 +432,7 @@ export class PaymentController extends BaseController {
         currency,
       });
       
-      const subscription = await paymentTransactionService.createSubscriptionWithLock(
+      const result = await paymentTransactionService.createSubscriptionWithLock(
         userId,
         planId,
         orderId,
@@ -409,13 +446,44 @@ export class PaymentController extends BaseController {
         orderId,
         paymentId,
         planId,
-        subscriptionId: subscription.id,
+        subscriptionId: result.subscription.id,
+        paymentRecordId: result.paymentRecordId,
         amountPaid,
         currency,
       });
 
+      // Track referral conversion if applicable
+      try {
+        const { studentRepository } = await import('../repositories');
+        const { referralTrackingService } = await import('../services/domain/referral-tracking.service');
+        
+        const studentProfile = await studentRepository.findByUserId(userId);
+        
+        if (studentProfile && result.paymentRecordId) {
+          // Use the payment record ID directly from the transaction (deterministic, no race condition)
+          await referralTrackingService.trackConversion(
+            studentProfile.id,
+            result.subscription.id,
+            result.paymentRecordId
+          );
+          
+          logger.info('Referral conversion tracked', {
+            studentId: studentProfile.id,
+            subscriptionId: result.subscription.id,
+            paymentRecordId: result.paymentRecordId
+          });
+        }
+      } catch (conversionError) {
+        logger.error('Failed to track referral conversion', {
+          error: conversionError,
+          userId,
+          subscriptionId: result.subscription.id,
+          orderId
+        });
+      }
+
       return this.sendSuccess(res, {
-        subscription,
+        subscription: result.subscription,
         paymentId,
       });
     } catch (error) {
@@ -597,13 +665,13 @@ export class PaymentController extends BaseController {
 
     try {
       // Phase 7.1: Check if this payment is from a referred student
-      const { paymentRepository } = await import('../repositories');
+      const { paymentRecordRepository } = await import('../repositories');
       const { studentRepository } = await import('../repositories');
       const { partnerStudentReferralRepository } = await import('../repositories');
-      const { getService, TYPES } = await import('../services/container');
+      const { commissionService } = await import('../services/domain/commission.service');
       
       // Look up payment by paymentReference (Razorpay payment ID)
-      const paymentRecord = await paymentRepository.findByPaymentReference(payment.id);
+      const paymentRecord = await paymentRecordRepository.findByPaymentReference(payment.id);
       
       if (paymentRecord && paymentRecord.userId) {
         // Find student profile by userId
@@ -625,10 +693,6 @@ export class PaymentController extends BaseController {
               paymentId: paymentRecord.id,
               partnerId: referral.partnerId
             });
-            
-            // Get commission service
-            const { ICommissionService } = await import('../services/domain/commission.service');
-            const commissionService = getService<typeof ICommissionService>(TYPES.ICommissionService);
             
             // Create commission
             await commissionService.createCommission(referral.id, paymentRecord.id);
@@ -811,7 +875,7 @@ export class PaymentController extends BaseController {
 
       // Activate subscription with transaction isolation - prevents race conditions
       // between webhook and manual verification using SERIALIZABLE isolation + row-level locking
-      const subscription = await paymentTransactionService.createSubscriptionWithLock(
+      const result = await paymentTransactionService.createSubscriptionWithLock(
         userId,
         planId,
         orderId,
@@ -825,8 +889,38 @@ export class PaymentController extends BaseController {
         planId,
         orderId,
         paymentId,
-        subscriptionId: subscription.id,
+        subscriptionId: result.subscription.id,
+        paymentRecordId: result.paymentRecordId,
       });
+
+      // Track referral conversion for webhook-driven subscriptions
+      try {
+        const { studentRepository } = await import('../repositories');
+        const { referralTrackingService } = await import('../services/domain/referral-tracking.service');
+        
+        const studentProfile = await studentRepository.findByUserId(userId);
+        
+        if (studentProfile && result.paymentRecordId) {
+          await referralTrackingService.trackConversion(
+            studentProfile.id,
+            result.subscription.id,
+            result.paymentRecordId
+          );
+          
+          logger.info('Webhook referral conversion tracked', {
+            studentId: studentProfile.id,
+            subscriptionId: result.subscription.id,
+            paymentRecordId: result.paymentRecordId
+          });
+        }
+      } catch (conversionError) {
+        logger.error('Failed to track webhook referral conversion', {
+          error: conversionError,
+          userId,
+          subscriptionId: result.subscription.id,
+          orderId
+        });
+      }
     } catch (error) {
       logger.error('Error handling order.paid webhook', {
         error,

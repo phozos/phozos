@@ -8,6 +8,11 @@ import { NotFoundError } from '../../repositories/errors';
 import { CommonValidators } from '../validation';
 import { subscriptionAuditOutboxService } from '../infrastructure/subscription-audit-outbox.service';
 
+export interface SubscriptionWithPayment {
+  subscription: UserSubscription;
+  paymentRecordId: string;
+}
+
 export interface IPaymentTransactionService {
   createSubscriptionWithLock(
     userId: string,
@@ -16,7 +21,7 @@ export interface IPaymentTransactionService {
     paymentId: string,
     amountPaid: number,
     currency: string
-  ): Promise<UserSubscription>;
+  ): Promise<SubscriptionWithPayment>;
 }
 
 export class PaymentTransactionService extends BaseService implements IPaymentTransactionService {
@@ -30,7 +35,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
     paymentId: string,
     amountPaid: number,
     currency: string
-  ): Promise<UserSubscription> {
+  ): Promise<SubscriptionWithPayment> {
     const errors: Record<string, string> = {};
 
     const userIdValidation = CommonValidators.validateUUID(userId, 'User ID');
@@ -58,7 +63,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
     amountPaid: number,
     currency: string,
     attempt: number = 1
-  ): Promise<UserSubscription> {
+  ): Promise<SubscriptionWithPayment> {
     try {
       return await this.executeTransaction(userId, planId, orderId, paymentId, amountPaid, currency);
     } catch (error: any) {
@@ -96,7 +101,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
     paymentId: string,
     amountPaid: number,
     currency: string
-  ): Promise<UserSubscription> {
+  ): Promise<SubscriptionWithPayment> {
     return await db.transaction(
       async (tx) => {
         const existingByOrder = await tx
@@ -107,7 +112,21 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
           .limit(1);
 
         if (existingByOrder.length > 0) {
-          return existingByOrder[0] as UserSubscription;
+          // Subscription already exists for this order - find the payment record
+          const existingPayment = await tx
+            .select()
+            .from(payments)
+            .where(eq(payments.orderId, orderId))
+            .limit(1);
+          
+          if (!existingPayment[0]) {
+            throw new Error(`Payment record not found for existing order: ${orderId}`);
+          }
+          
+          return {
+            subscription: existingByOrder[0] as UserSubscription,
+            paymentRecordId: existingPayment[0].id
+          };
         }
 
         const existingSubscriptions = await tx
@@ -191,7 +210,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
           const updatedSubscription = updated[0] as UserSubscription;
 
           // Record payment to payments table (CRITICAL: Fixes revenue tracking for upgrades)
-          await tx.insert(payments).values({
+          const paymentRecords = await tx.insert(payments).values({
             userId,
             subscriptionId: updatedSubscription.id,
             planId: targetPlan.id,
@@ -202,7 +221,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
             paymentReference: paymentId,
             paymentGateway: 'razorpay',
             paidAt: new Date(),
-          });
+          }).returning();
+
+          const paymentRecord = paymentRecords[0];
 
           // Log subscription upgrade event to outbox
           await subscriptionAuditOutboxService.enqueueEvent(
@@ -224,7 +245,10 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
             }
           );
 
-          return updatedSubscription;
+          return {
+            subscription: updatedSubscription,
+            paymentRecordId: paymentRecord.id
+          };
         }
 
         const startDate = new Date();
@@ -259,7 +283,7 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
         const newSubscription = created[0] as UserSubscription;
 
         // Record payment to payments table
-        await tx.insert(payments).values({
+        const paymentRecords = await tx.insert(payments).values({
           userId,
           subscriptionId: newSubscription.id,
           planId: targetPlan.id,
@@ -270,7 +294,9 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
           paymentReference: paymentId,
           paymentGateway: 'razorpay',
           paidAt: new Date(),
-        });
+        }).returning();
+
+        const paymentRecord = paymentRecords[0];
 
         // Log subscription creation event to outbox
         await subscriptionAuditOutboxService.enqueueEvent(
@@ -292,7 +318,10 @@ export class PaymentTransactionService extends BaseService implements IPaymentTr
           }
         );
 
-        return newSubscription;
+        return {
+          subscription: newSubscription,
+          paymentRecordId: paymentRecord.id
+        };
       },
       {
         isolationLevel: 'serializable',

@@ -4,7 +4,8 @@ import {
   IReferralClickRepository,
   IPartnerStudentReferralRepository,
   IPartnerProfileRepository,
-  IPaymentRepository
+  IPaymentRepository,
+  IStudentRepository
 } from '../../repositories';
 import { container, TYPES } from '../container';
 import { ReferralClick, PartnerStudentReferral } from '@shared/schema';
@@ -19,7 +20,7 @@ const ATTRIBUTION_WINDOW_DAYS = 30;
 
 export interface IReferralTrackingService {
   recordClick(data: RecordReferralClickRequest): Promise<ReferralClick>;
-  attributeStudentToPartner(studentId: string, partnerId: string, attributionMethod: AttributionMethod, clickId?: string, promoCode?: string): Promise<PartnerStudentReferral>;
+  attributeStudentToPartner(studentId: string, userId: string, partnerId: string, attributionMethod: AttributionMethod, clickId?: string, promoCode?: string): Promise<PartnerStudentReferral>;
   trackConversion(studentId: string, subscriptionId: string, paymentId: string): Promise<void>;
   isUniqueClick(fingerprint: string, linkId: string): Promise<boolean>;
   getFingerprintFromRequest(ipAddress: string, userAgent: string): string;
@@ -31,7 +32,8 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
     private referralClickRepo: IReferralClickRepository = container.get<IReferralClickRepository>(TYPES.IReferralClickRepository),
     private partnerStudentReferralRepo: IPartnerStudentReferralRepository = container.get<IPartnerStudentReferralRepository>(TYPES.IPartnerStudentReferralRepository),
     private partnerProfileRepo: IPartnerProfileRepository = container.get<IPartnerProfileRepository>(TYPES.IPartnerProfileRepository),
-    private paymentRepo: IPaymentRepository = container.get<IPaymentRepository>(TYPES.IPaymentRepository)
+    private paymentRepo: IPaymentRepository = container.get<IPaymentRepository>(TYPES.IPaymentRepository),
+    private studentRepo: IStudentRepository = container.get<IStudentRepository>(TYPES.IStudentRepository)
   ) {
     super();
   }
@@ -112,6 +114,7 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
 
   async attributeStudentToPartner(
     studentId: string,
+    userId: string,
     partnerId: string,
     attributionMethod: AttributionMethod = 'link_click',
     clickId?: string,
@@ -136,7 +139,7 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
       const referral = await this.partnerStudentReferralRepo.create({
         partnerId,
         studentId,
-        userId: studentId,
+        userId: userId,
         referralLinkId,
         attributionMethod,
         promoCode,
@@ -148,6 +151,12 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
       if (referralLinkId) {
         await this.referralLinkRepo.incrementConversionCount(referralLinkId);
       }
+
+      // Update student profile with partner reference for quick lookups
+      await this.studentRepo.update(studentId, {
+        referredByPartnerId: partnerId,
+        referralLinkId: referralLinkId
+      });
 
       return referral;
     } catch (error) {

@@ -153,9 +153,8 @@ export class RegistrationService extends BaseService implements IRegistrationSer
       if (referralCode) {
         try {
           const { container, TYPES } = await import('../container');
-          const { IReferralTrackingService } = await import('./referral-tracking.service');
-          
-          const referralTrackingService = container.get<typeof IReferralTrackingService>(TYPES.IReferralTrackingService);
+          const { referralTrackingService } = await import('./referral-tracking.service');
+          const logger = (await import('../../utils/logger')).default;
           const studentProfile = await this.studentRepo.findByUserId(result.user.id);
           
           if (studentProfile) {
@@ -166,6 +165,7 @@ export class RegistrationService extends BaseService implements IRegistrationSer
             if (referralLink) {
               await referralTrackingService.attributeStudentToPartner(
                 studentProfile.id,
+                studentProfile.userId,
                 referralLink.partnerId,
                 'link_click',
                 clickId,
@@ -175,7 +175,13 @@ export class RegistrationService extends BaseService implements IRegistrationSer
           }
         } catch (referralError) {
           // Log but don't fail registration if referral attribution fails
-          console.error('Failed to attribute referral:', referralError);
+          const logger = (await import('../../utils/logger')).default;
+          logger.error('Failed to attribute referral - CRITICAL', {
+            userId: result.user.id,
+            referralCode,
+            clickId,
+            error: referralError
+          });
         }
       }
 
