@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Switch, Route, useRoute } from "wouter";
 import { useAuth, AuthProvider } from "./hooks/useAuth";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -71,6 +71,26 @@ const LoadingFallback = () => (
   </div>
 );
 
+// Referral Redirect Component - handles /ref/:code route
+const ReferralRedirect = () => {
+  const [, params] = useRoute("/ref/:code");
+  
+  useEffect(() => {
+    if (params?.code) {
+      window.location.href = `/api/ref/${params.code}`;
+    }
+  }, [params]);
+  
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex flex-col items-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <p className="text-muted-foreground">Processing referral link...</p>
+      </div>
+    </div>
+  );
+};
+
 function AppContent() {
   const { user } = useAuth();
 
@@ -86,6 +106,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Switch>
+        <Route path="/ref/:code" component={ReferralRedirect} />
         <Route path="/" component={Home} />
         <Route path="/auth" component={Auth} />
         <Route path="/auth/staff-invite/:token" component={StaffInvite} />

@@ -32,7 +32,7 @@ export class PublicReferralController extends BaseController {
    * 6. Check if unique click (by fingerprint + linkId)
    * 7. Record click in referral_clicks table
    * 8. Set cookies: referral_code (httpOnly: false), click_id (httpOnly: true), ref_session
-   * 9. Redirect to /register?ref=LINKCODE
+   * 9. Redirect to /auth?signup=true&ref=LINKCODE
    */
   async handleReferralClick(req: Request, res: Response) {
     try {
@@ -97,8 +97,8 @@ export class PublicReferralController extends BaseController {
         sameSite: 'lax'
       });
       
-      // Redirect to registration page with referral code as query parameter
-      return res.redirect(`/register?ref=${linkCode}`);
+      // Redirect to auth page with signup mode and referral code as query parameters
+      return res.redirect(`/auth?signup=true&ref=${linkCode}`);
       
     } catch (error) {
       // Log error but don't expose details to user

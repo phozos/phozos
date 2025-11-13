@@ -158,12 +158,26 @@ export default function Auth() {
     return isVisibleByDefault || isVisibleBySecret;
   };
 
-  // Check URL parameters for admin access
+  // Check URL parameters for admin access and signup mode
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const type = urlParams.get('type');
+    const signup = urlParams.get('signup');
+    const ref = urlParams.get('ref');
+    
     if (type === 'admin') {
       setLoginType('admin');
+    }
+    
+    // Auto-open signup form when signup=true in URL (from referral links)
+    if (signup === 'true') {
+      setLoginType('student');
+      setIsSignup(true);
+    }
+    
+    // Log referral information if present
+    if (ref) {
+      console.log('📎 Referral code from URL:', ref);
     }
   }, [location]);
 
