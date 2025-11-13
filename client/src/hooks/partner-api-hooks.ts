@@ -362,6 +362,82 @@ export function usePartnerAnalytics() {
 }
 
 // ============================================================================
+// ADMIN REFERRAL HOOKS
+// ============================================================================
+
+/**
+ * Fetch all referrals (Admin only)
+ */
+export function useAllReferrals() {
+  return useApiQuery<any[]>(
+    ['/api/admin/partners/referrals'],
+    '/api/admin/partners/referrals',
+    undefined,
+    { staleTime: 1 * 60 * 1000 }
+  );
+}
+
+/**
+ * Approve referral (Admin only)
+ */
+export function useApproveReferral() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { referralId: string }>(
+    async ({ referralId }) => {
+      await api.post('/api/admin/partners/referrals/approve', { referralId });
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/partners/referrals'] });
+        toast({
+          title: 'Success',
+          description: 'Referral approved successfully',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to approve referral',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+/**
+ * Reject referral (Admin only)
+ */
+export function useRejectReferral() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useApiMutation<void, { referralId: string; reason: string }>(
+    async ({ referralId, reason }) => {
+      await api.post('/api/admin/partners/referrals/reject', { referralId, reason });
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['/api/admin/partners/referrals'] });
+        toast({
+          title: 'Success',
+          description: 'Referral rejected',
+        });
+      },
+      onError: () => {
+        toast({
+          title: 'Error',
+          description: 'Failed to reject referral',
+          variant: 'destructive',
+        });
+      },
+    }
+  );
+}
+
+// ============================================================================
 // ADMIN COMMISSION HOOKS
 // ============================================================================
 

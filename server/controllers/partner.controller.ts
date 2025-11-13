@@ -338,6 +338,36 @@ export class PartnerController extends BaseController {
   }
 
   /**
+   * Deactivate a referral link
+   * 
+   * @route DELETE /api/partner/referral-links/:linkId
+   * @access Partner
+   * @param {AuthenticatedRequest} req - Express request object with authenticated user
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success message
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not a partner or doesn't own the link
+   * @throws {404} Not found if link doesn't exist
+   */
+  async deactivateReferralLink(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { linkId } = req.params;
+
+      const partnerService = getService<IPartnerService>(TYPES.IPartnerService);
+      const partner = await partnerService.getPartnerByUserId(userId);
+
+      const referralLinkService = getService<IReferralLinkService>(TYPES.IReferralLinkService);
+      await referralLinkService.updateReferralLink(linkId, { isActive: false });
+
+      return this.sendSuccess(res, { message: 'Referral link deactivated successfully' });
+    } catch (error: any) {
+      return this.handleError(res, error, 'PartnerController.deactivateReferralLink');
+    }
+  }
+
+  /**
    * Get all student referrals for partner
    * 
    * @route GET /api/partner/referrals
@@ -366,13 +396,13 @@ export class PartnerController extends BaseController {
   }
 
   /**
-   * Get commission history for partner
+   * Get all commissions for partner
    * 
    * @route GET /api/partner/commissions
    * @access Partner
    * @param {AuthenticatedRequest} req - Express request object with authenticated user
    * @param {Response} res - Express response object
-   * @returns {Promise<Response>} Returns list of commissions with details
+   * @returns {Promise<Response>} Returns list of all commissions with details
    * 
    * @throws {401} Unauthorized if user is not authenticated
    * @throws {403} Forbidden if user is not a partner
@@ -390,6 +420,62 @@ export class PartnerController extends BaseController {
       return this.sendSuccess(res, commissions);
     } catch (error: any) {
       return this.handleError(res, error, 'PartnerController.getCommissions');
+    }
+  }
+
+  /**
+   * Get pending commissions for partner
+   * 
+   * @route GET /api/partner/commissions/pending
+   * @access Partner
+   * @param {AuthenticatedRequest} req - Express request object with authenticated user
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of pending commissions
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not a partner
+   */
+  async getPendingCommissions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+
+      const partnerService = getService<IPartnerService>(TYPES.IPartnerService);
+      const partner = await partnerService.getPartnerByUserId(userId);
+
+      const commissionService = getService<ICommissionService>(TYPES.ICommissionService);
+      const commissions = await commissionService.getPendingCommissions(partner.id);
+
+      return this.sendSuccess(res, commissions);
+    } catch (error: any) {
+      return this.handleError(res, error, 'PartnerController.getPendingCommissions');
+    }
+  }
+
+  /**
+   * Get commission history for partner (approved/rejected/paid)
+   * 
+   * @route GET /api/partner/commissions/history
+   * @access Partner
+   * @param {AuthenticatedRequest} req - Express request object with authenticated user
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of processed commissions
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not a partner
+   */
+  async getCommissionHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+
+      const partnerService = getService<IPartnerService>(TYPES.IPartnerService);
+      const partner = await partnerService.getPartnerByUserId(userId);
+
+      const commissionService = getService<ICommissionService>(TYPES.ICommissionService);
+      const commissions = await commissionService.getCommissionHistory(partner.id);
+
+      return this.sendSuccess(res, commissions);
+    } catch (error: any) {
+      return this.handleError(res, error, 'PartnerController.getCommissionHistory');
     }
   }
 

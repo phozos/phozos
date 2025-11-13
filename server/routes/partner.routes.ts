@@ -97,10 +97,10 @@ router.put('/profile',
 
 /**
  * Get Dashboard Statistics
- * @route GET /api/partner/dashboard
+ * @route GET /api/partner/dashboard-stats
  * @access Partner
  */
-router.get('/dashboard', 
+router.get('/dashboard-stats', 
   asyncHandler((req: AuthenticatedRequest, res: Response) => partnerController.getDashboardStats(req, res))
 );
 
@@ -139,6 +139,17 @@ router.put('/referral-links/:linkId',
   asyncHandler((req: AuthenticatedRequest, res: Response) => partnerController.updateReferralLink(req, res))
 );
 
+/**
+ * Deactivate Referral Link
+ * @route DELETE /api/partner/referral-links/:linkId
+ * @access Partner
+ * @csrf Required
+ */
+router.delete('/referral-links/:linkId', 
+  csrfProtection,
+  asyncHandler((req: AuthenticatedRequest, res: Response) => partnerController.deactivateReferralLink(req, res))
+);
+
 // ============================================================================
 // REFERRAL & COMMISSION TRACKING
 // ============================================================================
@@ -153,12 +164,30 @@ router.get('/referrals',
 );
 
 /**
- * Get Commission History
+ * Get All Commissions
  * @route GET /api/partner/commissions
  * @access Partner
  */
 router.get('/commissions', 
   asyncHandler((req: AuthenticatedRequest, res: Response) => partnerController.getCommissions(req, res))
+);
+
+/**
+ * Get Pending Commissions
+ * @route GET /api/partner/commissions/pending
+ * @access Partner
+ */
+router.get('/commissions/pending', 
+  asyncHandler((req: AuthenticatedRequest, res: Response) => partnerController.getPendingCommissions(req, res))
+);
+
+/**
+ * Get Commission History (approved/rejected/paid)
+ * @route GET /api/partner/commissions/history
+ * @access Partner
+ */
+router.get('/commissions/history', 
+  asyncHandler((req: AuthenticatedRequest, res: Response) => partnerController.getCommissionHistory(req, res))
 );
 
 // ============================================================================

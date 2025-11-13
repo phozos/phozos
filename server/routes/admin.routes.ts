@@ -219,9 +219,10 @@ router.get('/features/deprecations/:scheduleId/timeline', asyncHandler((req: Aut
 
 // Partner Management
 router.get('/partners', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllPartners(req, res)));
+router.get('/partners/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPartnerAnalytics(req, res)));
 router.get('/partners/:partnerId', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPartnerDetails(req, res)));
-router.post('/partners/verify', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.verifyPartner(req, res)));
-router.post('/partners/deactivate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.deactivatePartner(req, res)));
+router.post('/partners/:partnerId/verify', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.verifyPartner(req, res)));
+router.post('/partners/:partnerId/deactivate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.deactivatePartner(req, res)));
 
 // Partner Referral Management
 router.get('/partners/referrals', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllReferrals(req, res)));
@@ -229,15 +230,17 @@ router.post('/partners/referrals/approve', csrfProtection, asyncHandler((req: Au
 router.post('/partners/referrals/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectReferral(req, res)));
 
 // Partner Commission Management
+router.get('/commissions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllCommissions(req, res)));
 router.get('/partners/commissions/pending', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPendingCommissions(req, res)));
-router.post('/partners/commissions/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.approveCommissions(req, res)));
-router.post('/partners/commissions/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectCommissions(req, res)));
+router.post('/commissions/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.approveCommissions(req, res)));
+router.post('/commissions/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectCommissions(req, res)));
 
 // Partner Payout Management
+router.get('/payouts', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllPayouts(req, res)));
 router.get('/partners/payouts/pending', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPendingPayouts(req, res)));
-router.post('/partners/payouts/process-bank-transfer', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutBankTransfer(req, res)));
-router.post('/partners/payouts/process-paypal', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutPayPal(req, res)));
-router.post('/partners/payouts/complete', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.completePayout(req, res)));
-router.post('/partners/payouts/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.cancelPayout(req, res)));
+router.post('/payouts/:payoutId/process-bank', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutBankTransfer(req, res)));
+router.post('/payouts/:payoutId/process-paypal', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutPayPal(req, res)));
+router.post('/payouts/:payoutId/complete', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.completePayout(req, res)));
+router.post('/payouts/:payoutId/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.cancelPayout(req, res)));
 
 export default router;

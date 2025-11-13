@@ -12,12 +12,9 @@ import { z } from 'zod';
  * Validation Schemas
  */
 
-const verifyPartnerSchema = z.object({
-  partnerId: z.string().uuid()
-});
+const verifyPartnerSchema = z.object({});
 
 const deactivatePartnerSchema = z.object({
-  partnerId: z.string().uuid(),
   reason: z.string().min(1)
 });
 
@@ -40,21 +37,16 @@ const rejectCommissionsSchema = z.object({
 });
 
 const processPayoutBankTransferSchema = z.object({
-  payoutId: z.string().uuid(),
-  referenceNumber: z.string().min(1)
+  referenceId: z.string().min(1)
 });
 
 const processPayoutPayPalSchema = z.object({
-  payoutId: z.string().uuid(),
-  transactionId: z.string().min(1)
+  referenceId: z.string().min(1)
 });
 
-const completePayoutSchema = z.object({
-  payoutId: z.string().uuid()
-});
+const completePayoutSchema = z.object({});
 
 const cancelPayoutSchema = z.object({
-  payoutId: z.string().uuid(),
   reason: z.string().min(1)
 });
 
@@ -121,6 +113,68 @@ export class AdminPartnerController extends BaseController {
   }
 
   /**
+   * Get partner analytics across all partners
+   * 
+   * @route GET /api/admin/partners/analytics
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with authenticated admin
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns aggregated partner analytics
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getPartnerAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const partnerProfileRepo = getService<IPartnerProfileRepository>(TYPES.IPartnerProfileRepository);
+      const referralRepo = getService<IPartnerStudentReferralRepository>(TYPES.IPartnerStudentReferralRepository);
+      const commissionRepo = getService<IPartnerCommissionRepository>(TYPES.IPartnerCommissionRepository);
+      const payoutRepo = getService<IPartnerPayoutRepository>(TYPES.IPartnerPayoutRepository);
+
+      const [
+        totalPartners,
+        activePartners,
+        verifiedPartners,
+        allReferrals,
+        allCommissions,
+        allPayouts
+      ] = await Promise.all([
+        partnerProfileRepo.findAll(),
+        partnerProfileRepo.findActive(),
+        partnerProfileRepo.findVerified(),
+        referralRepo.findAll(),
+        commissionRepo.findAll(),
+        payoutRepo.findAll()
+      ]);
+
+      const convertedReferrals = allReferrals.filter((r: any) => r.status === 'converted');
+      const pendingCommissions = allCommissions.filter((c: any) => c.status === 'pending');
+      const approvedCommissions = allCommissions.filter((c: any) => c.status === 'approved');
+      const totalCommissionAmount = allCommissions.reduce((sum: number, c: any) => sum + Number(c.commissionAmount), 0);
+      const totalPayoutAmount = allPayouts.reduce((sum: number, p: any) => sum + Number(p.totalAmount), 0);
+
+      const analytics = {
+        totalPartners: totalPartners.length,
+        activePartners: activePartners.length,
+        verifiedPartners: verifiedPartners.length,
+        totalReferrals: allReferrals.length,
+        convertedReferrals: convertedReferrals.length,
+        conversionRate: allReferrals.length > 0 ? (convertedReferrals.length / allReferrals.length) * 100 : 0,
+        totalCommissions: allCommissions.length,
+        pendingCommissions: pendingCommissions.length,
+        approvedCommissions: approvedCommissions.length,
+        totalCommissionAmount,
+        totalPayouts: allPayouts.length,
+        totalPayoutAmount
+      };
+
+      return this.sendSuccess(res, analytics);
+    } catch (error: any) {
+      return this.handleError(res, error, 'AdminPartnerController.getPartnerAnalytics');
+    }
+  }
+
+  /**
    * Get partner details by ID
    * 
    * @route GET /api/admin/partners/:partnerId
@@ -149,17 +203,11 @@ export class AdminPartnerController extends BaseController {
   /**
    * Verify a partner account
    * 
-   * @route POST /api/admin/partners/verify
+   * @route POST /api/admin/partners/:partnerId/verify
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
    * @returns {Promise<Response>} Returns updated partner profile
-   * 
-   * @example
-   * // Request body:
-   * {
-   *   "partnerId": "uuid"
-   * }
    * 
    * @throws {401} Unauthorized if user is not authenticated
    * @throws {403} Forbidden if user is not an admin
@@ -169,10 +217,11 @@ export class AdminPartnerController extends BaseController {
   async verifyPartner(req: AuthenticatedRequest, res: Response) {
     try {
       const adminId = this.getUserId(req);
-      const validatedData = verifyPartnerSchema.parse(req.body);
+      const { partnerId } = req.params;
+      verifyPartnerSchema.parse(req.body);
 
       const partnerService = getService<IPartnerService>(TYPES.IPartnerService);
-      const updated = await partnerService.verifyPartner(validatedData.partnerId, adminId);
+      const updated = await partnerService.verifyPartner(partnerId, adminId);
 
       return this.sendSuccess(res, updated);
     } catch (error: any) {
@@ -186,7 +235,7 @@ export class AdminPartnerController extends BaseController {
   /**
    * Deactivate a partner account
    * 
-   * @route POST /api/admin/partners/deactivate
+   * @route POST /api/admin/partners/:partnerId/deactivate
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
@@ -195,7 +244,6 @@ export class AdminPartnerController extends BaseController {
    * @example
    * // Request body:
    * {
-   *   "partnerId": "uuid",
    *   "reason": "Fraudulent activity detected"
    * }
    * 
@@ -207,11 +255,12 @@ export class AdminPartnerController extends BaseController {
   async deactivatePartner(req: AuthenticatedRequest, res: Response) {
     try {
       const adminId = this.getUserId(req);
+      const { partnerId } = req.params;
       const validatedData = deactivatePartnerSchema.parse(req.body);
 
       const partnerService = getService<IPartnerService>(TYPES.IPartnerService);
       const updated = await partnerService.deactivatePartner(
-        validatedData.partnerId,
+        partnerId,
         adminId,
         validatedData.reason
       );
@@ -326,6 +375,29 @@ export class AdminPartnerController extends BaseController {
   }
 
   /**
+   * Get all commissions across all partners
+   * 
+   * @route GET /api/admin/commissions
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with authenticated admin
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of all commissions
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getAllCommissions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const commissionRepo = getService<IPartnerCommissionRepository>(TYPES.IPartnerCommissionRepository);
+      const commissions = await commissionRepo.findAll();
+
+      return this.sendSuccess(res, commissions);
+    } catch (error: any) {
+      return this.handleError(res, error, 'AdminPartnerController.getAllCommissions');
+    }
+  }
+
+  /**
    * Get all pending commissions across all partners
    * 
    * @route GET /api/admin/partners/commissions/pending
@@ -351,7 +423,7 @@ export class AdminPartnerController extends BaseController {
   /**
    * Approve multiple commissions
    * 
-   * @route POST /api/admin/partners/commissions/approve
+   * @route POST /api/admin/commissions/approve
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
@@ -387,7 +459,7 @@ export class AdminPartnerController extends BaseController {
   /**
    * Reject multiple commissions
    * 
-   * @route POST /api/admin/partners/commissions/reject
+   * @route POST /api/admin/commissions/reject
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
@@ -426,6 +498,29 @@ export class AdminPartnerController extends BaseController {
   }
 
   /**
+   * Get all payouts across all partners
+   * 
+   * @route GET /api/admin/payouts
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with authenticated admin
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of all payouts
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getAllPayouts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const payoutRepo = getService<IPartnerPayoutRepository>(TYPES.IPartnerPayoutRepository);
+      const payouts = await payoutRepo.findAll();
+
+      return this.sendSuccess(res, payouts);
+    } catch (error: any) {
+      return this.handleError(res, error, 'AdminPartnerController.getAllPayouts');
+    }
+  }
+
+  /**
    * Get all pending payouts across all partners
    * 
    * @route GET /api/admin/partners/payouts/pending
@@ -451,7 +546,7 @@ export class AdminPartnerController extends BaseController {
   /**
    * Process payout via bank transfer
    * 
-   * @route POST /api/admin/partners/payouts/process-bank-transfer
+   * @route POST /api/admin/payouts/:payoutId/process-bank
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
@@ -460,8 +555,7 @@ export class AdminPartnerController extends BaseController {
    * @example
    * // Request body:
    * {
-   *   "payoutId": "uuid",
-   *   "referenceNumber": "TXN123456789"
+   *   "referenceId": "TXN123456789"
    * }
    * 
    * @throws {401} Unauthorized if user is not authenticated
@@ -470,12 +564,13 @@ export class AdminPartnerController extends BaseController {
    */
   async processPayoutBankTransfer(req: AuthenticatedRequest, res: Response) {
     try {
+      const { payoutId } = req.params;
       const validatedData = processPayoutBankTransferSchema.parse(req.body);
 
       const payoutService = getService<IPayoutService>(TYPES.IPayoutService);
       const updated = await payoutService.processPayoutBankTransfer(
-        validatedData.payoutId,
-        validatedData.referenceNumber
+        payoutId,
+        validatedData.referenceId
       );
 
       return this.sendSuccess(res, updated);
@@ -490,7 +585,7 @@ export class AdminPartnerController extends BaseController {
   /**
    * Process payout via PayPal
    * 
-   * @route POST /api/admin/partners/payouts/process-paypal
+   * @route POST /api/admin/payouts/:payoutId/process-paypal
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
@@ -499,8 +594,7 @@ export class AdminPartnerController extends BaseController {
    * @example
    * // Request body:
    * {
-   *   "payoutId": "uuid",
-   *   "transactionId": "PP123456789"
+   *   "referenceId": "PP123456789"
    * }
    * 
    * @throws {401} Unauthorized if user is not authenticated
@@ -509,12 +603,13 @@ export class AdminPartnerController extends BaseController {
    */
   async processPayoutPayPal(req: AuthenticatedRequest, res: Response) {
     try {
+      const { payoutId } = req.params;
       const validatedData = processPayoutPayPalSchema.parse(req.body);
 
       const payoutService = getService<IPayoutService>(TYPES.IPayoutService);
       const updated = await payoutService.processPayoutPayPal(
-        validatedData.payoutId,
-        validatedData.transactionId
+        payoutId,
+        validatedData.referenceId
       );
 
       return this.sendSuccess(res, updated);
@@ -529,17 +624,11 @@ export class AdminPartnerController extends BaseController {
   /**
    * Complete a payout
    * 
-   * @route POST /api/admin/partners/payouts/complete
+   * @route POST /api/admin/payouts/:payoutId/complete
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
    * @returns {Promise<Response>} Returns completed payout
-   * 
-   * @example
-   * // Request body:
-   * {
-   *   "payoutId": "uuid"
-   * }
    * 
    * @throws {401} Unauthorized if user is not authenticated
    * @throws {403} Forbidden if user is not an admin
@@ -548,10 +637,11 @@ export class AdminPartnerController extends BaseController {
   async completePayout(req: AuthenticatedRequest, res: Response) {
     try {
       const adminId = this.getUserId(req);
-      const validatedData = completePayoutSchema.parse(req.body);
+      const { payoutId } = req.params;
+      completePayoutSchema.parse(req.body);
 
       const payoutService = getService<IPayoutService>(TYPES.IPayoutService);
-      const completed = await payoutService.completePayout(validatedData.payoutId, adminId);
+      const completed = await payoutService.completePayout(payoutId, adminId);
 
       return this.sendSuccess(res, completed);
     } catch (error: any) {
@@ -565,7 +655,7 @@ export class AdminPartnerController extends BaseController {
   /**
    * Cancel a payout
    * 
-   * @route POST /api/admin/partners/payouts/cancel
+   * @route POST /api/admin/payouts/:payoutId/cancel
    * @access Admin
    * @param {AuthenticatedRequest} req - Express request object with authenticated admin
    * @param {Response} res - Express response object
@@ -574,7 +664,6 @@ export class AdminPartnerController extends BaseController {
    * @example
    * // Request body:
    * {
-   *   "payoutId": "uuid",
    *   "reason": "Invalid bank details"
    * }
    * 
@@ -585,11 +674,12 @@ export class AdminPartnerController extends BaseController {
   async cancelPayout(req: AuthenticatedRequest, res: Response) {
     try {
       const adminId = this.getUserId(req);
+      const { payoutId } = req.params;
       const validatedData = cancelPayoutSchema.parse(req.body);
 
       const payoutService = getService<IPayoutService>(TYPES.IPayoutService);
       const cancelled = await payoutService.cancelPayout(
-        validatedData.payoutId,
+        payoutId,
         adminId,
         validatedData.reason
       );
