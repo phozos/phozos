@@ -10,6 +10,7 @@ import {
   DuplicateResourceError,
   InvalidOperationError
 } from '../errors';
+import logger from '../../utils/logger';
 
 export interface RegisterStudentDTO {
   message: string;
@@ -278,7 +279,11 @@ export class RegistrationService extends BaseService implements IRegistrationSer
         accountStatus: 'active'
       });
       
-      console.log(`👤 New staff member registered: ${email} (${teamRole}) via invite token`);
+      logger.info('New staff member registered via invite token', {
+        email,
+        teamRole,
+        userId: user.id
+      });
       
       return { user: this.sanitizeUser(user) };
     } catch (error) {

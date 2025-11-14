@@ -557,7 +557,10 @@ export class PaymentController extends BaseController {
       const createdAt = parsedBody.created_at;
       
       if (!createdAt) {
-        console.warn('⚠️ [Webhook Security] Webhook missing created_at timestamp - rejecting as invalid');
+        logger.warn('Webhook missing created_at timestamp - rejecting as invalid', {
+          event,
+          orderId: parsedBody.payload?.payment?.entity?.order_id
+        });
         return res.status(400).json({
           error: 'WEBHOOK_INVALID',
           message: 'Webhook missing created_at timestamp'
@@ -570,18 +573,29 @@ export class PaymentController extends BaseController {
 
       // Reject webhooks older than 5 minutes (300 seconds)
       if (age > 300) {
-        console.warn(`⚠️ [Webhook Security] Webhook too old - Age: ${age.toFixed(2)}s, Created: ${new Date(createdAt * 1000).toISOString()}, Current: ${new Date(currentTimestamp * 1000).toISOString()}`);
+        logger.warn('Webhook timestamp too old - possible replay attack', {
+          age: age.toFixed(2),
+          createdAt: new Date(createdAt * 1000).toISOString(),
+          currentTime: new Date(currentTimestamp * 1000).toISOString(),
+          event
+        });
         return res.status(400).json({
           error: 'WEBHOOK_TOO_OLD',
           message: 'Webhook timestamp too old, possible replay attack'
         });
       }
 
-      console.log(`✅ [Webhook Security] Timestamp validated - Age: ${age.toFixed(2)}s (within 5 minute window)`);
+      logger.info('Webhook timestamp validated successfully', {
+        age: age.toFixed(2),
+        event
+      });
 
       // DEDUPLICATION: Check if this event has already been processed
       if (!eventId) {
-        console.error('❌ Webhook missing event_id:', parsedBody);
+        logger.error('Webhook missing event_id', {
+          event,
+          payload: parsedBody
+        });
         return res.status(400).json({
           success: false,
           message: 'Webhook missing event_id'
@@ -591,7 +605,10 @@ export class PaymentController extends BaseController {
       // Check if event already processed
       const isProcessed = await webhookDeduplicationService.isEventProcessed(eventId);
       if (isProcessed) {
-        console.log(`✅ [Webhook Deduplication] Event ${eventId} already processed - returning 200 OK (idempotent)`);
+        logger.info('Webhook event already processed - idempotent response', {
+          eventId,
+          event
+        });
         return res.status(200).send('OK');
       }
 
@@ -614,7 +631,10 @@ export class PaymentController extends BaseController {
             break;
 
           default:
-            console.log(`Unhandled webhook event: ${event}`);
+            logger.info('Unhandled webhook event received', {
+              event,
+              eventId
+            });
         }
 
         // Mark event as successfully processed
@@ -630,30 +650,50 @@ export class PaymentController extends BaseController {
         
         await webhookDeduplicationService.markFailed(eventId, errorMessage);
         
-        console.error('❌ Webhook processing error:', processingError);
+        logger.error('Webhook processing error', {
+          error: processingError instanceof Error ? processingError.message : 'Unknown error',
+          stack: processingError instanceof Error ? processingError.stack : undefined,
+          eventId,
+          event
+        });
         
         // Still return 200 OK to prevent Razorpay retries
         // The event is marked as failed in our database for manual review
         return res.status(200).send('OK');
       }
     } catch (error) {
-      console.error('Webhook error:', error);
+      logger.error('Webhook error - top level catch', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return res.status(500).send('Internal server error');
     }
   }
 
   /**
+   * PHASE 3 - Bug #5, #9, #13 Fixes: Refactored webhook handler
+   * PHASE 6 - Issue #1: Documented dual tracking system
+   * 
    * Phase 7.1: Handle payment.captured webhook with commission creation
+   * 
+   * DUAL TRACKING SYSTEM (Issue #1):
+   * This webhook handler is ONE of TWO paths for tracking referral conversions:
+   * 1. WEBHOOK PATH (this method): Async notification from Razorpay after payment
+   * 2. MANUAL VERIFICATION PATH: Synchronous check in verifyPayment() method
+   * 
+   * Both paths now call the SAME centralized service methods:
+   * - referralTrackingService.trackConversion() (Bug #5 fix)
+   * - commissionService.createCommission() (with validation to prevent duplicates - Bug #9 fix)
+   * 
+   * This ensures consistent behavior regardless of which path executes first.
+   * Bug #13 fix: All operations wrapped in transaction for atomicity.
    * 
    * Logic flow:
    * 1. Look up payment by paymentReference (Razorpay payment ID)
    * 2. Find student profile by payment.userId
-   * 3. Check if student has referredByPartnerId
-   * 4. If yes, find referral record by studentId
-   * 5. Verify commissionEligible flag
-   * 6. Call commissionService.createCommission
-   * 7. Update referral status to 'converted'
-   * 8. Link subscriptionId and paymentId
+   * 3. Call centralized trackConversion() service (replaces manual update)
+   * 4. Call createCommission() which has built-in duplicate prevention
+   * 5. All wrapped in transaction for consistency
    */
   private async handlePaymentCaptured(payment: any) {
     logger.info('Payment captured webhook received', {
@@ -664,65 +704,94 @@ export class PaymentController extends BaseController {
     });
 
     try {
-      // Phase 7.1: Check if this payment is from a referred student
       const { paymentRecordRepository } = await import('../repositories');
       const { studentRepository } = await import('../repositories');
-      const { partnerStudentReferralRepository } = await import('../repositories');
+      const { referralTrackingService } = await import('../services/domain/referral-tracking.service');
       const { commissionService } = await import('../services/domain/commission.service');
+      const { db } = await import('../db');
       
       // Look up payment by paymentReference (Razorpay payment ID)
       const paymentRecord = await paymentRecordRepository.findByPaymentReference(payment.id);
       
-      if (paymentRecord && paymentRecord.userId) {
-        // Find student profile by userId
-        const studentProfile = await studentRepository.findByUserId(paymentRecord.userId);
+      if (!paymentRecord || !paymentRecord.userId) {
+        logger.warn('Payment record not found or missing userId', {
+          paymentId: payment.id
+        });
+        return;
+      }
+      
+      // Find student profile by userId
+      const studentProfile = await studentRepository.findByUserId(paymentRecord.userId);
+      
+      if (!studentProfile) {
+        logger.info('No student profile found for payment', {
+          paymentId: payment.id,
+          userId: paymentRecord.userId
+        });
+        return;
+      }
+      
+      // PHASE 3 - Bug #13: Wrap all operations in transaction for atomicity
+      // ATOMICITY FIX: Pass transaction to all service calls for proper isolation
+      await db.transaction(async (tx) => {
+        // PHASE 3 - Bug #5: Use centralized trackConversion service method
+        // This replaces manual referral update and ensures consistent business logic
+        // ATOMICITY FIX: Pass transaction to trackConversion
+        await referralTrackingService.trackConversion(
+          studentProfile.id,
+          paymentRecord.subscriptionId!,
+          paymentRecord.id,
+          tx
+        );
         
-        if (studentProfile && studentProfile.referredByPartnerId) {
-          logger.info('Found referred student for commission creation', {
-            paymentId: payment.id,
-            studentId: studentProfile.id,
-            partnerId: studentProfile.referredByPartnerId
-          });
-          
-          // Find referral record by studentId
+        logger.info('Conversion tracked successfully in webhook', {
+          paymentId: payment.id,
+          studentId: studentProfile.id
+        });
+        
+        // PHASE 3 - Bug #9: createCommission has built-in duplicate prevention
+        // It will throw error if commission already exists (from manual verification path)
+        // ATOMICITY FIX: All operations now use the same transaction
+        try {
+          const { partnerStudentReferralRepository } = await import('../repositories');
           const referral = await partnerStudentReferralRepository.findByStudentId(studentProfile.id);
           
-          if (referral && referral.commissionEligible) {
-            logger.info('Creating commission for eligible referral', {
-              referralId: referral.id,
-              paymentId: paymentRecord.id,
-              partnerId: referral.partnerId
-            });
+          if (referral && referral.status === 'converted' && referral.commissionEligible) {
+            // ATOMICITY FIX: Pass transaction to createCommission
+            await commissionService.createCommission(referral.id, paymentRecord.id, tx);
             
-            // Create commission
-            await commissionService.createCommission(referral.id, paymentRecord.id);
-            
-            // Update referral status to 'converted'
-            await partnerStudentReferralRepository.update(referral.id, {
-              status: 'converted',
-              convertedAt: new Date(),
-              subscriptionId: paymentRecord.subscriptionId || null,
-              paymentId: paymentRecord.id
-            });
-            
-            logger.info('Commission created successfully', {
+            logger.info('Commission created successfully in webhook', {
               referralId: referral.id,
               paymentId: paymentRecord.id,
               partnerId: referral.partnerId
             });
           } else {
-            logger.info('Referral found but not commission eligible', {
+            logger.info('Referral not eligible for commission', {
               referralId: referral?.id,
+              status: referral?.status,
               commissionEligible: referral?.commissionEligible,
               paymentId: payment.id
             });
           }
+        } catch (commissionError: any) {
+          // If commission already exists (from manual verification), that's OK
+          if (commissionError.message?.includes('already exists')) {
+            logger.info('Commission already created (likely from manual verification)', {
+              paymentId: payment.id,
+              studentId: studentProfile.id
+            });
+          } else {
+            // Re-throw other errors to rollback transaction
+            throw commissionError;
+          }
         }
-      }
-    } catch (commissionError) {
-      // Log error but don't fail the webhook processing
-      logger.error('Failed to create commission for payment', {
-        error: commissionError instanceof Error ? commissionError.message : 'Unknown error',
+      });
+      
+    } catch (error) {
+      // PHASE 5: Structured logging with context
+      logger.error('Failed to process referral conversion in webhook', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
         paymentId: payment.id
       });
     }

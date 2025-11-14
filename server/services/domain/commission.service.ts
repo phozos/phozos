@@ -3,7 +3,8 @@ import {
   IPartnerCommissionRepository,
   IPartnerProfileRepository,
   IPartnerStudentReferralRepository,
-  IPaymentRecordRepository
+  IPaymentRecordRepository,
+  DbOrTransaction
 } from '../../repositories';
 import { container, TYPES } from '../container';
 import { PartnerCommission } from '@shared/schema';
@@ -17,7 +18,7 @@ import { db } from '../../db';
 
 export interface ICommissionService {
   calculateCommission(partnerId: string, paymentAmount: number): Promise<CommissionCalculationResult>;
-  createCommission(referralId: string, paymentId: string): Promise<PartnerCommission>;
+  createCommission(referralId: string, paymentId: string, tx?: DbOrTransaction): Promise<PartnerCommission>;
   approveCommissions(commissionIds: string[], adminId: string): Promise<PartnerCommission[]>;
   rejectCommissions(commissionIds: string[], adminId: string, reason: string): Promise<PartnerCommission[]>;
   getPendingCommissions(partnerId: string): Promise<CommissionWithDetails[]>;
@@ -63,33 +64,58 @@ export class CommissionService extends BaseService implements ICommissionService
   }
 
   /**
+   * PHASE 4 - Bug #12 Fix: Added validation for commission creation
+   * ATOMICITY FIX: Accepts transaction parameter for proper atomicity
    * Phase 7.3: Create commission for a referral
    * 
    * Logic flow:
-   * 1. Get referral and payment details
-   * 2. Get partner profile for commission rate
-   * 3. Calculate commission amount from payment
-   * 4. Create commission record with 'pending' status
-   * 5. Update partner.totalCommissionEarned
-   * 6. Update referral commission fields
-   * 7. Log commission creation event
+   * 1. Validate commission doesn't already exist (prevent duplicates)
+   * 2. Get referral and validate it's in 'converted' status
+   * 3. Validate referral is commission eligible
+   * 4. Get payment details for amount
+   * 5. Calculate commission based on partner rate
+   * 6. Create commission record with 'pending' status
+   * 7. Update partner.totalCommissionEarned
+   * 8. Update referral commission fields
+   * 
+   * @param referralId - The referral ID to create commission for
+   * @param paymentId - The payment ID associated with the commission
+   * @param tx - Optional transaction handle for atomicity (required for webhook handler)
    */
-  async createCommission(referralId: string, paymentId: string): Promise<PartnerCommission> {
+  async createCommission(referralId: string, paymentId: string, tx?: DbOrTransaction): Promise<PartnerCommission> {
     try {
-      // Get referral details
-      const referral = await this.partnerStudentReferralRepo.findById(referralId);
+      // If transaction is provided, use it directly. Otherwise create a new transaction.
+      const executeWithTransaction = async (txHandle: DbOrTransaction) => {
+        // PHASE 4 - Bug #12: Check if commission already exists (prevent duplicates)
+        // ATOMICITY FIX: Use transaction for duplicate check to prevent race conditions
+        const existingCommission = await this.commissionRepo.findByReferralId(referralId, txHandle);
+        if (existingCommission) {
+          throw new InvalidOperationError('create commission', 'Commission already exists for this referral');
+        }
 
-      // Get payment details to get the actual payment amount
-      const payment = await this.paymentRecordRepo.findById(paymentId);
+        // Get referral details
+        const referral = await this.partnerStudentReferralRepo.findById(referralId, txHandle);
 
-      // Calculate commission based on payment amount
-      const calculation = await this.calculateCommission(
-        referral.partnerId,
-        Number(payment.amount)
-      );
+        // PHASE 4 - Bug #12: Validate referral status
+        if (referral.status !== 'converted') {
+          throw new InvalidOperationError('create commission', 'Referral must be in converted status to create commission');
+        }
 
-      const commission = await db.transaction(async (tx) => {
-        // Create commission record
+        // PHASE 4 - Bug #12: Check commission eligibility
+        if (!referral.commissionEligible) {
+          throw new InvalidOperationError('create commission', 'Referral is not eligible for commission');
+        }
+
+        // Get payment details to get the actual payment amount
+        const payment = await this.paymentRecordRepo.findById(paymentId, txHandle);
+
+        // Calculate commission based on payment amount
+        const calculation = await this.calculateCommission(
+          referral.partnerId,
+          Number(payment.amount)
+        );
+
+        // Create commission record with transaction
         const newCommission = await this.commissionRepo.create({
           partnerId: referral.partnerId,
           referralId: referral.id,
@@ -99,25 +125,32 @@ export class CommissionService extends BaseService implements ICommissionService
           commissionAmount: String(calculation.commissionAmount),
           currency: calculation.currency,
           status: 'pending'
-        });
+        }, txHandle);
 
-        // Update referral with commission details
+        // Update referral with commission details using transaction
         await this.partnerStudentReferralRepo.updateCommission(
           referral.id,
           calculation.commissionAmount,
-          'pending'
+          'pending',
+          txHandle
         );
 
-        // Update partner profile stats
+        // Update partner profile stats using transaction
         await this.partnerProfileRepo.updateCommissionEarned(
           referral.partnerId,
-          calculation.commissionAmount
+          calculation.commissionAmount,
+          txHandle
         );
 
         return newCommission;
-      });
+      };
 
-      return commission;
+      // Use provided transaction or create a new one
+      if (tx) {
+        return await executeWithTransaction(tx);
+      } else {
+        return await db.transaction(executeWithTransaction);
+      }
     } catch (error) {
       return this.handleError(error, 'CommissionService.createCommission');
     }

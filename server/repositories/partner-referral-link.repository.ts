@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   PartnerReferralLink, 
   InsertPartnerReferralLink, 
@@ -18,7 +18,7 @@ export interface IPartnerReferralLinkRepository {
   update(id: string, data: Partial<PartnerReferralLink>): Promise<PartnerReferralLink>;
   delete(id: string): Promise<boolean>;
   incrementClickCount(linkId: string, isUnique: boolean): Promise<void>;
-  incrementConversionCount(linkId: string): Promise<void>;
+  incrementConversionCount(linkId: string, tx?: DbOrTransaction): Promise<void>;
   updateLastClickedAt(linkId: string): Promise<void>;
   generateUniqueLinkCode(length: number): Promise<string>;
 }
@@ -93,9 +93,10 @@ export class PartnerReferralLinkRepository
     }
   }
 
-  async incrementConversionCount(linkId: string): Promise<void> {
+  async incrementConversionCount(linkId: string, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerReferralLinks)
         .set({ 
           conversionCount: sql`${partnerReferralLinks.conversionCount} + 1`,

@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   PartnerCommission, 
   InsertPartnerCommission, 
@@ -9,16 +9,17 @@ import { eq, and, desc, isNull } from 'drizzle-orm';
 import { handleDatabaseError } from './errors';
 
 export interface IPartnerCommissionRepository {
-  findById(id: string): Promise<PartnerCommission>;
-  findByIdOptional(id: string): Promise<PartnerCommission | undefined>;
-  findByPartnerId(partnerId: string): Promise<PartnerCommission[]>;
-  findPendingByPartnerId(partnerId: string): Promise<PartnerCommission[]>;
-  findByPayoutId(payoutId: string): Promise<PartnerCommission[]>;
-  create(data: InsertPartnerCommission): Promise<PartnerCommission>;
-  update(id: string, data: Partial<PartnerCommission>): Promise<PartnerCommission>;
-  approve(commissionId: string, adminId: string): Promise<void>;
-  reject(commissionId: string, adminId: string, reason: string): Promise<void>;
-  markAsPaid(commissionId: string, payoutId: string): Promise<void>;
+  findById(id: string, tx?: DbOrTransaction): Promise<PartnerCommission>;
+  findByIdOptional(id: string, tx?: DbOrTransaction): Promise<PartnerCommission | undefined>;
+  findByPartnerId(partnerId: string, tx?: DbOrTransaction): Promise<PartnerCommission[]>;
+  findPendingByPartnerId(partnerId: string, tx?: DbOrTransaction): Promise<PartnerCommission[]>;
+  findByPayoutId(payoutId: string, tx?: DbOrTransaction): Promise<PartnerCommission[]>;
+  findByReferralId(referralId: string, tx?: DbOrTransaction): Promise<PartnerCommission | undefined>;
+  create(data: InsertPartnerCommission, tx?: DbOrTransaction): Promise<PartnerCommission>;
+  update(id: string, data: Partial<PartnerCommission>, tx?: DbOrTransaction): Promise<PartnerCommission>;
+  approve(commissionId: string, adminId: string, tx?: DbOrTransaction): Promise<void>;
+  reject(commissionId: string, adminId: string, reason: string, tx?: DbOrTransaction): Promise<void>;
+  markAsPaid(commissionId: string, payoutId: string, tx?: DbOrTransaction): Promise<void>;
 }
 
 export class PartnerCommissionRepository 
@@ -29,9 +30,10 @@ export class PartnerCommissionRepository
     super(partnerCommissions, 'id');
   }
 
-  async findByPartnerId(partnerId: string): Promise<PartnerCommission[]> {
+  async findByPartnerId(partnerId: string, tx?: DbOrTransaction): Promise<PartnerCommission[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(partnerCommissions)
         .where(eq(partnerCommissions.partnerId, partnerId))
@@ -41,9 +43,10 @@ export class PartnerCommissionRepository
     }
   }
 
-  async findPendingByPartnerId(partnerId: string): Promise<PartnerCommission[]> {
+  async findPendingByPartnerId(partnerId: string, tx?: DbOrTransaction): Promise<PartnerCommission[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(partnerCommissions)
         .where(
@@ -59,9 +62,10 @@ export class PartnerCommissionRepository
     }
   }
 
-  async findByPayoutId(payoutId: string): Promise<PartnerCommission[]> {
+  async findByPayoutId(payoutId: string, tx?: DbOrTransaction): Promise<PartnerCommission[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(partnerCommissions)
         .where(eq(partnerCommissions.payoutId, payoutId))
@@ -71,9 +75,24 @@ export class PartnerCommissionRepository
     }
   }
 
-  async approve(commissionId: string, adminId: string): Promise<void> {
+  async findByReferralId(referralId: string, tx?: DbOrTransaction): Promise<PartnerCommission | undefined> {
     try {
-      await db
+      const executor = tx || db;
+      const results = await executor
+        .select()
+        .from(partnerCommissions)
+        .where(eq(partnerCommissions.referralId, referralId))
+        .limit(1);
+      return results[0] as PartnerCommission | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'PartnerCommissionRepository.findByReferralId');
+    }
+  }
+
+  async approve(commissionId: string, adminId: string, tx?: DbOrTransaction): Promise<void> {
+    try {
+      const executor = tx || db;
+      await executor
         .update(partnerCommissions)
         .set({ 
           status: 'approved',
@@ -87,9 +106,10 @@ export class PartnerCommissionRepository
     }
   }
 
-  async reject(commissionId: string, adminId: string, reason: string): Promise<void> {
+  async reject(commissionId: string, adminId: string, reason: string, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerCommissions)
         .set({ 
           status: 'rejected',
@@ -104,9 +124,10 @@ export class PartnerCommissionRepository
     }
   }
 
-  async markAsPaid(commissionId: string, payoutId: string): Promise<void> {
+  async markAsPaid(commissionId: string, payoutId: string, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerCommissions)
         .set({ 
           status: 'paid',

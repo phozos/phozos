@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   PartnerProfile, 
   InsertPartnerProfile, 
@@ -21,10 +21,10 @@ export interface IPartnerProfileRepository {
   create(data: InsertPartnerProfile): Promise<PartnerProfile>;
   update(id: string, data: Partial<PartnerProfile>): Promise<PartnerProfile>;
   delete(id: string): Promise<boolean>;
-  incrementReferralCount(partnerId: string): Promise<void>;
-  incrementConversionCount(partnerId: string): Promise<void>;
-  updateCommissionEarned(partnerId: string, amount: number): Promise<void>;
-  updateCommissionPaid(partnerId: string, amount: number): Promise<void>;
+  incrementReferralCount(partnerId: string, tx?: DbOrTransaction): Promise<void>;
+  incrementConversionCount(partnerId: string, tx?: DbOrTransaction): Promise<void>;
+  updateCommissionEarned(partnerId: string, amount: number, tx?: DbOrTransaction): Promise<void>;
+  updateCommissionPaid(partnerId: string, amount: number, tx?: DbOrTransaction): Promise<void>;
 }
 
 export class PartnerProfileRepository 
@@ -161,9 +161,10 @@ export class PartnerProfileRepository
     }
   }
 
-  async incrementReferralCount(partnerId: string): Promise<void> {
+  async incrementReferralCount(partnerId: string, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerProfiles)
         .set({ 
           totalReferrals: sql`${partnerProfiles.totalReferrals} + 1`,
@@ -175,9 +176,10 @@ export class PartnerProfileRepository
     }
   }
 
-  async incrementConversionCount(partnerId: string): Promise<void> {
+  async incrementConversionCount(partnerId: string, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerProfiles)
         .set({ 
           totalConversions: sql`${partnerProfiles.totalConversions} + 1`,
@@ -189,9 +191,10 @@ export class PartnerProfileRepository
     }
   }
 
-  async updateCommissionEarned(partnerId: string, amount: number): Promise<void> {
+  async updateCommissionEarned(partnerId: string, amount: number, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerProfiles)
         .set({ 
           totalCommissionEarned: sql`${partnerProfiles.totalCommissionEarned} + ${amount}`,
@@ -203,9 +206,10 @@ export class PartnerProfileRepository
     }
   }
 
-  async updateCommissionPaid(partnerId: string, amount: number): Promise<void> {
+  async updateCommissionPaid(partnerId: string, amount: number, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerProfiles)
         .set({ 
           totalCommissionPaid: sql`${partnerProfiles.totalCommissionPaid} + ${amount}`,

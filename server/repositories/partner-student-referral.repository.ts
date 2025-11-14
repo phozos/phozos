@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   PartnerStudentReferral, 
   InsertPartnerStudentReferral, 
@@ -13,10 +13,10 @@ export interface IPartnerStudentReferralRepository {
   findByIdOptional(id: string): Promise<PartnerStudentReferral | undefined>;
   findByPartnerId(partnerId: string): Promise<PartnerStudentReferral[]>;
   findByStudentId(studentId: string): Promise<PartnerStudentReferral | undefined>;
-  create(data: InsertPartnerStudentReferral): Promise<PartnerStudentReferral>;
-  update(id: string, data: Partial<PartnerStudentReferral>): Promise<PartnerStudentReferral>;
+  create(data: InsertPartnerStudentReferral, tx?: DbOrTransaction): Promise<PartnerStudentReferral>;
+  update(id: string, data: Partial<PartnerStudentReferral>, tx?: DbOrTransaction): Promise<PartnerStudentReferral>;
   updateStatus(referralId: string, status: string, statusReason?: string): Promise<void>;
-  updateCommission(referralId: string, commissionAmount: number, commissionStatus: string): Promise<void>;
+  updateCommission(referralId: string, commissionAmount: number, commissionStatus: string, tx?: DbOrTransaction): Promise<void>;
 }
 
 export class PartnerStudentReferralRepository 
@@ -72,9 +72,10 @@ export class PartnerStudentReferralRepository
     }
   }
 
-  async updateCommission(referralId: string, commissionAmount: number, commissionStatus: string): Promise<void> {
+  async updateCommission(referralId: string, commissionAmount: number, commissionStatus: string, tx?: DbOrTransaction): Promise<void> {
     try {
-      await db
+      const executor = tx || db;
+      await executor
         .update(partnerStudentReferrals)
         .set({ 
           commissionAmount: commissionAmount.toString(),

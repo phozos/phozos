@@ -100,7 +100,7 @@ export interface UserFilters {
 
 export interface StudentProfileFilters {
   userId?: string;
-  status?: string;
+  status?: "inquiry" | "converted" | "visa_applied" | "visa_approved" | "departed";
   assignedCounselorId?: string | null;
   nationality?: string;
   destinationCountry?: string;

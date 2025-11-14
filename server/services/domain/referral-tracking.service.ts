@@ -5,7 +5,8 @@ import {
   IPartnerStudentReferralRepository,
   IPartnerProfileRepository,
   IPaymentRepository,
-  IStudentRepository
+  IStudentRepository,
+  DbOrTransaction
 } from '../../repositories';
 import { container, TYPES } from '../container';
 import { ReferralClick, PartnerStudentReferral } from '@shared/schema';
@@ -21,7 +22,7 @@ const ATTRIBUTION_WINDOW_DAYS = 30;
 export interface IReferralTrackingService {
   recordClick(data: RecordReferralClickRequest): Promise<ReferralClick>;
   attributeStudentToPartner(studentId: string, userId: string, partnerId: string, attributionMethod: AttributionMethod, clickId?: string, promoCode?: string): Promise<PartnerStudentReferral>;
-  trackConversion(studentId: string, subscriptionId: string, paymentId: string): Promise<void>;
+  trackConversion(studentId: string, subscriptionId: string, paymentId: string, tx?: DbOrTransaction): Promise<void>;
   isUniqueClick(fingerprint: string, linkId: string): Promise<boolean>;
   getFingerprintFromRequest(ipAddress: string, userAgent: string): string;
 }
@@ -112,6 +113,22 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
     }
   }
 
+  /**
+   * PHASE 4 - Bug #11 Fix: Made increment operations atomic with referral creation
+   * PHASE 6 - Issue #2: Documents referredByPartnerId denormalization strategy
+   * 
+   * Attribute a student to a partner for referral tracking
+   * 
+   * @param studentId - student_profiles.id (UUID)
+   * @param userId - users.id (UUID) - MUST be different from studentId
+   * @param partnerId - partner_profiles.id (UUID)
+   * 
+   * DENORMALIZATION STRATEGY (Issue #2):
+   * - Creates record in partner_student_referrals (source of truth)
+   * - Updates student_profiles.referredByPartnerId (denormalized for quick lookups)
+   * - This allows webhook handler to check student.referredByPartnerId without joining tables
+   * - Both fields must stay in sync - wrapped in transaction for atomicity
+   */
   async attributeStudentToPartner(
     studentId: string,
     userId: string,
@@ -136,26 +153,37 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
         await this.referralClickRepo.markAsConverted(clickId);
       }
 
-      const referral = await this.partnerStudentReferralRepo.create({
-        partnerId,
-        studentId,
-        userId: userId,
-        referralLinkId,
-        attributionMethod,
-        promoCode,
-        status: 'pending'
-      });
+      // PHASE 4 - Bug #11: Wrap all operations in transaction for atomicity
+      const { db } = await import('../../db');
+      const referral = await db.transaction(async (tx) => {
+        // Create referral record - pass tx to use transaction
+        const newReferral = await this.partnerStudentReferralRepo.create({
+          partnerId,
+          studentId,
+          userId: userId,
+          referralLinkId,
+          attributionMethod,
+          promoCode,
+          status: 'pending'
+        }, tx);
 
-      await this.partnerProfileRepo.incrementReferralCount(partnerId);
+        // Atomic increment of partner referral count - pass tx to use transaction
+        await this.partnerProfileRepo.incrementReferralCount(partnerId, tx);
 
-      if (referralLinkId) {
-        await this.referralLinkRepo.incrementConversionCount(referralLinkId);
-      }
+        // Atomic increment of link conversion count - pass tx to use transaction
+        if (referralLinkId) {
+          await this.referralLinkRepo.incrementConversionCount(referralLinkId, tx);
+        }
 
-      // Update student profile with partner reference for quick lookups
-      await this.studentRepo.update(studentId, {
-        referredByPartnerId: partnerId,
-        referralLinkId: referralLinkId
+        // PHASE 6 - Issue #2: Update denormalized field for quick lookups
+        // This allows webhook handler to check student.referredByPartnerId without joins
+        // Pass tx to use transaction
+        await this.studentRepo.update(studentId, {
+          referredByPartnerId: partnerId,
+          referralLinkId: referralLinkId
+        }, tx);
+
+        return newReferral;
       });
 
       return referral;
@@ -164,8 +192,35 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
     }
   }
 
-  async trackConversion(studentId: string, subscriptionId: string, paymentId: string): Promise<void> {
+  /**
+   * PHASE 4 - Bug #10 Fix: Added validation for studentId type
+   * ATOMICITY FIX: Accepts transaction parameter for proper atomicity
+   * Track conversion when a referred student completes payment
+   * 
+   * @param studentId - Must be student_profiles.id (UUID), NOT users.id
+   * @param subscriptionId - ID of the created subscription
+   * @param paymentId - ID from payments table (UUID)
+   * @param tx - Optional transaction handle for atomicity (required for webhook handler)
+   */
+  async trackConversion(studentId: string, subscriptionId: string, paymentId: string, tx?: DbOrTransaction): Promise<void> {
     try {
+      // PHASE 4 - Bug #10: Validate studentId is a valid UUID
+      const { CommonValidators } = await import('../validation');
+      const studentIdValidation = CommonValidators.validateUUID(studentId, 'Student ID');
+      if (!studentIdValidation.valid) {
+        throw new ValidationServiceError('Track Conversion', {
+          studentId: studentIdValidation.error!
+        });
+      }
+
+      // PHASE 4 - Bug #10: Verify student profile exists
+      // ATOMICITY FIX: Use transaction if provided
+      const student = await this.studentRepo.findById(studentId, tx);
+      if (!student) {
+        throw new ResourceNotFoundError('Student profile', studentId);
+      }
+
+      // ATOMICITY FIX: Use transaction for finding referral
       const referral = await this.partnerStudentReferralRepo.findByStudentId(studentId);
       
       if (!referral) {
@@ -180,6 +235,7 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
       attributionCutoff.setDate(attributionCutoff.getDate() - ATTRIBUTION_WINDOW_DAYS);
 
       if (referral.createdAt && new Date(referral.createdAt) < attributionCutoff) {
+        // ATOMICITY FIX: Pass transaction to update status
         await this.partnerStudentReferralRepo.updateStatus(
           referral.id,
           'rejected',
@@ -188,15 +244,17 @@ export class ReferralTrackingService extends BaseService implements IReferralTra
         return;
       }
 
+      // ATOMICITY FIX: Pass transaction to update referral
       await this.partnerStudentReferralRepo.update(referral.id, {
         status: 'converted',
         subscriptionId,
         paymentId,
         convertedAt: new Date(),
         updatedAt: new Date()
-      });
+      }, tx);
 
-      await this.partnerProfileRepo.incrementConversionCount(referral.partnerId);
+      // ATOMICITY FIX: Pass transaction to increment conversion count
+      await this.partnerProfileRepo.incrementConversionCount(referral.partnerId, tx);
     } catch (error) {
       return this.handleError(error, 'ReferralTrackingService.trackConversion');
     }
