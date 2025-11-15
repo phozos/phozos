@@ -16,6 +16,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { CancellationRequestWithDetails, CancellationStats } from '../../repositories/cancellation-request.repository';
+import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
 
 export interface ICancellationService {
   createCancellationRequest(data: InsertCancellationRequest): Promise<CancellationRequest>;
@@ -77,19 +78,26 @@ export class CancellationService extends BaseService implements ICancellationSer
         requestedAt: new Date(),
       };
 
-      return await db.transaction(async (tx) => {
-        const cancellationRequest = await this.cancellationRequestRepository.create(sanitizedData);
+      const cancellationRequest = await db.transaction(async (tx) => {
+        const request = await this.cancellationRequestRepository.create(sanitizedData);
 
         logger.info('Cancellation request created', {
-          requestId: cancellationRequest.id,
+          requestId: request.id,
           userId: data.userId,
           subscriptionId: data.subscriptionId,
         });
 
-        return cancellationRequest;
+        return request;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyCancellationRequestReceived(
+        data.userId,
+        data.subscriptionId
+      );
+
+      return cancellationRequest;
     } catch (error) {
       return this.handleError(error, 'CancellationService.createCancellationRequest');
     }
@@ -149,10 +157,10 @@ export class CancellationService extends BaseService implements ICancellationSer
         );
       }
 
-      return await db.transaction(async (tx) => {
+      const updatedRequest = await db.transaction(async (tx) => {
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
         
-        const updatedRequest = await this.cancellationRequestRepository.updateStatus(
+        const updated = await this.cancellationRequestRepository.updateStatus(
           id,
           'approved',
           adminId,
@@ -163,7 +171,6 @@ export class CancellationService extends BaseService implements ICancellationSer
         if (subscription && subscription.status !== 'cancelled') {
           await this.userSubscriptionRepository.update(request.subscriptionId, {
             status: 'cancelled',
-            endDate: new Date(),
             updatedAt: new Date(),
           });
         }
@@ -174,10 +181,17 @@ export class CancellationService extends BaseService implements ICancellationSer
           subscriptionId: request.subscriptionId,
         });
 
-        return updatedRequest;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyCancellationApproved(
+        request.userId,
+        request.subscriptionId
+      );
+
+      return updatedRequest;
     } catch (error) {
       return this.handleError(error, 'CancellationService.approveCancellationRequest');
     }
@@ -201,10 +215,10 @@ export class CancellationService extends BaseService implements ICancellationSer
         );
       }
 
-      return await db.transaction(async (tx) => {
+      const updatedRequest = await db.transaction(async (tx) => {
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
         
-        const updatedRequest = await this.cancellationRequestRepository.updateStatus(
+        const updated = await this.cancellationRequestRepository.updateStatus(
           id,
           'rejected',
           adminId,
@@ -217,10 +231,18 @@ export class CancellationService extends BaseService implements ICancellationSer
           subscriptionId: request.subscriptionId,
         });
 
-        return updatedRequest;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyCancellationRejected(
+        request.userId,
+        request.subscriptionId,
+        adminNotes || 'Your request did not meet the cancellation criteria.'
+      );
+
+      return updatedRequest;
     } catch (error) {
       return this.handleError(error, 'CancellationService.rejectCancellationRequest');
     }
