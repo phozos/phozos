@@ -16,6 +16,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { ChargebackDisputeWithDetails } from '../../repositories/chargeback-dispute.repository';
+import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
 
 export interface IDisputeService {
   createDispute(data: InsertChargebackDispute): Promise<ChargebackDispute>;
@@ -72,20 +73,27 @@ export class DisputeService extends BaseService implements IDisputeService {
         currency: payment.currency,
       };
 
-      return await db.transaction(async (tx) => {
-        const dispute = await this.disputeRepository.create(sanitizedData);
+      const dispute = await db.transaction(async (tx) => {
+        const newDispute = await this.disputeRepository.create(sanitizedData);
 
         logger.info('Dispute created', {
-          disputeId: dispute.id,
+          disputeId: newDispute.id,
           userId: data.userId,
           paymentId: data.paymentId,
           type: data.type,
         });
 
-        return dispute;
+        return newDispute;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyDisputeReceived(
+        data.userId,
+        dispute.id
+      );
+
+      return dispute;
     } catch (error) {
       return this.handleError(error, 'DisputeService.createDispute');
     }
@@ -216,8 +224,8 @@ export class DisputeService extends BaseService implements IDisputeService {
 
       const sanitizedResolution = InputSanitizer.sanitizePlainText(resolution);
 
-      return await db.transaction(async (tx) => {
-        const updatedDispute = await this.disputeRepository.resolve(id, sanitizedResolution, adminId);
+      const updatedDispute = await db.transaction(async (tx) => {
+        const updated = await this.disputeRepository.resolve(id, sanitizedResolution, adminId);
 
         logger.info('Dispute resolved', {
           disputeId: id,
@@ -225,10 +233,18 @@ export class DisputeService extends BaseService implements IDisputeService {
           resolution: sanitizedResolution,
         });
 
-        return updatedDispute;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyDisputeResolved(
+        dispute.userId,
+        id,
+        sanitizedResolution
+      );
+
+      return updatedDispute;
     } catch (error) {
       return this.handleError(error, 'DisputeService.resolveDispute');
     }
@@ -248,18 +264,25 @@ export class DisputeService extends BaseService implements IDisputeService {
         );
       }
 
-      return await db.transaction(async (tx) => {
-        const updatedDispute = await this.disputeRepository.updateStatus(id, 'investigating', adminId);
+      const updatedDispute = await db.transaction(async (tx) => {
+        const updated = await this.disputeRepository.updateStatus(id, 'investigating', adminId);
 
         logger.info('Dispute escalated to investigation', {
           disputeId: id,
           adminId,
         });
 
-        return updatedDispute;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyDisputeUnderInvestigation(
+        dispute.userId,
+        id
+      );
+
+      return updatedDispute;
     } catch (error) {
       return this.handleError(error, 'DisputeService.escalateToInvestigation');
     }
