@@ -13,10 +13,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'info',
+        type: 'system',
         title: 'Cancellation Request Received',
         message: `Your subscription cancellation request has been received and is being reviewed by our team.`,
-        metadata: { subscriptionId, action: 'cancellation_request_received' },
+        data: { subscriptionId, action: 'cancellation_request_received' },
       });
 
       logger.info('Cancellation request notification sent', { userId, subscriptionId });
@@ -29,10 +29,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'success',
+        type: 'system',
         title: 'Cancellation Request Approved',
         message: `Your subscription cancellation request has been approved. Your subscription has been cancelled.`,
-        metadata: { subscriptionId, action: 'cancellation_approved' },
+        data: { subscriptionId, action: 'cancellation_approved' },
       });
 
       logger.info('Cancellation approval notification sent', { userId, subscriptionId });
@@ -45,10 +45,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'warning',
+        type: 'system',
         title: 'Cancellation Request Rejected',
         message: `Your subscription cancellation request has been reviewed and was not approved. Reason: ${reason}`,
-        metadata: { subscriptionId, action: 'cancellation_rejected', reason },
+        data: { subscriptionId, action: 'cancellation_rejected', reason },
       });
 
       logger.info('Cancellation rejection notification sent', { userId, subscriptionId });
@@ -61,10 +61,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'info',
+        type: 'system',
         title: 'Refund Request Received',
         message: `Your refund request for ₹${amount / 100} has been received and is being processed.`,
-        metadata: { subscriptionId, amount, action: 'refund_request_received' },
+        data: { subscriptionId, amount, action: 'refund_request_received' },
       });
 
       logger.info('Refund request notification sent', { userId, subscriptionId, amount });
@@ -77,10 +77,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'success',
+        type: 'system',
         title: 'Refund Request Approved',
         message: `Your refund request for ₹${amount / 100} has been approved and is being processed. The amount will be credited to your original payment method within 5-7 business days.`,
-        metadata: { subscriptionId, amount, action: 'refund_approved' },
+        data: { subscriptionId, amount, action: 'refund_approved' },
       });
 
       logger.info('Refund approval notification sent', { userId, subscriptionId, amount });
@@ -93,10 +93,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'warning',
+        type: 'system',
         title: 'Refund Request Rejected',
         message: `Your refund request has been reviewed and was not approved. Reason: ${reason}`,
-        metadata: { subscriptionId, action: 'refund_rejected', reason },
+        data: { subscriptionId, action: 'refund_rejected', reason },
       });
 
       logger.info('Refund rejection notification sent', { userId, subscriptionId });
@@ -109,10 +109,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'success',
+        type: 'system',
         title: 'Refund Processed Successfully',
         message: `Your refund of ₹${amount / 100} has been processed successfully. The amount will be credited to your original payment method within 5-7 business days.`,
-        metadata: { subscriptionId, amount, action: 'refund_processed' },
+        data: { subscriptionId, amount, action: 'refund_processed' },
       });
 
       logger.info('Refund processed notification sent', { userId, subscriptionId, amount });
@@ -125,10 +125,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'error',
+        type: 'system',
         title: 'Refund Processing Failed',
         message: `We encountered an issue processing your refund. Our team has been notified and will contact you shortly.`,
-        metadata: { subscriptionId, action: 'refund_failed' },
+        data: { subscriptionId, action: 'refund_failed' },
       });
 
       logger.info('Refund failed notification sent', { userId, subscriptionId });
@@ -141,10 +141,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'info',
+        type: 'system',
         title: 'Dispute Received',
         message: `Your dispute has been received and is under review. We will investigate and respond within 2-3 business days.`,
-        metadata: { disputeId, action: 'dispute_received' },
+        data: { disputeId, action: 'dispute_received' },
       });
 
       logger.info('Dispute received notification sent', { userId, disputeId });
@@ -157,10 +157,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'info',
+        type: 'system',
         title: 'Dispute Under Investigation',
         message: `Your dispute is currently being investigated by our team. We will update you on the progress soon.`,
-        metadata: { disputeId, action: 'dispute_investigating' },
+        data: { disputeId, action: 'dispute_investigating' },
       });
 
       logger.info('Dispute investigation notification sent', { userId, disputeId });
@@ -173,10 +173,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId,
-        type: 'success',
+        type: 'system',
         title: 'Dispute Resolved',
         message: `Your dispute has been resolved. Resolution: ${resolution}`,
-        metadata: { disputeId, action: 'dispute_resolved', resolution },
+        data: { disputeId, action: 'dispute_resolved', resolution },
       });
 
       logger.info('Dispute resolution notification sent', { userId, disputeId });
@@ -189,10 +189,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId: adminUserId,
-        type: 'info',
+        type: 'system',
         title: 'New Cancellation Request',
         message: `A new subscription cancellation request requires your review.`,
-        metadata: { requestId, action: 'admin_new_cancellation_request' },
+        data: { requestId, action: 'admin_new_cancellation_request' },
       });
 
       logger.info('Admin cancellation request notification sent', { adminUserId, requestId });
@@ -205,10 +205,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId: adminUserId,
-        type: 'warning',
+        type: 'system',
         title: 'New Refund Request',
         message: `A new refund request requires your immediate attention.`,
-        metadata: { requestId, action: 'admin_new_refund_request' },
+        data: { requestId, action: 'admin_new_refund_request' },
       });
 
       logger.info('Admin refund request notification sent', { adminUserId, requestId });
@@ -221,10 +221,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId: adminUserId,
-        type: 'error',
+        type: 'system',
         title: 'New Dispute Raised',
         message: `A new dispute has been raised and requires investigation.`,
-        metadata: { disputeId, action: 'admin_new_dispute' },
+        data: { disputeId, action: 'admin_new_dispute' },
       });
 
       logger.info('Admin dispute notification sent', { adminUserId, disputeId });
@@ -237,10 +237,10 @@ export class SubscriptionManagementNotificationService {
     try {
       await this.notificationService.createNotification({
         userId: adminUserId,
-        type: 'error',
+        type: 'system',
         title: 'Refund Processing Failed',
         message: `Refund ${refundId} failed to process and requires manual intervention.`,
-        metadata: { refundId, action: 'admin_refund_failed' },
+        data: { refundId, action: 'admin_refund_failed' },
       });
 
       logger.info('Admin refund failure notification sent', { adminUserId, refundId });
