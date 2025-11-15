@@ -338,6 +338,50 @@ export const exportSubscribersSchema = z.object({
   format: z.enum(['csv']).optional().default('csv')
 });
 
+// Subscription Management schemas (Phase 1.2)
+export const cancellationStatusSchema = z.enum(['pending', 'approved', 'rejected', 'cancelled']);
+export const refundStatusSchema = z.enum(['pending', 'processing', 'completed', 'failed', 'rejected']);
+export const disputeStatusSchema = z.enum(['open', 'investigating', 'resolved', 'closed']);
+export const disputeTypeSchema = z.enum(['chargeback', 'dispute']);
+
+export const createCancellationRequestSchema = z.object({
+  subscriptionId: uuidSchema,
+  userId: uuidSchema,
+  reason: z.string().min(10, 'Reason must be at least 10 characters').max(1000, 'Reason must not exceed 1000 characters')
+});
+
+export const processCancellationRequestSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  adminNotes: z.string().max(2000, 'Admin notes must not exceed 2000 characters').optional()
+});
+
+export const createRefundRequestSchema = z.object({
+  subscriptionId: uuidSchema,
+  userId: uuidSchema,
+  reason: z.string().min(10, 'Reason must be at least 10 characters').max(1000, 'Reason must not exceed 1000 characters'),
+  amount: z.number().positive('Refund amount must be positive').optional()
+});
+
+export const processRefundRequestSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  adminNotes: z.string().max(2000, 'Admin notes must not exceed 2000 characters').optional(),
+  refundAmount: z.number().positive('Refund amount must be positive').optional()
+});
+
+export const createDisputeSchema = z.object({
+  subscriptionId: uuidSchema,
+  userId: uuidSchema,
+  type: disputeTypeSchema,
+  reason: z.string().min(10, 'Reason must be at least 10 characters').max(2000, 'Reason must not exceed 2000 characters'),
+  evidence: z.record(z.any()).optional()
+});
+
+export const updateDisputeStatusSchema = z.object({
+  status: disputeStatusSchema,
+  resolution: z.string().max(2000, 'Resolution must not exceed 2000 characters').optional(),
+  adminNotes: z.string().max(2000, 'Admin notes must not exceed 2000 characters').optional()
+});
+
 // Export helper type inference
 export type ForumPostInput = z.infer<typeof forumPostSchema>;
 export type ForumCommentInput = z.infer<typeof forumCommentSchema>;
@@ -348,3 +392,9 @@ export type EventInput = z.infer<typeof eventSchema>;
 export type DocumentInput = z.infer<typeof documentSchema>;
 export type NotificationInput = z.infer<typeof notificationSchema>;
 export type PaymentInput = z.infer<typeof paymentSchema>;
+export type CreateCancellationRequestInput = z.infer<typeof createCancellationRequestSchema>;
+export type ProcessCancellationRequestInput = z.infer<typeof processCancellationRequestSchema>;
+export type CreateRefundRequestInput = z.infer<typeof createRefundRequestSchema>;
+export type ProcessRefundRequestInput = z.infer<typeof processRefundRequestSchema>;
+export type CreateDisputeInput = z.infer<typeof createDisputeSchema>;
+export type UpdateDisputeStatusInput = z.infer<typeof updateDisputeStatusSchema>;

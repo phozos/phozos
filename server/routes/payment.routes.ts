@@ -23,4 +23,8 @@ router.post('/webhook', webhookIpWhitelist, webhookRateLimit, asyncHandler((req:
   paymentController.handleWebhook(req, res)
 ));
 
+router.post('/webhook/refund', webhookIpWhitelist, webhookRateLimit, asyncHandler((req: AuthenticatedRequest, res: Response) => 
+  paymentController.handleRefundWebhook(req, res)
+));
+
 export default router;

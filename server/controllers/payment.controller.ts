@@ -997,6 +997,73 @@ export class PaymentController extends BaseController {
       });
     }
   }
+
+  async handleRefundWebhook(req: Request, res: Response) {
+    try {
+      const webhookSignature = req.headers['x-razorpay-signature'] as string;
+      const webhookBody = req.body;
+
+      if (!webhookSignature) {
+        logger.error('Razorpay refund webhook missing signature');
+        return this.sendError(res, 400, 'MISSING_SIGNATURE', 'Webhook signature missing');
+      }
+
+      const rawBody = typeof webhookBody === 'string' ? webhookBody : JSON.stringify(webhookBody);
+      const isValid = razorpayService.verifyWebhookSignature(rawBody, webhookSignature);
+
+      if (!isValid) {
+        logger.error('Invalid Razorpay refund webhook signature');
+        return this.sendError(res, 401, 'INVALID_SIGNATURE', 'Invalid webhook signature');
+      }
+
+      const event = typeof webhookBody === 'string' ? JSON.parse(webhookBody) : webhookBody;
+      const eventType = event.event;
+
+      logger.info('Razorpay refund webhook received', { eventType });
+
+      if (eventType === 'refund.processed' || eventType === 'refund.failed') {
+        await this.processRefundWebhook(event);
+      }
+
+      return this.sendSuccess(res, { message: 'Webhook processed successfully' });
+    } catch (error) {
+      logger.error('Error processing refund webhook', { error });
+      return this.handleError(res, error, 'PaymentController.handleRefundWebhook');
+    }
+  }
+
+  private async processRefundWebhook(event: any) {
+    try {
+      const { refund } = razorpayService.handleRefundWebhook(event);
+      const razorpayRefundId = refund.id;
+      const status = refund.status;
+
+      logger.info('Processing refund webhook', {
+        razorpayRefundId,
+        status,
+        paymentId: refund.payment_id,
+      });
+
+      const { RefundService } = await import('../services/domain/refund.service');
+      const { getService } = await import('../services/container');
+      const { TYPES } = await import('../services/container');
+      
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      await refundService.updateRefundStatusFromRazorpay(razorpayRefundId, status);
+
+      logger.info('Refund status updated from webhook', {
+        razorpayRefundId,
+        status,
+      });
+    } catch (error) {
+      logger.error('Error processing refund webhook event', {
+        error,
+        event,
+      });
+      throw error;
+    }
+  }
 }
 
 export const paymentController = new PaymentController();

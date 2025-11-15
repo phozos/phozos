@@ -36,6 +36,10 @@ export const deprecationStatusEnum = pgEnum("deprecation_status", ["scheduled", 
 export const paymentTypeEnum = pgEnum("payment_type", ["new_subscription", "upgrade", "renewal"]);
 export const aiTierEnum = pgEnum("ai_tier", ["none", "basic", "pro", "ultra"]);
 export const prepTierEnum = pgEnum("prep_tier", ["none", "basic", "pro", "ultra"]);
+export const cancellationStatusEnum = pgEnum("cancellation_status", ["pending", "approved", "rejected", "cancelled"]);
+export const refundStatusEnum = pgEnum("refund_status", ["pending", "processing", "completed", "failed", "rejected"]);
+export const disputeStatusEnum = pgEnum("dispute_status", ["open", "investigating", "resolved", "closed"]);
+export const disputeTypeEnum = pgEnum("dispute_type", ["chargeback", "dispute"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -1184,6 +1188,64 @@ export const failedPayments = pgTable("failed_payments", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Cancellation Requests table (for user-initiated subscription cancellations)
+export const cancellationRequests = pgTable("cancellation_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  reason: text("reason").notNull(),
+  status: cancellationStatusEnum("status").notNull().default("pending"),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  processedBy: uuid("processed_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Refunds table (for tracking refund requests and processing)
+export const refunds = pgTable("refunds", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  cancellationRequestId: uuid("cancellation_request_id").references(() => cancellationRequests.id, { onDelete: 'set null' }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  reason: text("reason").notNull(),
+  status: refundStatusEnum("status").notNull().default("pending"),
+  razorpayRefundId: text("razorpay_refund_id"),
+  razorpayStatus: text("razorpay_status"),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  processedBy: uuid("processed_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  razorpayResponse: jsonb("razorpay_response"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Chargebacks and Disputes table (for tracking payment disputes)
+export const chargebacksDisputes = pgTable("chargebacks_disputes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  type: disputeTypeEnum("type").notNull(),
+  reason: text("reason").notNull(),
+  status: disputeStatusEnum("status").notNull().default("open"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  evidence: jsonb("evidence"),
+  razorpayDisputeId: text("razorpay_dispute_id"),
+  resolution: text("resolution"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Subscription Plan Changes table (for audit trail)
 export const subscriptionPlanChanges = pgTable("subscription_plan_changes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1357,6 +1419,9 @@ export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEven
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertSubscriptionAuditOutboxSchema = createInsertSchema(subscriptionAuditOutbox).omit({ id: true, createdAt: true });
 export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
+export const insertCancellationRequestSchema = createInsertSchema(cancellationRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertChargebackDisputeSchema = createInsertSchema(chargebacksDisputes).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSubscriptionPlanChangeSchema = createInsertSchema(subscriptionPlanChanges).omit({ id: true, createdAt: true });
 export const insertSubscriptionPlanNotificationSchema = createInsertSchema(subscriptionPlanNotifications).omit({ id: true, createdAt: true });
 export const insertUserPlanNotificationSchema = createInsertSchema(userPlanNotifications).omit({ id: true, createdAt: true });
@@ -1432,6 +1497,12 @@ export type SubscriptionAuditOutbox = typeof subscriptionAuditOutbox.$inferSelec
 export type InsertSubscriptionAuditOutbox = z.infer<typeof insertSubscriptionAuditOutboxSchema>;
 export type FailedPayment = typeof failedPayments.$inferSelect;
 export type InsertFailedPayment = z.infer<typeof insertFailedPaymentSchema>;
+export type CancellationRequest = typeof cancellationRequests.$inferSelect;
+export type InsertCancellationRequest = z.infer<typeof insertCancellationRequestSchema>;
+export type Refund = typeof refunds.$inferSelect;
+export type InsertRefund = z.infer<typeof insertRefundSchema>;
+export type ChargebackDispute = typeof chargebacksDisputes.$inferSelect;
+export type InsertChargebackDispute = z.infer<typeof insertChargebackDisputeSchema>;
 export type SubscriptionPlanChange = typeof subscriptionPlanChanges.$inferSelect;
 export type InsertSubscriptionPlanChange = z.infer<typeof insertSubscriptionPlanChangeSchema>;
 export type SubscriptionPlanNotification = typeof subscriptionPlanNotifications.$inferSelect;

@@ -20,6 +20,27 @@ export interface RazorpayOrder {
   notes?: Record<string, any>;
 }
 
+export interface RazorpayRefundOptions {
+  paymentId: string;
+  amount?: number;
+  notes?: Record<string, any>;
+  receipt?: string;
+}
+
+export interface RazorpayRefund {
+  id: string;
+  entity: string;
+  amount: number;
+  currency: string;
+  payment_id: string;
+  receipt: string | null;
+  status: string;
+  created_at: number;
+  notes?: Record<string, any>;
+  speed_requested?: string;
+  speed_processed?: string;
+}
+
 export class RazorpayService {
   private razorpay: Razorpay;
 
@@ -105,6 +126,97 @@ export class RazorpayService {
       return await this.razorpay.payments.fetch(paymentId);
     } catch (error: any) {
       throw new Error(`Failed to fetch payment: ${error.error?.description || error.statusCode || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Initiate a refund for a payment
+   * @param options - Refund options including paymentId and optional amount
+   * @returns RazorpayRefund object
+   */
+  async initiateRefund(options: RazorpayRefundOptions): Promise<RazorpayRefund> {
+    try {
+      const refundData: any = {
+        payment_id: options.paymentId,
+      };
+
+      if (options.amount !== undefined) {
+        refundData.amount = options.amount;
+      }
+
+      if (options.notes) {
+        refundData.notes = options.notes;
+      }
+
+      if (options.receipt) {
+        refundData.receipt = options.receipt;
+      }
+
+      const refund = await this.razorpay.payments.refund(options.paymentId, refundData);
+      
+      return refund as RazorpayRefund;
+    } catch (error: any) {
+      const errorMessage = error.error?.description || error.statusCode || 'Unknown error';
+      throw new Error(`Razorpay refund initiation failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get refund status and details
+   * @param refundId - Razorpay refund ID
+   * @returns RazorpayRefund object with current status
+   */
+  async getRefundStatus(refundId: string): Promise<RazorpayRefund> {
+    try {
+      const refund = await this.razorpay.refunds.fetch(refundId);
+      return refund as RazorpayRefund;
+    } catch (error: any) {
+      const errorMessage = error.error?.description || error.statusCode || 'Unknown error';
+      throw new Error(`Failed to fetch refund status: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Get all refunds for a specific payment
+   * @param paymentId - Razorpay payment ID
+   * @returns Array of RazorpayRefund objects
+   */
+  async getPaymentRefunds(paymentId: string): Promise<RazorpayRefund[]> {
+    try {
+      const refunds = await this.razorpay.payments.fetchMultipleRefund(paymentId);
+      return (refunds.items || []) as RazorpayRefund[];
+    } catch (error: any) {
+      const errorMessage = error.error?.description || error.statusCode || 'Unknown error';
+      throw new Error(`Failed to fetch payment refunds: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Handle refund webhook events
+   * @param event - Webhook event object from Razorpay
+   * @returns Parsed refund event data
+   */
+  handleRefundWebhook(event: any): { 
+    eventType: string; 
+    refund: RazorpayRefund;
+    payment: any;
+  } {
+    try {
+      const eventType = event.event;
+      const refund = event.payload?.refund?.entity;
+      const payment = event.payload?.payment?.entity;
+
+      if (!refund) {
+        throw new Error('Invalid refund webhook: missing refund data');
+      }
+
+      return {
+        eventType,
+        refund: refund as RazorpayRefund,
+        payment,
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to process refund webhook: ${error.message}`);
     }
   }
 }

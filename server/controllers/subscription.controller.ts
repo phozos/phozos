@@ -4,11 +4,34 @@ import { getService, TYPES } from '../services/container';
 import { ISubscriptionService } from '../services/domain/subscription.service';
 import { IUserSubscriptionService } from '../services/domain/user-subscription.service';
 import { IPlanMigrationService } from '../services/domain/plan-migration.service';
+import { ICancellationService } from '../services/domain/cancellation.service';
+import { IRefundService } from '../services/domain/refund.service';
+import { IDisputeService } from '../services/domain/dispute.service';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
 
 const subscribeSchema = z.object({
   planId: z.string().min(1)
+});
+
+const createCancellationRequestSchema = z.object({
+  subscriptionId: z.string().uuid(),
+  reason: z.string().min(10).max(1000)
+});
+
+const createRefundRequestSchema = z.object({
+  subscriptionId: z.string().uuid(),
+  paymentId: z.string().uuid(),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  reason: z.string().min(10).max(1000)
+});
+
+const createDisputeSchema = z.object({
+  subscriptionId: z.string().uuid(),
+  paymentId: z.string().uuid(),
+  type: z.enum(['chargeback', 'dispute']),
+  reason: z.string().min(10).max(2000),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/)
 });
 
 /**
@@ -401,6 +424,153 @@ export class SubscriptionController extends BaseController {
       return this.sendSuccess(res, { message: 'Migration declined' });
     } catch (error) {
       return this.handleError(res, error, 'SubscriptionController.declineMigration');
+    }
+  }
+
+  async getUserSubscriptionHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      
+      const history = await userSubscriptionService.getSubscriptionHistory(userId);
+      
+      return this.sendSuccess(res, history);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getUserSubscriptionHistory');
+    }
+  }
+
+  async createCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { subscriptionId, reason } = createCancellationRequestSchema.parse(req.body);
+      
+      const cancellationService = getService<ICancellationService>(TYPES.ICancellationService);
+      const request = await cancellationService.createCancellationRequest({
+        userId,
+        subscriptionId,
+        reason,
+      });
+      
+      res.status(201);
+      return this.sendSuccess(res, request);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'SubscriptionController.createCancellationRequest');
+    }
+  }
+
+  async getUserCancellationRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const cancellationService = getService<ICancellationService>(TYPES.ICancellationService);
+      
+      const requests = await cancellationService.getCancellationRequestsByUser(userId);
+      
+      return this.sendSuccess(res, requests);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getUserCancellationRequests');
+    }
+  }
+
+  async createRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { subscriptionId, paymentId, amount, reason } = createRefundRequestSchema.parse(req.body);
+      
+      const refundService = getService<IRefundService>(TYPES.IRefundService);
+      
+      const eligibility = await refundService.isRefundEligible(paymentId);
+      if (!eligibility.eligible) {
+        return this.sendError(res, 400, 'REFUND_NOT_ELIGIBLE', eligibility.reason || 'Refund not eligible');
+      }
+      
+      const request = await refundService.createRefundRequest({
+        userId,
+        subscriptionId,
+        paymentId,
+        amount,
+        reason,
+      });
+      
+      res.status(201);
+      return this.sendSuccess(res, request);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'SubscriptionController.createRefundRequest');
+    }
+  }
+
+  async getUserRefundRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const refundService = getService<IRefundService>(TYPES.IRefundService);
+      
+      const requests = await refundService.getRefundsByUser(userId);
+      
+      return this.sendSuccess(res, requests);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getUserRefundRequests');
+    }
+  }
+
+  async createDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { subscriptionId, paymentId, type, reason, amount } = createDisputeSchema.parse(req.body);
+      
+      const disputeService = getService<IDisputeService>(TYPES.IDisputeService);
+      const dispute = await disputeService.createDispute({
+        userId,
+        subscriptionId,
+        paymentId,
+        type,
+        reason,
+        amount,
+      });
+      
+      res.status(201);
+      return this.sendSuccess(res, dispute);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'SubscriptionController.createDispute');
+    }
+  }
+
+  async getUserDisputes(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const disputeService = getService<IDisputeService>(TYPES.IDisputeService);
+      
+      const disputes = await disputeService.getDisputesByUser(userId);
+      
+      return this.sendSuccess(res, disputes);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.getUserDisputes');
+    }
+  }
+
+  async checkRefundEligibility(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = this.getUserId(req);
+      const { paymentId } = req.query;
+      
+      if (!paymentId || typeof paymentId !== 'string') {
+        return this.sendError(res, 400, 'MISSING_PAYMENT_ID', 'Payment ID is required');
+      }
+      
+      const refundService = getService<IRefundService>(TYPES.IRefundService);
+      const eligibility = await refundService.isRefundEligible(paymentId);
+      
+      return this.sendSuccess(res, eligibility);
+    } catch (error) {
+      return this.handleError(res, error, 'SubscriptionController.checkRefundEligibility');
     }
   }
 }

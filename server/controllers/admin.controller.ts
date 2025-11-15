@@ -3010,6 +3010,598 @@ export class AdminController extends BaseController {
       return this.handleError(res, error, 'AdminController.exportSubscribers');
     }
   }
+
+  // ============================================================================
+  // SUBSCRIPTION MANAGEMENT (Phase 3)
+  // ============================================================================
+
+  async getAllAdminSubscriptions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, planId, page = 1, limit = 20 } = req.query;
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      
+      const filters: any = {};
+      if (status) filters.status = status;
+      if (userId) filters.userId = userId;
+      if (planId) filters.planId = planId;
+      
+      const subscriptions = await userSubscriptionService.findAll(filters);
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = subscriptions.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        subscriptions: paginatedResults,
+        total: subscriptions.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(subscriptions.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAllAdminSubscriptions');
+    }
+  }
+
+  async getAdminSubscriptionDetails(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const subscription = await userSubscriptionService.getUserSubscription(id);
+      
+      if (!subscription) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Subscription not found');
+      }
+      
+      return this.sendSuccess(res, subscription);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminSubscriptionDetails');
+    }
+  }
+
+  async forceCancelSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { reason, adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!reason) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Reason is required for force cancellation');
+      }
+      
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      await userSubscriptionService.update(id, {
+        status: 'cancelled',
+        endDate: new Date(),
+        updatedAt: new Date()
+      });
+      
+      logger.info('Admin force-cancelled subscription', {
+        subscriptionId: id,
+        adminId,
+        reason,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, { 
+        message: 'Subscription cancelled successfully',
+        subscriptionId: id 
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.forceCancelSubscription');
+    }
+  }
+
+  async forceRefundSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { amount, reason, adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!amount || !reason) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Amount and reason are required');
+      }
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const subscription = await userSubscriptionService.getUserSubscription(id);
+      
+      if (!subscription || !subscription.paymentId) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Subscription or payment not found');
+      }
+      
+      const refund = await refundService.createRefundRequest({
+        paymentId: subscription.paymentId,
+        subscriptionId: id,
+        userId: subscription.userId,
+        amount: Number(amount),
+        reason,
+        adminNotes,
+        status: 'processing',
+        requestedAt: new Date(),
+        processedBy: adminId
+      });
+      
+      logger.info('Admin force-refund initiated', {
+        subscriptionId: id,
+        adminId,
+        refundId: refund.id,
+        amount,
+        reason
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Refund initiated successfully',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.forceRefundSubscription');
+    }
+  }
+
+  async getAdminCancellationRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, page = 1, limit = 20 } = req.query;
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      let requests;
+      if (status === 'pending') {
+        requests = await cancellationService.getPendingCancellationRequests();
+      } else {
+        requests = await cancellationService.getPendingCancellationRequests();
+      }
+      
+      if (userId) {
+        requests = requests.filter((r: any) => r.userId === userId);
+      }
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = requests.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        requests: paginatedResults,
+        total: requests.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(requests.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminCancellationRequests');
+    }
+  }
+
+  async getAdminCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      const request = await cancellationService.getCancellationRequest(id);
+      
+      if (!request) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Cancellation request not found');
+      }
+      
+      return this.sendSuccess(res, request);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminCancellationRequest');
+    }
+  }
+
+  async approveCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      const request = await cancellationService.approveCancellationRequest(id, adminId, adminNotes);
+      
+      logger.info('Cancellation request approved', {
+        requestId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Cancellation request approved successfully',
+        request
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.approveCancellationRequest');
+    }
+  }
+
+  async rejectCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!adminNotes) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Admin notes are required for rejection');
+      }
+      
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      const request = await cancellationService.rejectCancellationRequest(id, adminId, adminNotes);
+      
+      logger.info('Cancellation request rejected', {
+        requestId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Cancellation request rejected successfully',
+        request
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.rejectCancellationRequest');
+    }
+  }
+
+  async getAdminRefundRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, page = 1, limit = 20 } = req.query;
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      let refunds;
+      if (status === 'pending') {
+        refunds = await refundService.getPendingRefunds();
+      } else {
+        refunds = await refundService.getPendingRefunds();
+      }
+      
+      if (userId) {
+        refunds = refunds.filter((r: any) => r.userId === userId);
+      }
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = refunds.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        refunds: paginatedResults,
+        total: refunds.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(refunds.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminRefundRequests');
+    }
+  }
+
+  async getAdminRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.getRefund(id);
+      
+      if (!refund) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Refund request not found');
+      }
+      
+      return this.sendSuccess(res, refund);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminRefundRequest');
+    }
+  }
+
+  async approveRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.approveRefund(id, adminId, adminNotes);
+      
+      logger.info('Refund request approved', {
+        refundId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Refund request approved and processing initiated',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.approveRefundRequest');
+    }
+  }
+
+  async rejectRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!adminNotes) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Admin notes are required for rejection');
+      }
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.rejectRefund(id, adminId, adminNotes);
+      
+      logger.info('Refund request rejected', {
+        refundId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Refund request rejected successfully',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.rejectRefundRequest');
+    }
+  }
+
+  async processRefundManually(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const adminId = this.getUserId(req);
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.getRefund(id);
+      if (!refund) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Refund not found');
+      }
+      
+      logger.info('Manual refund processing triggered', {
+        refundId: id,
+        adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Manual refund processing initiated',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.processRefundManually');
+    }
+  }
+
+  async getRefundStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.getRefund(id);
+      if (!refund) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Refund not found');
+      }
+      
+      return this.sendSuccess(res, {
+        refundId: id,
+        status: refund.status,
+        razorpayRefundId: refund.razorpayRefundId,
+        razorpayStatus: refund.razorpayStatus,
+        processedAt: refund.processedAt
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getRefundStatus');
+    }
+  }
+
+  async getAdminDisputes(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, page = 1, limit = 20 } = req.query;
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      let disputes;
+      if (status === 'open' || !status) {
+        disputes = await disputeService.getOpenDisputes();
+      } else {
+        disputes = await disputeService.getOpenDisputes();
+      }
+      
+      if (userId) {
+        disputes = disputes.filter((d: any) => d.userId === userId);
+      }
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = disputes.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        disputes: paginatedResults,
+        total: disputes.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(disputes.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminDisputes');
+    }
+  }
+
+  async getAdminDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.getDispute(id);
+      
+      if (!dispute) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Dispute not found');
+      }
+      
+      return this.sendSuccess(res, dispute);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminDispute');
+    }
+  }
+
+  async assignDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { assignedAdminId } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!assignedAdminId) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Assigned admin ID is required');
+      }
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.updateDisputeStatus(id, 'investigating', assignedAdminId);
+      
+      logger.info('Dispute assigned', {
+        disputeId: id,
+        assignedTo: assignedAdminId,
+        assignedBy: adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Dispute assigned successfully',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.assignDispute');
+    }
+  }
+
+  async investigateDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const adminId = this.getUserId(req);
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.escalateToInvestigation(id, adminId);
+      
+      logger.info('Dispute escalated to investigation', {
+        disputeId: id,
+        adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Dispute escalated to investigation',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.investigateDispute');
+    }
+  }
+
+  async resolveDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { resolution } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!resolution) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Resolution is required');
+      }
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.resolveDispute(id, resolution, adminId);
+      
+      logger.info('Dispute resolved', {
+        disputeId: id,
+        adminId,
+        resolution
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Dispute resolved successfully',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.resolveDispute');
+    }
+  }
+
+  async addDisputeEvidence(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { evidence } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!evidence) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Evidence data is required');
+      }
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.addEvidence(id, evidence, adminId);
+      
+      logger.info('Evidence added to dispute', {
+        disputeId: id,
+        adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Evidence added successfully',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.addDisputeEvidence');
+    }
+  }
+
+  async getSubscriptionManagementAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const { RefundService } = await import('../services/domain/refund.service');
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const [cancellationStats, pendingRefunds, openDisputes] = await Promise.all([
+        cancellationService.getCancellationStatistics(),
+        refundService.getPendingRefunds(),
+        disputeService.getOpenDisputes()
+      ]);
+      
+      const analytics = {
+        cancellations: cancellationStats,
+        refunds: {
+          pending: pendingRefunds.length,
+          total: pendingRefunds.length
+        },
+        disputes: {
+          open: openDisputes.length,
+          total: openDisputes.length
+        }
+      };
+      
+      return this.sendSuccess(res, analytics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getSubscriptionManagementAnalytics');
+    }
+  }
 }
 
 export const adminController = new AdminController();

@@ -74,6 +74,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSubscriptionManagementAnalytics } from "@/hooks/useAdminSubscriptionManagement";
 import {
   Table,
   TableBody,
@@ -2362,7 +2363,124 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <SubscriptionManagementOverview />
       </div>
+    );
+  }
+
+  function SubscriptionManagementOverview() {
+    const { data: analytics } = useSubscriptionManagementAnalytics();
+    
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-bold">Subscription Management</CardTitle>
+            <div className="flex gap-2">
+              <Link href="/admin/subscriptions/cancellation-requests">
+                <Button variant="outline" size="sm">
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Cancellations
+                </Button>
+              </Link>
+              <Link href="/admin/subscriptions/refund-management">
+                <Button variant="outline" size="sm">
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Refunds
+                </Button>
+              </Link>
+              <Link href="/admin/subscriptions/dispute-management">
+                <Button variant="outline" size="sm">
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Disputes
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Pending Cancellation Requests
+                    </p>
+                    <p className="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-2">
+                      {analytics?.cancellations?.pending || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {analytics?.cancellations?.total || 0}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-orange-600" />
+                  </div>
+                </div>
+                <Link href="/admin/subscriptions/cancellation-requests">
+                  <Button variant="link" size="sm" className="mt-3 p-0 h-auto text-orange-600">
+                    View all requests →
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Pending Refund Requests
+                    </p>
+                    <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">
+                      {analytics?.refunds?.pending || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {analytics?.refunds?.total || 0}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <DollarSign className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+                <Link href="/admin/subscriptions/refund-management">
+                  <Button variant="link" size="sm" className="mt-3 p-0 h-auto text-blue-600">
+                    Manage refunds →
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Open Disputes
+                    </p>
+                    <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">
+                      {analytics?.disputes?.open || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {analytics?.disputes?.total || 0}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                  </div>
+                </div>
+                <Link href="/admin/subscriptions/dispute-management">
+                  <Button variant="link" size="sm" className="mt-3 p-0 h-auto text-red-600">
+                    Handle disputes →
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 

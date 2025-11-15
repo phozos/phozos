@@ -76,6 +76,12 @@ import {
   partnerPayoutRepository,
   IPaymentRecordRepository,
   paymentRecordRepository,
+  ICancellationRequestRepository,
+  cancellationRequestRepository,
+  IRefundRepository,
+  refundRepository,
+  IChargebackDisputeRepository,
+  chargebackDisputeRepository,
 } from '../repositories';
 import { jwtService } from '../security/jwtService';
 import { validationService } from './infrastructure/validation.service';
@@ -85,6 +91,9 @@ import { featureVersioningService } from './domain/feature-versioning.service';
 import { featureChangeNotificationService } from './domain/feature-change-notification.service';
 import { quotaManagementService } from './domain/quota-management.service';
 import { featureAnalyticsService } from './domain/feature-analytics.service';
+import { CancellationService, ICancellationService } from './domain/cancellation.service';
+import { RefundService, IRefundService } from './domain/refund.service';
+import { DisputeService, IDisputeService } from './domain/dispute.service';
 
 /**
  * DI Container Interface
@@ -135,6 +144,9 @@ export const TYPES = {
   IPartnerCommissionRepository: Symbol.for('IPartnerCommissionRepository'),
   IPartnerPayoutRepository: Symbol.for('IPartnerPayoutRepository'),
   IPaymentRecordRepository: Symbol.for('IPaymentRecordRepository'),
+  ICancellationRequestRepository: Symbol.for('ICancellationRequestRepository'),
+  IRefundRepository: Symbol.for('IRefundRepository'),
+  IChargebackDisputeRepository: Symbol.for('IChargebackDisputeRepository'),
   
   // Infrastructure Service Tokens (Phase 5.4)
   WebSocketService: Symbol.for('WebSocketService'),
@@ -196,6 +208,11 @@ export const TYPES = {
   
   // Security Service Tokens (Phase 3)
   JwtService: Symbol.for('JwtService'),
+  
+  // Subscription Management Service Tokens (Phase 2)
+  ICancellationService: Symbol.for('ICancellationService'),
+  IRefundService: Symbol.for('IRefundService'),
+  IDisputeService: Symbol.for('IDisputeService'),
 } as const;
 
 /**
@@ -242,6 +259,9 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
     this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
     this.bindings.set(TYPES.IPaymentRecordRepository, paymentRecordRepository);
+    this.bindings.set(TYPES.ICancellationRequestRepository, cancellationRequestRepository);
+    this.bindings.set(TYPES.IRefundRepository, refundRepository);
+    this.bindings.set(TYPES.IChargebackDisputeRepository, chargebackDisputeRepository);
     
     // Bind security services
     this.bindings.set(TYPES.JwtService, jwtService);
@@ -256,6 +276,34 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IFeatureChangeNotificationService, featureChangeNotificationService);
     this.bindings.set(TYPES.IQuotaManagementService, quotaManagementService);
     this.bindings.set(TYPES.IFeatureAnalyticsService, featureAnalyticsService);
+    
+    // Bind subscription management services (Phase 2)
+    // Note: Services are instantiated with their dependencies to avoid circular dependency issues
+    this.bindings.set(
+      TYPES.ICancellationService,
+      new CancellationService(
+        cancellationRequestRepository,
+        userSubscriptionRepository,
+        paymentRepository
+      )
+    );
+    this.bindings.set(
+      TYPES.IRefundService,
+      new RefundService(
+        refundRepository,
+        userSubscriptionRepository,
+        paymentRepository,
+        cancellationRequestRepository
+      )
+    );
+    this.bindings.set(
+      TYPES.IDisputeService,
+      new DisputeService(
+        chargebackDisputeRepository,
+        userSubscriptionRepository,
+        paymentRepository
+      )
+    );
     
     // Note: Service bindings are registered lazily to avoid circular dependencies
     // Services will be bound when they are first requested

@@ -6,6 +6,62 @@ EduPath is an international education platform designed to connect students with
 
 ## Recent Changes
 
+### Subscription Management System - Phase 1: Foundation & Infrastructure (November 15, 2025)
+
+**Phase 1.1: Database Schema & Migrations**
+- Created 3 new database tables for subscription lifecycle management:
+  - `cancellation_requests`: Tracks user cancellation requests with approval workflow (11 columns, 3 FKs)
+  - `refunds`: Manages refund requests with Razorpay integration (18 columns, 5 FKs)
+  - `chargebacks_disputes`: Handles payment disputes and chargebacks (17 columns, 4 FKs)
+- Added 4 new enums: `cancellationStatusEnum`, `refundStatusEnum`, `disputeStatusEnum`, `disputeTypeEnum`
+- Generated migration file: `migrations/0023_funny_champions.sql`
+- All tables use UUID primary keys, timestamps, and proper foreign key constraints
+
+**Phase 1.2: Domain Models & Zod Validation**
+- Created Zod validation schemas in `server/services/validation/schemas.ts`:
+  - `insertCancellationRequestSchema`, `updateCancellationRequestSchema`
+  - `insertRefundSchema`, `updateRefundSchema`
+  - `insertChargebackDisputeSchema`, `updateChargebackDisputeSchema`
+- All schemas include field-level validation, proper type coercion, and business rule enforcement
+
+**Phase 1.3: Repository Layer**
+- Implemented `CancellationRequestRepository` with 7 methods (create, findById, findBySubscriptionId, findByUserId, findPending, updateStatus, getStatistics)
+- Implemented `RefundRepository` with 8 methods including getTotalRefundedAmount for financial reporting
+- Implemented `ChargebackDisputeRepository` with 7 methods including evidence management
+- All repositories extend BaseRepository pattern and registered in DI container
+- Added to `server/repositories/index.ts` and `server/services/container.ts` with proper type tokens
+
+**Phase 1.4: Domain Services**
+- Created `CancellationService` with SERIALIZABLE transactions for approval/rejection workflows
+- Created `RefundService` with 48-hour eligibility window validation and multi-step approval process
+- Created `DisputeService` with evidence tracking and investigation escalation
+- All services integrate with existing InputSanitizer for XSS protection
+- Business logic separated from data access following existing patterns
+- Comprehensive error handling using custom service errors
+
+**Phase 1.5: Razorpay Payment Integration**
+- Extended `RazorpayService` with 4 new refund methods:
+  - `initiateRefund`: Creates refund requests in Razorpay
+  - `getRefundStatus`: Fetches real-time refund status
+  - `getPaymentRefunds`: Retrieves all refunds for a payment
+  - `handleRefundWebhook`: Processes Razorpay refund webhooks
+- Added TypeScript interfaces: `RazorpayRefundOptions`, `RazorpayRefund`
+- Comprehensive error handling with descriptive error messages
+
+**Phase 1.6: Business Rules Implementation**
+- 2-day (48-hour) refund eligibility window from payment date
+- Status validation for all state transitions (pending → approved/rejected)
+- Prevents duplicate requests (cancellations, refunds, disputes)
+- Owner validation ensures users can only manage their own requests
+- All input sanitized to prevent XSS attacks
+
+**Technical Implementation:**
+- **Files Created:** 6 new files (3 repositories, 3 domain services)
+- **Files Modified:** 4 files (schema.ts, validation schemas, razorpay.service.ts, container.ts, repositories/index.ts)
+- **Database Migration:** Generated migration with 3 new tables and 4 enums
+- **Status:** Phase 1 complete - All components tested with LSP (no errors)
+- **Next Steps:** Phase 2 - API Controllers & Routes implementation
+
 ### Partner Account System - Frontend Implementation Complete (November 12, 2025)
 
 **Phase 10: Partner Analytics Dashboard (Admin)**

@@ -34,6 +34,9 @@ export * from './partner-student-referral.repository';
 export * from './partner-commission.repository';
 export * from './partner-payout.repository';
 export * from './payment-record.repository';
+export * from './cancellation-request.repository';
+export * from './refund.repository';
+export * from './chargeback-dispute.repository';
 
 import { userRepository } from './user.repository';
 import { studentRepository } from './student.repository';
@@ -69,6 +72,9 @@ import { partnerStudentReferralRepository } from './partner-student-referral.rep
 import { partnerCommissionRepository } from './partner-commission.repository';
 import { partnerPayoutRepository } from './partner-payout.repository';
 import { paymentRecordRepository } from './payment-record.repository';
+import { cancellationRequestRepository } from './cancellation-request.repository';
+import { refundRepository } from './refund.repository';
+import { chargebackDisputeRepository } from './chargeback-dispute.repository';
 
 export const repositories = {
   user: userRepository,
@@ -106,5 +112,8 @@ export const repositories = {
   partnerStudentReferral: partnerStudentReferralRepository,
   partnerCommission: partnerCommissionRepository,
   partnerPayout: partnerPayoutRepository,
-  paymentRecord: paymentRecordRepository
+  paymentRecord: paymentRecordRepository,
+  cancellationRequest: cancellationRequestRepository,
+  refund: refundRepository,
+  chargebackDispute: chargebackDisputeRepository
 };

@@ -28,6 +28,7 @@ import Auth from "@/pages/Auth";
 import StaffInvite from "@/pages/StaffInvite";
 import StudentProfileDetail from "@/pages/StudentProfileDetail";
 import SubscriptionPlans from "@/pages/SubscriptionPlans";
+import SubscriptionManagement from "@/pages/SubscriptionManagement";
 import PublicPlans from "@/pages/PublicPlans";
 import ConversionTest from "@/pages/ConversionTest";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
@@ -289,6 +290,12 @@ function AppContent() {
         <Route path="/profile">
           <ProtectedRoute {...anyAuth}>
             <Profile />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/subscription-management">
+          <ProtectedRoute {...customerOnly}>
+            <SubscriptionManagement />
           </ProtectedRoute>
         </Route>
 

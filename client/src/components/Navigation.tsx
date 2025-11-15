@@ -89,6 +89,7 @@ export default function Navigation({ user, onSignOut }: NavigationProps) {
       { href: "/dashboard", label: "Dashboard" },
       { href: "/applications", label: "Applications" },
       { href: "/documents", label: "Documents" },
+      { href: "/subscription-management", label: "Subscription" },
     ] : []),
     ...(user.teamRole === "admin" ? [{ href: "/dashboard/admin", label: "Admin Dashboard" }] : []),
     ...(user.teamRole === "counselor" ? [{ href: "/dashboard/team", label: "Counselor Dashboard" }] : [])

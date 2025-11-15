@@ -31,7 +31,9 @@ import {
   Globe,
   Lock,
   Bell,
-  ArrowRight
+  ArrowRight,
+  CreditCard,
+  Settings
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -519,6 +521,15 @@ export default function Dashboard() {
                       <Badge variant={subscription.status === 'active' ? 'default' : 'secondary'}>
                         {subscription.status}
                       </Badge>
+                    </div>
+                    
+                    <div className="pt-3 border-t">
+                      <Button asChild variant="outline" className="w-full">
+                        <Link href="/subscription-management">
+                          <Settings className="w-4 h-4 mr-2" />
+                          Manage Subscription
+                        </Link>
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

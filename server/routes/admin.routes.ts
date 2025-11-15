@@ -243,4 +243,39 @@ router.post('/payouts/:payoutId/process-paypal', csrfProtection, asyncHandler((r
 router.post('/payouts/:payoutId/complete', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.completePayout(req, res)));
 router.post('/payouts/:payoutId/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.cancelPayout(req, res)));
 
+// ============================================================================
+// SUBSCRIPTION MANAGEMENT (Phase 3)
+// ============================================================================
+
+// Admin Subscription Management
+router.get('/subscription-management/subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAllAdminSubscriptions(req, res)));
+router.get('/subscription-management/subscriptions/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminSubscriptionDetails(req, res)));
+router.patch('/subscription-management/subscriptions/:id/force-cancel', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceCancelSubscription(req, res)));
+router.patch('/subscription-management/subscriptions/:id/force-refund', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceRefundSubscription(req, res)));
+
+// Cancellation Requests Management
+router.get('/subscription-management/cancellation-requests', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminCancellationRequests(req, res)));
+router.get('/subscription-management/cancellation-requests/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminCancellationRequest(req, res)));
+router.patch('/subscription-management/cancellation-requests/:id/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.approveCancellationRequest(req, res)));
+router.patch('/subscription-management/cancellation-requests/:id/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.rejectCancellationRequest(req, res)));
+
+// Refund Requests Management
+router.get('/subscription-management/refund-requests', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminRefundRequests(req, res)));
+router.get('/subscription-management/refund-requests/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminRefundRequest(req, res)));
+router.patch('/subscription-management/refund-requests/:id/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.approveRefundRequest(req, res)));
+router.patch('/subscription-management/refund-requests/:id/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.rejectRefundRequest(req, res)));
+router.post('/subscription-management/refund-requests/:id/process', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.processRefundManually(req, res)));
+router.get('/subscription-management/refund-requests/:id/status', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRefundStatus(req, res)));
+
+// Dispute Management
+router.get('/subscription-management/disputes', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminDisputes(req, res)));
+router.get('/subscription-management/disputes/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminDispute(req, res)));
+router.patch('/subscription-management/disputes/:id/assign', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.assignDispute(req, res)));
+router.patch('/subscription-management/disputes/:id/investigate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.investigateDispute(req, res)));
+router.patch('/subscription-management/disputes/:id/resolve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.resolveDispute(req, res)));
+router.post('/subscription-management/disputes/:id/evidence', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.addDisputeEvidence(req, res)));
+
+// Subscription Management Analytics
+router.get('/subscription-management/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionManagementAnalytics(req, res)));
+
 export default router;
