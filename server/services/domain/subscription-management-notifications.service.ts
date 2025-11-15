@@ -1,12 +1,10 @@
-import { container, TYPES } from '../container';
+import { getService, TYPES } from '../container';
 import { INotificationService } from './notification.service';
 import logger from '../../utils/logger';
 
 export class SubscriptionManagementNotificationService {
-  private notificationService: INotificationService;
-
-  constructor() {
-    this.notificationService = container.get<INotificationService>(TYPES.INotificationService);
+  private get notificationService(): INotificationService {
+    return getService<INotificationService>(TYPES.INotificationService);
   }
 
   async notifyCancellationRequestReceived(userId: string, subscriptionId: string): Promise<void> {
