@@ -17,6 +17,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { logger } from '../../utils/logger';
 import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { RefundWithDetails } from '../../repositories/refund.repository';
+import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
 
 export interface IRefundService {
   createRefundRequest(data: InsertRefund): Promise<Refund>;
@@ -125,20 +126,28 @@ export class RefundService extends BaseService implements IRefundService {
         currency: payment.currency,
       };
 
-      return await db.transaction(async (tx) => {
-        const refund = await this.refundRepository.create(sanitizedData);
+      const refund = await db.transaction(async (tx) => {
+        const newRefund = await this.refundRepository.create(sanitizedData);
 
         logger.info('Refund request created', {
-          refundId: refund.id,
+          refundId: newRefund.id,
           userId: data.userId,
           paymentId: data.paymentId,
           amount: data.amount,
         });
 
-        return refund;
+        return newRefund;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyRefundRequestReceived(
+        data.userId,
+        data.subscriptionId,
+        data.amount
+      );
+
+      return refund;
     } catch (error) {
       return this.handleError(error, 'RefundService.createRefundRequest');
     }
@@ -199,10 +208,10 @@ export class RefundService extends BaseService implements IRefundService {
         throw new InvalidOperationError('approve refund', `Cannot approve refund with status: ${refund.status}`);
       }
 
-      return await db.transaction(async (tx) => {
+      const updatedRefund = await db.transaction(async (tx) => {
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
 
-        const updatedRefund = await this.refundRepository.updateStatus(id, 'processing', {
+        const updated = await this.refundRepository.updateStatus(id, 'processing', {
           processedBy: adminId,
           adminNotes: sanitizedNotes,
         });
@@ -213,10 +222,18 @@ export class RefundService extends BaseService implements IRefundService {
           amount: refund.amount,
         });
 
-        return updatedRefund;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyRefundApproved(
+        refund.userId,
+        refund.subscriptionId,
+        refund.amount
+      );
+
+      return updatedRefund;
     } catch (error) {
       return this.handleError(error, 'RefundService.approveRefund');
     }
@@ -233,10 +250,10 @@ export class RefundService extends BaseService implements IRefundService {
         throw new InvalidOperationError('reject refund', `Cannot reject refund with status: ${refund.status}`);
       }
 
-      return await db.transaction(async (tx) => {
+      const updatedRefund = await db.transaction(async (tx) => {
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
 
-        const updatedRefund = await this.refundRepository.updateStatus(id, 'rejected', {
+        const updated = await this.refundRepository.updateStatus(id, 'rejected', {
           processedBy: adminId,
           adminNotes: sanitizedNotes,
         });
@@ -246,10 +263,18 @@ export class RefundService extends BaseService implements IRefundService {
           adminId,
         });
 
-        return updatedRefund;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      await subscriptionManagementNotificationService.notifyRefundRejected(
+        refund.userId,
+        refund.subscriptionId,
+        adminNotes || 'Your refund request did not meet the refund criteria.'
+      );
+
+      return updatedRefund;
     } catch (error) {
       return this.handleError(error, 'RefundService.rejectRefund');
     }
@@ -262,10 +287,10 @@ export class RefundService extends BaseService implements IRefundService {
         throw new ResourceNotFoundError('Refund', id);
       }
 
-      return await db.transaction(async (tx) => {
+      const updatedRefund = await db.transaction(async (tx) => {
         const status = razorpayStatus === 'processed' ? 'completed' : 'processing';
 
-        const updatedRefund = await this.refundRepository.updateStatus(id, status, {
+        const updated = await this.refundRepository.updateStatus(id, status, {
           razorpayRefundId,
           razorpayStatus,
         });
@@ -276,10 +301,25 @@ export class RefundService extends BaseService implements IRefundService {
           razorpayStatus,
         });
 
-        return updatedRefund;
+        return updated;
       }, {
         isolationLevel: 'serializable',
       });
+
+      if (razorpayStatus === 'processed') {
+        await subscriptionManagementNotificationService.notifyRefundProcessed(
+          refund.userId,
+          refund.subscriptionId,
+          refund.amount
+        );
+      } else if (razorpayStatus === 'failed') {
+        await subscriptionManagementNotificationService.notifyRefundFailed(
+          refund.userId,
+          refund.subscriptionId
+        );
+      }
+
+      return updatedRefund;
     } catch (error) {
       return this.handleError(error, 'RefundService.processRefund');
     }
