@@ -132,6 +132,10 @@ const featuresConfigSchema = z.object({
   MONITORING_ENABLED: booleanSchema,
   COMPLIANCE_REPORT_ENABLED: booleanSchema,
   ERROR_DETAILS_ENABLED: booleanSchema,
+  ENABLE_USER_CANCELLATION_REQUESTS: booleanSchema,
+  ENABLE_REFUND_SYSTEM: booleanSchema,
+  ENABLE_DISPUTE_MANAGEMENT: booleanSchema,
+  ENABLE_ADMIN_FORCE_REFUND: booleanSchema,
 });
 
 /**
@@ -268,6 +272,10 @@ function validateConfiguration() {
         MONITORING_ENABLED: process.env.MONITORING_ENABLED,
         COMPLIANCE_REPORT_ENABLED: process.env.COMPLIANCE_REPORT_ENABLED,
         ERROR_DETAILS_ENABLED: process.env.ERROR_DETAILS_ENABLED,
+        ENABLE_USER_CANCELLATION_REQUESTS: process.env.ENABLE_USER_CANCELLATION_REQUESTS,
+        ENABLE_REFUND_SYSTEM: process.env.ENABLE_REFUND_SYSTEM,
+        ENABLE_DISPUTE_MANAGEMENT: process.env.ENABLE_DISPUTE_MANAGEMENT,
+        ENABLE_ADMIN_FORCE_REFUND: process.env.ENABLE_ADMIN_FORCE_REFUND,
       },
       logging: {
         LOG_LEVEL: process.env.LOG_LEVEL,
