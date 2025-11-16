@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import {
   Refund,
   InsertRefund,
@@ -32,16 +32,16 @@ export interface RefundWithDetails extends Refund {
 }
 
 export interface IRefundRepository {
-  create(data: InsertRefund): Promise<Refund>;
-  findById(id: string): Promise<Refund>;
-  findByIdOptional(id: string): Promise<Refund | undefined>;
-  findByPaymentId(paymentId: string): Promise<Refund[]>;
-  findBySubscriptionId(subscriptionId: string): Promise<Refund[]>;
-  findByUserId(userId: string): Promise<Refund[]>;
-  findPending(): Promise<RefundWithDetails[]>;
-  updateStatus(id: string, status: string, razorpayData?: Partial<Refund>): Promise<Refund>;
-  updateRazorpayRefundId(id: string, refundId: string): Promise<Refund>;
-  getTotalRefundedAmount(subscriptionId: string): Promise<number>;
+  create(data: InsertRefund, tx?: DbOrTransaction): Promise<Refund>;
+  findById(id: string, tx?: DbOrTransaction): Promise<Refund>;
+  findByIdOptional(id: string, tx?: DbOrTransaction): Promise<Refund | undefined>;
+  findByPaymentId(paymentId: string, tx?: DbOrTransaction): Promise<Refund[]>;
+  findBySubscriptionId(subscriptionId: string, tx?: DbOrTransaction): Promise<Refund[]>;
+  findByUserId(userId: string, tx?: DbOrTransaction): Promise<Refund[]>;
+  findPending(tx?: DbOrTransaction): Promise<RefundWithDetails[]>;
+  updateStatus(id: string, status: string, razorpayData?: Partial<Refund>, tx?: DbOrTransaction): Promise<Refund>;
+  updateRazorpayRefundId(id: string, refundId: string, tx?: DbOrTransaction): Promise<Refund>;
+  getTotalRefundedAmount(subscriptionId: string, tx?: DbOrTransaction): Promise<number>;
 }
 
 export class RefundRepository
@@ -52,9 +52,10 @@ export class RefundRepository
     super(refunds, 'id');
   }
 
-  async create(data: InsertRefund): Promise<Refund> {
+  async create(data: InsertRefund, tx?: DbOrTransaction): Promise<Refund> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .insert(refunds)
         .values({
           ...data,
@@ -69,9 +70,10 @@ export class RefundRepository
     }
   }
 
-  async findByPaymentId(paymentId: string): Promise<Refund[]> {
+  async findByPaymentId(paymentId: string, tx?: DbOrTransaction): Promise<Refund[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(refunds)
         .where(eq(refunds.paymentId, paymentId))
@@ -81,9 +83,10 @@ export class RefundRepository
     }
   }
 
-  async findBySubscriptionId(subscriptionId: string): Promise<Refund[]> {
+  async findBySubscriptionId(subscriptionId: string, tx?: DbOrTransaction): Promise<Refund[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(refunds)
         .where(eq(refunds.subscriptionId, subscriptionId))
@@ -93,9 +96,10 @@ export class RefundRepository
     }
   }
 
-  async findByUserId(userId: string): Promise<Refund[]> {
+  async findByUserId(userId: string, tx?: DbOrTransaction): Promise<Refund[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(refunds)
         .where(eq(refunds.userId, userId))
@@ -105,9 +109,10 @@ export class RefundRepository
     }
   }
 
-  async findPending(): Promise<RefundWithDetails[]> {
+  async findPending(tx?: DbOrTransaction): Promise<RefundWithDetails[]> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .select({
           id: refunds.id,
           paymentId: refunds.paymentId,
@@ -161,7 +166,8 @@ export class RefundRepository
   async updateStatus(
     id: string,
     status: string,
-    razorpayData?: Partial<Refund>
+    razorpayData?: Partial<Refund>,
+    tx?: DbOrTransaction
   ): Promise<Refund> {
     try {
       const updateData: Partial<Refund> = {
@@ -191,7 +197,8 @@ export class RefundRepository
         updateData.processedAt = new Date();
       }
 
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .update(refunds)
         .set(updateData)
         .where(eq(refunds.id, id))
@@ -207,9 +214,10 @@ export class RefundRepository
     }
   }
 
-  async updateRazorpayRefundId(id: string, refundId: string): Promise<Refund> {
+  async updateRazorpayRefundId(id: string, refundId: string, tx?: DbOrTransaction): Promise<Refund> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .update(refunds)
         .set({
           razorpayRefundId: refundId,
@@ -228,9 +236,10 @@ export class RefundRepository
     }
   }
 
-  async getTotalRefundedAmount(subscriptionId: string): Promise<number> {
+  async getTotalRefundedAmount(subscriptionId: string, tx?: DbOrTransaction): Promise<number> {
     try {
-      const result = await db
+      const executor = tx || db;
+      const result = await executor
         .select({
           total: sum(refunds.amount),
         })

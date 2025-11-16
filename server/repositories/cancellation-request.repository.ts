@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import {
   CancellationRequest,
   InsertCancellationRequest,
@@ -33,14 +33,14 @@ export interface CancellationStats {
 }
 
 export interface ICancellationRequestRepository {
-  create(data: InsertCancellationRequest): Promise<CancellationRequest>;
-  findById(id: string): Promise<CancellationRequest>;
-  findByIdOptional(id: string): Promise<CancellationRequest | undefined>;
-  findBySubscriptionId(subscriptionId: string): Promise<CancellationRequest[]>;
-  findByUserId(userId: string): Promise<CancellationRequest[]>;
-  findPending(): Promise<CancellationRequestWithDetails[]>;
-  updateStatus(id: string, status: string, processedBy: string, adminNotes?: string): Promise<CancellationRequest>;
-  getStatistics(): Promise<CancellationStats>;
+  create(data: InsertCancellationRequest, tx?: DbOrTransaction): Promise<CancellationRequest>;
+  findById(id: string, tx?: DbOrTransaction): Promise<CancellationRequest>;
+  findByIdOptional(id: string, tx?: DbOrTransaction): Promise<CancellationRequest | undefined>;
+  findBySubscriptionId(subscriptionId: string, tx?: DbOrTransaction): Promise<CancellationRequest[]>;
+  findByUserId(userId: string, tx?: DbOrTransaction): Promise<CancellationRequest[]>;
+  findPending(tx?: DbOrTransaction): Promise<CancellationRequestWithDetails[]>;
+  updateStatus(id: string, status: string, processedBy: string, adminNotes?: string, tx?: DbOrTransaction): Promise<CancellationRequest>;
+  getStatistics(tx?: DbOrTransaction): Promise<CancellationStats>;
 }
 
 export class CancellationRequestRepository
@@ -51,9 +51,10 @@ export class CancellationRequestRepository
     super(cancellationRequests, 'id');
   }
 
-  async create(data: InsertCancellationRequest): Promise<CancellationRequest> {
+  async create(data: InsertCancellationRequest, tx?: DbOrTransaction): Promise<CancellationRequest> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .insert(cancellationRequests)
         .values({
           ...data,
@@ -68,9 +69,10 @@ export class CancellationRequestRepository
     }
   }
 
-  async findBySubscriptionId(subscriptionId: string): Promise<CancellationRequest[]> {
+  async findBySubscriptionId(subscriptionId: string, tx?: DbOrTransaction): Promise<CancellationRequest[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(cancellationRequests)
         .where(eq(cancellationRequests.subscriptionId, subscriptionId))
@@ -80,9 +82,10 @@ export class CancellationRequestRepository
     }
   }
 
-  async findByUserId(userId: string): Promise<CancellationRequest[]> {
+  async findByUserId(userId: string, tx?: DbOrTransaction): Promise<CancellationRequest[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(cancellationRequests)
         .where(eq(cancellationRequests.userId, userId))
@@ -92,9 +95,10 @@ export class CancellationRequestRepository
     }
   }
 
-  async findPending(): Promise<CancellationRequestWithDetails[]> {
+  async findPending(tx?: DbOrTransaction): Promise<CancellationRequestWithDetails[]> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .select({
           id: cancellationRequests.id,
           subscriptionId: cancellationRequests.subscriptionId,
@@ -135,7 +139,8 @@ export class CancellationRequestRepository
     id: string,
     status: string,
     processedBy: string,
-    adminNotes?: string
+    adminNotes?: string,
+    tx?: DbOrTransaction
   ): Promise<CancellationRequest> {
     try {
       const updateData: Partial<CancellationRequest> = {
@@ -149,7 +154,8 @@ export class CancellationRequestRepository
         updateData.adminNotes = adminNotes;
       }
 
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .update(cancellationRequests)
         .set(updateData)
         .where(eq(cancellationRequests.id, id))
@@ -165,9 +171,10 @@ export class CancellationRequestRepository
     }
   }
 
-  async getStatistics(): Promise<CancellationStats> {
+  async getStatistics(tx?: DbOrTransaction): Promise<CancellationStats> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .select({
           status: cancellationRequests.status,
           count: count(),

@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { Payment, InsertPayment, payments } from '@shared/schema';
 import { db } from '../db';
 import { eq, and } from 'drizzle-orm';
@@ -6,15 +6,15 @@ import { handleDatabaseError } from './errors';
 
 export interface IPaymentRecordRepository {
   findAll(): Promise<Payment[]>;
-  findById(id: string): Promise<Payment>;
-  findByIdOptional(id: string): Promise<Payment | undefined>;
+  findById(id: string, tx?: DbOrTransaction): Promise<Payment>;
+  findByIdOptional(id: string, tx?: DbOrTransaction): Promise<Payment | undefined>;
   findByPaymentReference(paymentReference: string): Promise<Payment | undefined>;
   findByOrderId(orderId: string): Promise<Payment | undefined>;
   findByUserId(userId: string): Promise<Payment[]>;
   findBySubscriptionId(subscriptionId: string): Promise<Payment[]>;
-  create(data: InsertPayment): Promise<Payment>;
-  update(id: string, data: Partial<Payment>): Promise<Payment>;
-  delete(id: string): Promise<boolean>;
+  create(data: InsertPayment, tx?: DbOrTransaction): Promise<Payment>;
+  update(id: string, data: Partial<Payment>, tx?: DbOrTransaction): Promise<Payment>;
+  delete(id: string, tx?: DbOrTransaction): Promise<boolean>;
 }
 
 export class PaymentRecordRepository extends BaseRepository<Payment, InsertPayment> implements IPaymentRecordRepository {

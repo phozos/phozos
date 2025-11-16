@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   SubscriptionPlan, InsertSubscriptionPlan, subscriptionPlans,
   UserSubscription, InsertUserSubscription, userSubscriptions,
@@ -36,15 +36,15 @@ export interface ISubscriptionPlanRepository {
 }
 
 export interface IUserSubscriptionRepository {
-  findById(id: string): Promise<UserSubscription>;
-  findByIdOptional(id: string): Promise<UserSubscription | undefined>;
+  findById(id: string, tx?: DbOrTransaction): Promise<UserSubscription>;
+  findByIdOptional(id: string, tx?: DbOrTransaction): Promise<UserSubscription | undefined>;
   findByUser(userId: string): Promise<UserSubscription | undefined>;
   findByUserWithPlan(userId: string): Promise<SubscriptionWithPlan | undefined>;
   findAll(filters?: UserSubscriptionFilters): Promise<UserSubscription[]>;
   findAllWithDetails(): Promise<SubscriptionWithDetails[]>;
-  create(data: InsertUserSubscription): Promise<UserSubscription>;
-  update(id: string, data: Partial<UserSubscription>): Promise<UserSubscription>;
-  delete(id: string): Promise<boolean>;
+  create(data: InsertUserSubscription, tx?: DbOrTransaction): Promise<UserSubscription>;
+  update(id: string, data: Partial<UserSubscription>, tx?: DbOrTransaction): Promise<UserSubscription>;
+  delete(id: string, tx?: DbOrTransaction): Promise<boolean>;
   findActiveByUserId(userId: string): Promise<UserSubscription | undefined>;
   findByOrderId(orderId: string): Promise<UserSubscription | undefined>;
   hasActiveSubscription(userId: string): Promise<boolean>;

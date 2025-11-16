@@ -79,7 +79,7 @@ export class CancellationService extends BaseService implements ICancellationSer
       };
 
       const cancellationRequest = await db.transaction(async (tx) => {
-        const request = await this.cancellationRequestRepository.create(sanitizedData);
+        const request = await this.cancellationRequestRepository.create(sanitizedData, tx);
 
         logger.info('Cancellation request created', {
           requestId: request.id,
@@ -145,34 +145,35 @@ export class CancellationService extends BaseService implements ICancellationSer
     adminNotes?: string
   ): Promise<CancellationRequest> {
     try {
-      const request = await this.cancellationRequestRepository.findById(id);
-      if (!request) {
-        throw new ResourceNotFoundError('CancellationRequest', id);
-      }
-
-      if (request.status !== 'pending') {
-        throw new InvalidOperationError(
-          'approve cancellation',
-          `Cannot approve cancellation request with status: ${request.status}`
-        );
-      }
-
       const updatedRequest = await db.transaction(async (tx) => {
+        const request = await this.cancellationRequestRepository.findById(id, tx);
+        if (!request) {
+          throw new ResourceNotFoundError('CancellationRequest', id);
+        }
+
+        if (request.status !== 'pending') {
+          throw new InvalidOperationError(
+            'approve cancellation',
+            `Cannot approve cancellation request with status: ${request.status}`
+          );
+        }
+
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
         
         const updated = await this.cancellationRequestRepository.updateStatus(
           id,
           'approved',
           adminId,
-          sanitizedNotes
+          sanitizedNotes,
+          tx
         );
 
-        const subscription = await this.userSubscriptionRepository.findById(request.subscriptionId);
+        const subscription = await this.userSubscriptionRepository.findById(request.subscriptionId, tx);
         if (subscription && subscription.status !== 'cancelled') {
           await this.userSubscriptionRepository.update(request.subscriptionId, {
             status: 'cancelled',
             updatedAt: new Date(),
-          });
+          }, tx);
         }
 
         logger.info('Cancellation request approved', {
@@ -187,8 +188,8 @@ export class CancellationService extends BaseService implements ICancellationSer
       });
 
       await subscriptionManagementNotificationService.notifyCancellationApproved(
-        request.userId,
-        request.subscriptionId
+        updatedRequest.userId,
+        updatedRequest.subscriptionId
       );
 
       return updatedRequest;
@@ -203,26 +204,27 @@ export class CancellationService extends BaseService implements ICancellationSer
     adminNotes?: string
   ): Promise<CancellationRequest> {
     try {
-      const request = await this.cancellationRequestRepository.findById(id);
-      if (!request) {
-        throw new ResourceNotFoundError('CancellationRequest', id);
-      }
-
-      if (request.status !== 'pending') {
-        throw new InvalidOperationError(
-          'reject cancellation',
-          `Cannot reject cancellation request with status: ${request.status}`
-        );
-      }
-
       const updatedRequest = await db.transaction(async (tx) => {
+        const request = await this.cancellationRequestRepository.findById(id, tx);
+        if (!request) {
+          throw new ResourceNotFoundError('CancellationRequest', id);
+        }
+
+        if (request.status !== 'pending') {
+          throw new InvalidOperationError(
+            'reject cancellation',
+            `Cannot reject cancellation request with status: ${request.status}`
+          );
+        }
+
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
         
         const updated = await this.cancellationRequestRepository.updateStatus(
           id,
           'rejected',
           adminId,
-          sanitizedNotes
+          sanitizedNotes,
+          tx
         );
 
         logger.info('Cancellation request rejected', {
@@ -237,8 +239,8 @@ export class CancellationService extends BaseService implements ICancellationSer
       });
 
       await subscriptionManagementNotificationService.notifyCancellationRejected(
-        request.userId,
-        request.subscriptionId,
+        updatedRequest.userId,
+        updatedRequest.subscriptionId,
         adminNotes || 'Your request did not meet the cancellation criteria.'
       );
 
@@ -250,30 +252,32 @@ export class CancellationService extends BaseService implements ICancellationSer
 
   async cancelRequest(id: string, userId: string): Promise<CancellationRequest> {
     try {
-      const request = await this.cancellationRequestRepository.findById(id);
-      if (!request) {
-        throw new ResourceNotFoundError('CancellationRequest', id);
-      }
-
-      if (request.userId !== userId) {
-        throw new InvalidOperationError(
-          'cancel request',
-          'User does not own this cancellation request'
-        );
-      }
-
-      if (request.status !== 'pending') {
-        throw new InvalidOperationError(
-          'cancel request',
-          `Cannot cancel request with status: ${request.status}`
-        );
-      }
-
       return await db.transaction(async (tx) => {
+        const request = await this.cancellationRequestRepository.findById(id, tx);
+        if (!request) {
+          throw new ResourceNotFoundError('CancellationRequest', id);
+        }
+
+        if (request.userId !== userId) {
+          throw new InvalidOperationError(
+            'cancel request',
+            'User does not own this cancellation request'
+          );
+        }
+
+        if (request.status !== 'pending') {
+          throw new InvalidOperationError(
+            'cancel request',
+            `Cannot cancel request with status: ${request.status}`
+          );
+        }
+
         const updatedRequest = await this.cancellationRequestRepository.updateStatus(
           id,
           'cancelled',
-          userId
+          userId,
+          undefined,
+          tx
         );
 
         logger.info('Cancellation request cancelled by user', {

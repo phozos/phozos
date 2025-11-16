@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import {
   ChargebackDispute,
   InsertChargebackDispute,
@@ -32,15 +32,15 @@ export interface ChargebackDisputeWithDetails extends ChargebackDispute {
 }
 
 export interface IChargebackDisputeRepository {
-  create(data: InsertChargebackDispute): Promise<ChargebackDispute>;
-  findById(id: string): Promise<ChargebackDispute>;
-  findByIdOptional(id: string): Promise<ChargebackDispute | undefined>;
-  findByPaymentId(paymentId: string): Promise<ChargebackDispute[]>;
-  findByUserId(userId: string): Promise<ChargebackDispute[]>;
-  findOpen(): Promise<ChargebackDisputeWithDetails[]>;
-  updateStatus(id: string, status: string, resolvedBy?: string): Promise<ChargebackDispute>;
-  addEvidence(id: string, evidence: Record<string, any>): Promise<ChargebackDispute>;
-  resolve(id: string, resolution: string, resolvedBy: string): Promise<ChargebackDispute>;
+  create(data: InsertChargebackDispute, tx?: DbOrTransaction): Promise<ChargebackDispute>;
+  findById(id: string, tx?: DbOrTransaction): Promise<ChargebackDispute>;
+  findByIdOptional(id: string, tx?: DbOrTransaction): Promise<ChargebackDispute | undefined>;
+  findByPaymentId(paymentId: string, tx?: DbOrTransaction): Promise<ChargebackDispute[]>;
+  findByUserId(userId: string, tx?: DbOrTransaction): Promise<ChargebackDispute[]>;
+  findOpen(tx?: DbOrTransaction): Promise<ChargebackDisputeWithDetails[]>;
+  updateStatus(id: string, status: string, resolvedBy?: string, tx?: DbOrTransaction): Promise<ChargebackDispute>;
+  addEvidence(id: string, evidence: Record<string, any>, tx?: DbOrTransaction): Promise<ChargebackDispute>;
+  resolve(id: string, resolution: string, resolvedBy: string, tx?: DbOrTransaction): Promise<ChargebackDispute>;
 }
 
 export class ChargebackDisputeRepository
@@ -51,9 +51,10 @@ export class ChargebackDisputeRepository
     super(chargebacksDisputes, 'id');
   }
 
-  async create(data: InsertChargebackDispute): Promise<ChargebackDispute> {
+  async create(data: InsertChargebackDispute, tx?: DbOrTransaction): Promise<ChargebackDispute> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .insert(chargebacksDisputes)
         .values({
           ...data,
@@ -68,9 +69,10 @@ export class ChargebackDisputeRepository
     }
   }
 
-  async findByPaymentId(paymentId: string): Promise<ChargebackDispute[]> {
+  async findByPaymentId(paymentId: string, tx?: DbOrTransaction): Promise<ChargebackDispute[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(chargebacksDisputes)
         .where(eq(chargebacksDisputes.paymentId, paymentId))
@@ -80,9 +82,10 @@ export class ChargebackDisputeRepository
     }
   }
 
-  async findByUserId(userId: string): Promise<ChargebackDispute[]> {
+  async findByUserId(userId: string, tx?: DbOrTransaction): Promise<ChargebackDispute[]> {
     try {
-      return await db
+      const executor = tx || db;
+      return await executor
         .select()
         .from(chargebacksDisputes)
         .where(eq(chargebacksDisputes.userId, userId))
@@ -92,9 +95,10 @@ export class ChargebackDisputeRepository
     }
   }
 
-  async findOpen(): Promise<ChargebackDisputeWithDetails[]> {
+  async findOpen(tx?: DbOrTransaction): Promise<ChargebackDisputeWithDetails[]> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .select({
           id: chargebacksDisputes.id,
           paymentId: chargebacksDisputes.paymentId,
@@ -152,7 +156,8 @@ export class ChargebackDisputeRepository
   async updateStatus(
     id: string,
     status: string,
-    resolvedBy?: string
+    resolvedBy?: string,
+    tx?: DbOrTransaction
   ): Promise<ChargebackDispute> {
     try {
       const updateData: Partial<ChargebackDispute> = {
@@ -165,7 +170,8 @@ export class ChargebackDisputeRepository
         updateData.resolvedAt = new Date();
       }
 
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .update(chargebacksDisputes)
         .set(updateData)
         .where(eq(chargebacksDisputes.id, id))
@@ -181,10 +187,9 @@ export class ChargebackDisputeRepository
     }
   }
 
-  async addEvidence(id: string, evidence: Record<string, any>): Promise<ChargebackDispute> {
+  async addEvidence(id: string, evidence: Record<string, any>, tx?: DbOrTransaction): Promise<ChargebackDispute> {
     try {
-      // First get the existing dispute to merge evidence
-      const existing = await this.findByIdOptional(id);
+      const existing = await this.findByIdOptional(id, tx);
       if (!existing) {
         throw new NotFoundError('ChargebackDispute', id);
       }
@@ -195,7 +200,8 @@ export class ChargebackDisputeRepository
         ...evidence,
       };
 
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .update(chargebacksDisputes)
         .set({
           evidence: mergedEvidence,
@@ -210,9 +216,10 @@ export class ChargebackDisputeRepository
     }
   }
 
-  async resolve(id: string, resolution: string, resolvedBy: string): Promise<ChargebackDispute> {
+  async resolve(id: string, resolution: string, resolvedBy: string, tx?: DbOrTransaction): Promise<ChargebackDispute> {
     try {
-      const results = await db
+      const executor = tx || db;
+      const results = await executor
         .update(chargebacksDisputes)
         .set({
           status: 'resolved',

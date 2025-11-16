@@ -74,7 +74,7 @@ export class DisputeService extends BaseService implements IDisputeService {
       };
 
       const dispute = await db.transaction(async (tx) => {
-        const newDispute = await this.disputeRepository.create(sanitizedData);
+        const newDispute = await this.disputeRepository.create(sanitizedData, tx);
 
         logger.info('Dispute created', {
           disputeId: newDispute.id,
@@ -137,18 +137,18 @@ export class DisputeService extends BaseService implements IDisputeService {
 
   async updateDisputeStatus(id: string, status: string, adminId?: string): Promise<ChargebackDispute> {
     try {
-      const dispute = await this.disputeRepository.findById(id);
-      if (!dispute) {
-        throw new ResourceNotFoundError('Dispute', id);
-      }
-
-      const validStatuses = ['open', 'investigating', 'resolved', 'closed'];
-      if (!validStatuses.includes(status)) {
-        throw new InvalidOperationError('status update', `Invalid status: ${status}`);
-      }
-
       return await db.transaction(async (tx) => {
-        const updatedDispute = await this.disputeRepository.updateStatus(id, status, adminId);
+        const dispute = await this.disputeRepository.findById(id, tx);
+        if (!dispute) {
+          throw new ResourceNotFoundError('Dispute', id);
+        }
+
+        const validStatuses = ['open', 'investigating', 'resolved', 'closed'];
+        if (!validStatuses.includes(status)) {
+          throw new InvalidOperationError('status update', `Invalid status: ${status}`);
+        }
+
+        const updatedDispute = await this.disputeRepository.updateStatus(id, status, adminId, tx);
 
         logger.info('Dispute status updated', {
           disputeId: id,
@@ -167,32 +167,32 @@ export class DisputeService extends BaseService implements IDisputeService {
 
   async addEvidence(id: string, evidence: Record<string, any>, adminId: string): Promise<ChargebackDispute> {
     try {
-      const dispute = await this.disputeRepository.findById(id);
-      if (!dispute) {
-        throw new ResourceNotFoundError('Dispute', id);
-      }
-
-      if (dispute.status === 'resolved' || dispute.status === 'closed') {
-        throw new InvalidOperationError(
-          'add evidence',
-          `Cannot add evidence to dispute with status: ${dispute.status}`
-        );
-      }
-
-      const sanitizedEvidence: Record<string, any> = {};
-      for (const key in evidence) {
-        if (typeof evidence[key] === 'string') {
-          sanitizedEvidence[key] = InputSanitizer.sanitizePlainText(evidence[key]);
-        } else {
-          sanitizedEvidence[key] = evidence[key];
-        }
-      }
-
-      sanitizedEvidence.addedBy = adminId;
-      sanitizedEvidence.addedAt = new Date().toISOString();
-
       return await db.transaction(async (tx) => {
-        const updatedDispute = await this.disputeRepository.addEvidence(id, sanitizedEvidence);
+        const dispute = await this.disputeRepository.findById(id, tx);
+        if (!dispute) {
+          throw new ResourceNotFoundError('Dispute', id);
+        }
+
+        if (dispute.status === 'resolved' || dispute.status === 'closed') {
+          throw new InvalidOperationError(
+            'add evidence',
+            `Cannot add evidence to dispute with status: ${dispute.status}`
+          );
+        }
+
+        const sanitizedEvidence: Record<string, any> = {};
+        for (const key in evidence) {
+          if (typeof evidence[key] === 'string') {
+            sanitizedEvidence[key] = InputSanitizer.sanitizePlainText(evidence[key]);
+          } else {
+            sanitizedEvidence[key] = evidence[key];
+          }
+        }
+
+        sanitizedEvidence.addedBy = adminId;
+        sanitizedEvidence.addedAt = new Date().toISOString();
+
+        const updatedDispute = await this.disputeRepository.addEvidence(id, sanitizedEvidence, tx);
 
         logger.info('Evidence added to dispute', {
           disputeId: id,
@@ -210,22 +210,22 @@ export class DisputeService extends BaseService implements IDisputeService {
 
   async resolveDispute(id: string, resolution: string, adminId: string): Promise<ChargebackDispute> {
     try {
-      const dispute = await this.disputeRepository.findById(id);
-      if (!dispute) {
-        throw new ResourceNotFoundError('Dispute', id);
-      }
-
-      if (dispute.status === 'resolved' || dispute.status === 'closed') {
-        throw new InvalidOperationError(
-          'resolve dispute',
-          `Cannot resolve dispute with status: ${dispute.status}`
-        );
-      }
-
       const sanitizedResolution = InputSanitizer.sanitizePlainText(resolution);
 
       const updatedDispute = await db.transaction(async (tx) => {
-        const updated = await this.disputeRepository.resolve(id, sanitizedResolution, adminId);
+        const dispute = await this.disputeRepository.findById(id, tx);
+        if (!dispute) {
+          throw new ResourceNotFoundError('Dispute', id);
+        }
+
+        if (dispute.status === 'resolved' || dispute.status === 'closed') {
+          throw new InvalidOperationError(
+            'resolve dispute',
+            `Cannot resolve dispute with status: ${dispute.status}`
+          );
+        }
+
+        const updated = await this.disputeRepository.resolve(id, sanitizedResolution, adminId, tx);
 
         logger.info('Dispute resolved', {
           disputeId: id,
@@ -239,7 +239,7 @@ export class DisputeService extends BaseService implements IDisputeService {
       });
 
       await subscriptionManagementNotificationService.notifyDisputeResolved(
-        dispute.userId,
+        updatedDispute.userId,
         id,
         sanitizedResolution
       );
@@ -252,20 +252,20 @@ export class DisputeService extends BaseService implements IDisputeService {
 
   async escalateToInvestigation(id: string, adminId: string): Promise<ChargebackDispute> {
     try {
-      const dispute = await this.disputeRepository.findById(id);
-      if (!dispute) {
-        throw new ResourceNotFoundError('Dispute', id);
-      }
-
-      if (dispute.status !== 'open') {
-        throw new InvalidOperationError(
-          'escalate dispute',
-          `Cannot escalate dispute with status: ${dispute.status}`
-        );
-      }
-
       const updatedDispute = await db.transaction(async (tx) => {
-        const updated = await this.disputeRepository.updateStatus(id, 'investigating', adminId);
+        const dispute = await this.disputeRepository.findById(id, tx);
+        if (!dispute) {
+          throw new ResourceNotFoundError('Dispute', id);
+        }
+
+        if (dispute.status !== 'open') {
+          throw new InvalidOperationError(
+            'escalate dispute',
+            `Cannot escalate dispute with status: ${dispute.status}`
+          );
+        }
+
+        const updated = await this.disputeRepository.updateStatus(id, 'investigating', adminId, tx);
 
         logger.info('Dispute escalated to investigation', {
           disputeId: id,
@@ -278,7 +278,7 @@ export class DisputeService extends BaseService implements IDisputeService {
       });
 
       await subscriptionManagementNotificationService.notifyDisputeUnderInvestigation(
-        dispute.userId,
+        updatedDispute.userId,
         id
       );
 

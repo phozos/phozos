@@ -123,7 +123,7 @@ export class RefundService extends BaseService implements IRefundService {
       };
 
       const refund = await db.transaction(async (tx) => {
-        const newRefund = await this.refundRepository.create(sanitizedData);
+        const newRefund = await this.refundRepository.create(sanitizedData, tx);
 
         logger.info('Refund request created', {
           refundId: newRefund.id,
@@ -195,22 +195,22 @@ export class RefundService extends BaseService implements IRefundService {
 
   async approveRefund(id: string, adminId: string, adminNotes?: string): Promise<Refund> {
     try {
-      const refund = await this.refundRepository.findById(id);
-      if (!refund) {
-        throw new ResourceNotFoundError('Refund', id);
-      }
-
-      if (refund.status !== 'pending') {
-        throw new InvalidOperationError('approve refund', `Cannot approve refund with status: ${refund.status}`);
-      }
-
       const updatedRefund = await db.transaction(async (tx) => {
+        const refund = await this.refundRepository.findById(id, tx);
+        if (!refund) {
+          throw new ResourceNotFoundError('Refund', id);
+        }
+
+        if (refund.status !== 'pending') {
+          throw new InvalidOperationError('approve refund', `Cannot approve refund with status: ${refund.status}`);
+        }
+
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
 
         const updated = await this.refundRepository.updateStatus(id, 'processing', {
           processedBy: adminId,
           adminNotes: sanitizedNotes,
-        });
+        }, tx);
 
         logger.info('Refund approved', {
           refundId: id,
@@ -224,9 +224,9 @@ export class RefundService extends BaseService implements IRefundService {
       });
 
       await subscriptionManagementNotificationService.notifyRefundApproved(
-        refund.userId,
-        refund.subscriptionId,
-        parseFloat(refund.amount)
+        updatedRefund.userId,
+        updatedRefund.subscriptionId,
+        parseFloat(updatedRefund.amount)
       );
 
       return updatedRefund;
@@ -237,22 +237,22 @@ export class RefundService extends BaseService implements IRefundService {
 
   async rejectRefund(id: string, adminId: string, adminNotes?: string): Promise<Refund> {
     try {
-      const refund = await this.refundRepository.findById(id);
-      if (!refund) {
-        throw new ResourceNotFoundError('Refund', id);
-      }
-
-      if (refund.status !== 'pending') {
-        throw new InvalidOperationError('reject refund', `Cannot reject refund with status: ${refund.status}`);
-      }
-
       const updatedRefund = await db.transaction(async (tx) => {
+        const refund = await this.refundRepository.findById(id, tx);
+        if (!refund) {
+          throw new ResourceNotFoundError('Refund', id);
+        }
+
+        if (refund.status !== 'pending') {
+          throw new InvalidOperationError('reject refund', `Cannot reject refund with status: ${refund.status}`);
+        }
+
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
 
         const updated = await this.refundRepository.updateStatus(id, 'rejected', {
           processedBy: adminId,
           adminNotes: sanitizedNotes,
-        });
+        }, tx);
 
         logger.info('Refund rejected', {
           refundId: id,
@@ -265,8 +265,8 @@ export class RefundService extends BaseService implements IRefundService {
       });
 
       await subscriptionManagementNotificationService.notifyRefundRejected(
-        refund.userId,
-        refund.subscriptionId,
+        updatedRefund.userId,
+        updatedRefund.subscriptionId,
         adminNotes || 'Your refund request did not meet the refund criteria.'
       );
 
@@ -278,18 +278,18 @@ export class RefundService extends BaseService implements IRefundService {
 
   async processRefund(id: string, razorpayRefundId: string, razorpayStatus: string): Promise<Refund> {
     try {
-      const refund = await this.refundRepository.findById(id);
-      if (!refund) {
-        throw new ResourceNotFoundError('Refund', id);
-      }
-
       const updatedRefund = await db.transaction(async (tx) => {
+        const refund = await this.refundRepository.findById(id, tx);
+        if (!refund) {
+          throw new ResourceNotFoundError('Refund', id);
+        }
+
         const status = razorpayStatus === 'processed' ? 'completed' : 'processing';
 
         const updated = await this.refundRepository.updateStatus(id, status, {
           razorpayRefundId,
           razorpayStatus,
-        });
+        }, tx);
 
         logger.info('Refund processed', {
           refundId: id,
@@ -304,14 +304,14 @@ export class RefundService extends BaseService implements IRefundService {
 
       if (razorpayStatus === 'processed') {
         await subscriptionManagementNotificationService.notifyRefundProcessed(
-          refund.userId,
-          refund.subscriptionId,
-          parseFloat(refund.amount)
+          updatedRefund.userId,
+          updatedRefund.subscriptionId,
+          parseFloat(updatedRefund.amount)
         );
       } else if (razorpayStatus === 'failed') {
         await subscriptionManagementNotificationService.notifyRefundFailed(
-          refund.userId,
-          refund.subscriptionId
+          updatedRefund.userId,
+          updatedRefund.subscriptionId
         );
       }
 
