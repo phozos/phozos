@@ -3,6 +3,94 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
 
 // ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+export interface CancellationRequest {
+  id: string;
+  subscriptionId: string;
+  userId: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedAt: string;
+  processedAt?: string;
+  processedBy?: string;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CancellationRequestsResponse {
+  requests: CancellationRequest[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface Refund {
+  id: string;
+  paymentId: string;
+  subscriptionId: string;
+  userId: string;
+  cancellationRequestId?: string;
+  amount: string;
+  currency: string;
+  reason: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'rejected';
+  razorpayRefundId?: string;
+  razorpayStatus?: string;
+  requestedAt: string;
+  processedAt?: string;
+  processedBy?: string;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RefundsResponse {
+  refunds: Refund[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface Dispute {
+  id: string;
+  paymentId: string;
+  subscriptionId: string;
+  userId: string;
+  type: 'chargeback' | 'dispute';
+  reason: string;
+  description?: string;
+  status: 'open' | 'investigating' | 'resolved' | 'closed';
+  amount: string;
+  currency: string;
+  evidence?: Record<string, any>;
+  razorpayDisputeId?: string;
+  resolution?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  assignedTo?: string;
+  adminNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DisputesResponse {
+  disputes: Dispute[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface RefundStatusResponse {
+  id: string;
+  status: string;
+  razorpayStatus?: string;
+  lastUpdated: string;
+}
+
+// ============================================================================
 // ADMIN SUBSCRIPTIONS
 // ============================================================================
 
@@ -15,7 +103,7 @@ export function useAdminSubscriptions(filters?: {
 }) {
   const queryString = new URLSearchParams(filters as any).toString();
   return useApiQuery(
-    ['/api/admin/subscription-management/subscriptions', filters],
+    ['/api/admin/subscription-management/subscriptions', queryString],
     `/api/admin/subscription-management/subscriptions${queryString ? `?${queryString}` : ''}`,
     undefined,
     { staleTime: 30000 }
@@ -71,8 +159,8 @@ export function useAdminCancellationRequests(filters?: {
   limit?: number;
 }) {
   const queryString = new URLSearchParams(filters as any).toString();
-  return useApiQuery(
-    ['/api/admin/subscription-management/cancellation-requests', filters],
+  return useApiQuery<CancellationRequestsResponse>(
+    ['/api/admin/subscription-management/cancellation-requests', queryString],
     `/api/admin/subscription-management/cancellation-requests${queryString ? `?${queryString}` : ''}`,
     undefined,
     { staleTime: 30000 }
@@ -80,7 +168,7 @@ export function useAdminCancellationRequests(filters?: {
 }
 
 export function useAdminCancellationRequest(id: string) {
-  return useApiQuery(
+  return useApiQuery<CancellationRequest>(
     [`/api/admin/subscription-management/cancellation-requests/${id}`],
     `/api/admin/subscription-management/cancellation-requests/${id}`,
     undefined,
@@ -127,8 +215,8 @@ export function useAdminRefundRequests(filters?: {
   limit?: number;
 }) {
   const queryString = new URLSearchParams(filters as any).toString();
-  return useApiQuery(
-    ['/api/admin/subscription-management/refund-requests', filters],
+  return useApiQuery<RefundsResponse>(
+    ['/api/admin/subscription-management/refund-requests', queryString],
     `/api/admin/subscription-management/refund-requests${queryString ? `?${queryString}` : ''}`,
     undefined,
     { staleTime: 30000 }
@@ -136,7 +224,7 @@ export function useAdminRefundRequests(filters?: {
 }
 
 export function useAdminRefundRequest(id: string) {
-  return useApiQuery(
+  return useApiQuery<Refund>(
     [`/api/admin/subscription-management/refund-requests/${id}`],
     `/api/admin/subscription-management/refund-requests/${id}`,
     undefined,
@@ -186,7 +274,7 @@ export function useProcessRefundManually() {
 }
 
 export function useRefundStatus(id: string) {
-  return useApiQuery(
+  return useApiQuery<RefundStatusResponse>(
     [`/api/admin/subscription-management/refund-requests/${id}/status`],
     `/api/admin/subscription-management/refund-requests/${id}/status`,
     undefined,
@@ -205,8 +293,8 @@ export function useAdminDisputes(filters?: {
   limit?: number;
 }) {
   const queryString = new URLSearchParams(filters as any).toString();
-  return useApiQuery(
-    ['/api/admin/subscription-management/disputes', filters],
+  return useApiQuery<DisputesResponse>(
+    ['/api/admin/subscription-management/disputes', queryString],
     `/api/admin/subscription-management/disputes${queryString ? `?${queryString}` : ''}`,
     undefined,
     { staleTime: 30000 }
@@ -214,7 +302,7 @@ export function useAdminDisputes(filters?: {
 }
 
 export function useAdminDispute(id: string) {
-  return useApiQuery(
+  return useApiQuery<Dispute>(
     [`/api/admin/subscription-management/disputes/${id}`],
     `/api/admin/subscription-management/disputes/${id}`,
     undefined,

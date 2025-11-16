@@ -68,11 +68,7 @@ export default function SubscriptionManagement() {
     (req) => req.status === 'pending' || req.status === 'processing'
   );
 
-  const getLatestPayment = () => {
-    return null;
-  };
-
-  const payment = getLatestPayment();
+  const payment = undefined as { id: string; paidAt: string; amount: string } | undefined;
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -118,7 +114,10 @@ export default function SubscriptionManagement() {
 
         <TabsContent value="overview" className="space-y-6">
           <SubscriptionOverview
-            subscription={subscription}
+            subscription={{
+              ...subscription,
+              expiresAt: subscription.expiresAt ?? undefined,
+            }}
             plan={plan}
             payment={payment}
             onCancelClick={() => setActiveTab('cancel')}

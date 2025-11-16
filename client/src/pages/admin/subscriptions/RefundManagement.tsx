@@ -149,11 +149,11 @@ export default function RefundManagement() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const formatAmount = (amount: number) => {
+  const formatAmount = (amount: string) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
-    }).format(amount / 100);
+    }).format(parseFloat(amount) / 100);
   };
 
   const isEligibleForRefund = (requestedAt: string) => {
