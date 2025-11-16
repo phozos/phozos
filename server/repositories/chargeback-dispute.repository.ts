@@ -33,7 +33,8 @@ export interface ChargebackDisputeWithDetails extends ChargebackDispute {
 
 export interface IChargebackDisputeRepository {
   create(data: InsertChargebackDispute): Promise<ChargebackDispute>;
-  findById(id: string): Promise<ChargebackDispute | undefined>;
+  findById(id: string): Promise<ChargebackDispute>;
+  findByIdOptional(id: string): Promise<ChargebackDispute | undefined>;
   findByPaymentId(paymentId: string): Promise<ChargebackDispute[]>;
   findByUserId(userId: string): Promise<ChargebackDispute[]>;
   findOpen(): Promise<ChargebackDisputeWithDetails[]>;
@@ -64,20 +65,6 @@ export class ChargebackDisputeRepository
       return results[0] as ChargebackDispute;
     } catch (error) {
       handleDatabaseError(error, 'ChargebackDisputeRepository.create');
-    }
-  }
-
-  async findById(id: string): Promise<ChargebackDispute | undefined> {
-    try {
-      const results = await db
-        .select()
-        .from(chargebacksDisputes)
-        .where(eq(chargebacksDisputes.id, id))
-        .limit(1);
-
-      return results[0] as ChargebackDispute | undefined;
-    } catch (error) {
-      handleDatabaseError(error, 'ChargebackDisputeRepository.findById');
     }
   }
 
@@ -197,7 +184,7 @@ export class ChargebackDisputeRepository
   async addEvidence(id: string, evidence: Record<string, any>): Promise<ChargebackDispute> {
     try {
       // First get the existing dispute to merge evidence
-      const existing = await this.findById(id);
+      const existing = await this.findByIdOptional(id);
       if (!existing) {
         throw new NotFoundError('ChargebackDispute', id);
       }

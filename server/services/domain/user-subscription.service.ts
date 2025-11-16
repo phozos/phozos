@@ -11,6 +11,7 @@ export interface IUserSubscriptionService {
   getCurrentSubscription(userId: string): Promise<UserSubscription | undefined>;
   getSubscriptionWithPlan(userId: string): Promise<any>;
   getAllSubscriptions(): Promise<any[]>;
+  getSubscriptionHistory(userId: string): Promise<any[]>;
   createSubscription(subscription: InsertUserSubscription): Promise<UserSubscription>;
   updateSubscription(id: string, updates: Partial<UserSubscription>): Promise<UserSubscription | undefined>;
   cancelSubscription(subscriptionId: string): Promise<boolean>;
@@ -51,6 +52,20 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
       return await this.userSubscriptionRepo.findAllWithDetails();
     } catch (error) {
       return this.handleError(error, 'UserSubscriptionService.getAllSubscriptions');
+    }
+  }
+
+  async getSubscriptionHistory(userId: string): Promise<any[]> {
+    try {
+      const subscription = await this.userSubscriptionRepo.findByUser(userId);
+      if (!subscription) {
+        return [];
+      }
+      
+      const { subscriptionAuditService } = await import('../infrastructure/subscription-audit.service');
+      return await subscriptionAuditService.getSubscriptionHistory(subscription.id);
+    } catch (error) {
+      return this.handleError(error, 'UserSubscriptionService.getSubscriptionHistory');
     }
   }
 

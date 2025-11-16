@@ -2,7 +2,7 @@ import { BaseService } from '../base.service';
 import {
   IRefundRepository,
   IUserSubscriptionRepository,
-  IPaymentRepository,
+  IPaymentRecordRepository,
   ICancellationRequestRepository,
 } from '../../repositories';
 import { container, TYPES } from '../container';
@@ -39,7 +39,7 @@ export class RefundService extends BaseService implements IRefundService {
   constructor(
     private refundRepository: IRefundRepository,
     private userSubscriptionRepository: IUserSubscriptionRepository,
-    private paymentRepository: IPaymentRepository,
+    private paymentRepository: IPaymentRecordRepository,
     private cancellationRequestRepository: ICancellationRequestRepository
   ) {
     super();

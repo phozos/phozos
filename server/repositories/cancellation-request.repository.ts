@@ -34,7 +34,8 @@ export interface CancellationStats {
 
 export interface ICancellationRequestRepository {
   create(data: InsertCancellationRequest): Promise<CancellationRequest>;
-  findById(id: string): Promise<CancellationRequest | undefined>;
+  findById(id: string): Promise<CancellationRequest>;
+  findByIdOptional(id: string): Promise<CancellationRequest | undefined>;
   findBySubscriptionId(subscriptionId: string): Promise<CancellationRequest[]>;
   findByUserId(userId: string): Promise<CancellationRequest[]>;
   findPending(): Promise<CancellationRequestWithDetails[]>;
@@ -64,20 +65,6 @@ export class CancellationRequestRepository
       return results[0] as CancellationRequest;
     } catch (error) {
       handleDatabaseError(error, 'CancellationRequestRepository.create');
-    }
-  }
-
-  async findById(id: string): Promise<CancellationRequest | undefined> {
-    try {
-      const results = await db
-        .select()
-        .from(cancellationRequests)
-        .where(eq(cancellationRequests.id, id))
-        .limit(1);
-
-      return results[0] as CancellationRequest | undefined;
-    } catch (error) {
-      handleDatabaseError(error, 'CancellationRequestRepository.findById');
     }
   }
 

@@ -33,7 +33,8 @@ export interface RefundWithDetails extends Refund {
 
 export interface IRefundRepository {
   create(data: InsertRefund): Promise<Refund>;
-  findById(id: string): Promise<Refund | undefined>;
+  findById(id: string): Promise<Refund>;
+  findByIdOptional(id: string): Promise<Refund | undefined>;
   findByPaymentId(paymentId: string): Promise<Refund[]>;
   findBySubscriptionId(subscriptionId: string): Promise<Refund[]>;
   findByUserId(userId: string): Promise<Refund[]>;
@@ -65,20 +66,6 @@ export class RefundRepository
       return results[0] as Refund;
     } catch (error) {
       handleDatabaseError(error, 'RefundRepository.create');
-    }
-  }
-
-  async findById(id: string): Promise<Refund | undefined> {
-    try {
-      const results = await db
-        .select()
-        .from(refunds)
-        .where(eq(refunds.id, id))
-        .limit(1);
-
-      return results[0] as Refund | undefined;
-    } catch (error) {
-      handleDatabaseError(error, 'RefundRepository.findById');
     }
   }
 

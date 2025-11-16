@@ -2,7 +2,7 @@ import { BaseService } from '../base.service';
 import {
   IChargebackDisputeRepository,
   IUserSubscriptionRepository,
-  IPaymentRepository,
+  IPaymentRecordRepository,
 } from '../../repositories';
 import { container, TYPES } from '../container';
 import {
@@ -34,7 +34,7 @@ export class DisputeService extends BaseService implements IDisputeService {
   constructor(
     private disputeRepository: IChargebackDisputeRepository,
     private userSubscriptionRepository: IUserSubscriptionRepository,
-    private paymentRepository: IPaymentRepository
+    private paymentRepository: IPaymentRecordRepository
   ) {
     super();
   }
