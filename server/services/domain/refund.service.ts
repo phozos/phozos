@@ -330,4 +330,12 @@ export class RefundService extends BaseService implements IRefundService {
   }
 }
 
-export const refundService = container.get<IRefundService>(TYPES.IRefundService);
+let _refundService: IRefundService | undefined;
+export const refundService = new Proxy({} as IRefundService, {
+  get(target, prop) {
+    if (!_refundService) {
+      _refundService = container.get<IRefundService>(TYPES.IRefundService);
+    }
+    return (_refundService as any)[prop];
+  }
+});

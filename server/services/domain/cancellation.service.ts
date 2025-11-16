@@ -303,4 +303,12 @@ export class CancellationService extends BaseService implements ICancellationSer
   }
 }
 
-export const cancellationService = container.get<ICancellationService>(TYPES.ICancellationService);
+let _cancellationService: ICancellationService | undefined;
+export const cancellationService = new Proxy({} as ICancellationService, {
+  get(target, prop) {
+    if (!_cancellationService) {
+      _cancellationService = container.get<ICancellationService>(TYPES.ICancellationService);
+    }
+    return (_cancellationService as any)[prop];
+  }
+});

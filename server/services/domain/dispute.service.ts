@@ -289,4 +289,12 @@ export class DisputeService extends BaseService implements IDisputeService {
   }
 }
 
-export const disputeService = container.get<IDisputeService>(TYPES.IDisputeService);
+let _disputeService: IDisputeService | undefined;
+export const disputeService = new Proxy({} as IDisputeService, {
+  get(target, prop) {
+    if (!_disputeService) {
+      _disputeService = container.get<IDisputeService>(TYPES.IDisputeService);
+    }
+    return (_disputeService as any)[prop];
+  }
+});
