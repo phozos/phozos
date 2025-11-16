@@ -299,4 +299,4 @@ export class CancellationService extends BaseService implements ICancellationSer
   }
 }
 
-export const cancellationService = new CancellationService();
+export const cancellationService = container.get<ICancellationService>(TYPES.ICancellationService);

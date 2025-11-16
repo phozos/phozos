@@ -292,7 +292,7 @@ class Container implements IContainer {
       new RefundService(
         refundRepository,
         userSubscriptionRepository,
-        paymentRepository,
+        paymentRecordRepository,
         cancellationRequestRepository
       )
     );
@@ -301,7 +301,7 @@ class Container implements IContainer {
       new DisputeService(
         chargebackDisputeRepository,
         userSubscriptionRepository,
-        paymentRepository
+        paymentRecordRepository
       )
     );
     

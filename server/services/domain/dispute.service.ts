@@ -289,4 +289,4 @@ export class DisputeService extends BaseService implements IDisputeService {
   }
 }
 
-export const disputeService = new DisputeService();
+export const disputeService = container.get<IDisputeService>(TYPES.IDisputeService);

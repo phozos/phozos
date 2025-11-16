@@ -52,10 +52,6 @@ export class RefundService extends BaseService implements IRefundService {
         return { eligible: false, reason: 'Payment not found' };
       }
 
-      if (payment.status !== 'completed' && payment.status !== 'success') {
-        return { eligible: false, reason: 'Payment is not completed' };
-      }
-
       if (!payment.paidAt) {
         return { eligible: false, reason: 'Payment date is not available' };
       }
@@ -144,7 +140,7 @@ export class RefundService extends BaseService implements IRefundService {
       await subscriptionManagementNotificationService.notifyRefundRequestReceived(
         data.userId,
         data.subscriptionId,
-        data.amount
+        parseFloat(data.amount)
       );
 
       return refund;
@@ -230,7 +226,7 @@ export class RefundService extends BaseService implements IRefundService {
       await subscriptionManagementNotificationService.notifyRefundApproved(
         refund.userId,
         refund.subscriptionId,
-        refund.amount
+        parseFloat(refund.amount)
       );
 
       return updatedRefund;
@@ -310,7 +306,7 @@ export class RefundService extends BaseService implements IRefundService {
         await subscriptionManagementNotificationService.notifyRefundProcessed(
           refund.userId,
           refund.subscriptionId,
-          refund.amount
+          parseFloat(refund.amount)
         );
       } else if (razorpayStatus === 'failed') {
         await subscriptionManagementNotificationService.notifyRefundFailed(
@@ -334,4 +330,4 @@ export class RefundService extends BaseService implements IRefundService {
   }
 }
 
-export const refundService = new RefundService();
+export const refundService = container.get<IRefundService>(TYPES.IRefundService);
