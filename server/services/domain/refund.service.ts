@@ -19,6 +19,7 @@ import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { RefundWithDetails } from '../../repositories/refund.repository';
 import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
 import { RazorpayService } from '../integration/razorpay.service';
+import { subscriptionAuditService } from '../infrastructure/subscription-audit.service';
 
 export interface IRefundService {
   createRefundRequest(data: InsertRefund): Promise<Refund>;
@@ -257,6 +258,18 @@ export class RefundService extends BaseService implements IRefundService {
             processedAt: new Date(),
           }, tx);
 
+          await subscriptionAuditService.logEvent(
+            refund.subscriptionId,
+            adminId,
+            'refund_request_approved',
+            {
+              refundId: id,
+              razorpayRefundId: razorpayRefund.id,
+              amount: refund.amount,
+              notes: sanitizedNotes,
+            }
+          );
+
           return updated;
         } catch (razorpayError: any) {
           const errorMessage = razorpayError.message || 'Razorpay refund initiation failed';
@@ -320,6 +333,17 @@ export class RefundService extends BaseService implements IRefundService {
           adminId,
         });
 
+        await subscriptionAuditService.logEvent(
+          refund.subscriptionId,
+          adminId,
+          'refund_request_rejected',
+          {
+            refundId: id,
+            reason: sanitizedNotes || 'Refund request rejected',
+            amount: refund.amount,
+          }
+        );
+
         return updated;
       }, {
         isolationLevel: 'serializable',
@@ -328,6 +352,7 @@ export class RefundService extends BaseService implements IRefundService {
       await subscriptionManagementNotificationService.notifyRefundRejected(
         updatedRefund.userId,
         updatedRefund.subscriptionId,
+        parseFloat(updatedRefund.amount),
         adminNotes || 'Your refund request did not meet the refund criteria.'
       );
 

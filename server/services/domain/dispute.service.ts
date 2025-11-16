@@ -17,6 +17,7 @@ import { logger } from '../../utils/logger';
 import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { ChargebackDisputeWithDetails } from '../../repositories/chargeback-dispute.repository';
 import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
+import { subscriptionAuditService } from '../infrastructure/subscription-audit.service';
 
 export interface IDisputeService {
   createDispute(data: InsertChargebackDispute): Promise<ChargebackDispute>;
@@ -90,7 +91,9 @@ export class DisputeService extends BaseService implements IDisputeService {
 
       await subscriptionManagementNotificationService.notifyDisputeReceived(
         data.userId,
-        dispute.id
+        dispute.id,
+        parseFloat(data.amount),
+        data.type
       );
 
       return dispute;
@@ -156,6 +159,16 @@ export class DisputeService extends BaseService implements IDisputeService {
           adminId,
         });
 
+        if (adminId && status === 'investigating') {
+          await subscriptionAuditService.logEvent(
+            dispute.subscriptionId,
+            adminId,
+            'dispute_assigned',
+            dispute.status,
+            status
+          );
+        }
+
         return updatedDispute;
       }, {
         isolationLevel: 'serializable',
@@ -199,6 +212,12 @@ export class DisputeService extends BaseService implements IDisputeService {
           adminId,
         });
 
+        await subscriptionAuditService.logEvent(
+          dispute.subscriptionId,
+          adminId,
+          'dispute_evidence_added'
+        );
+
         return updatedDispute;
       }, {
         isolationLevel: 'serializable',
@@ -233,6 +252,14 @@ export class DisputeService extends BaseService implements IDisputeService {
           resolution: sanitizedResolution,
         });
 
+        await subscriptionAuditService.logEvent(
+          dispute.subscriptionId,
+          adminId,
+          'dispute_resolved',
+          dispute.status,
+          'resolved'
+        );
+
         return updated;
       }, {
         isolationLevel: 'serializable',
@@ -241,6 +268,7 @@ export class DisputeService extends BaseService implements IDisputeService {
       await subscriptionManagementNotificationService.notifyDisputeResolved(
         updatedDispute.userId,
         id,
+        parseFloat(updatedDispute.amount),
         sanitizedResolution
       );
 
@@ -272,6 +300,14 @@ export class DisputeService extends BaseService implements IDisputeService {
           adminId,
         });
 
+        await subscriptionAuditService.logEvent(
+          dispute.subscriptionId,
+          adminId,
+          'dispute_investigated',
+          dispute.status,
+          'investigating'
+        );
+
         return updated;
       }, {
         isolationLevel: 'serializable',
@@ -279,7 +315,9 @@ export class DisputeService extends BaseService implements IDisputeService {
 
       await subscriptionManagementNotificationService.notifyDisputeUnderInvestigation(
         updatedDispute.userId,
-        id
+        id,
+        updatedDispute.type,
+        parseFloat(updatedDispute.amount)
       );
 
       return updatedDispute;

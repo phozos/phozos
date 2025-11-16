@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 5px 5px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      background-color: #f9fafb;
+      padding: 30px 20px;
+      border: 1px solid #e5e7eb;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 25px;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      border-left: 4px solid #10b981;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #059669;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .amount-display {
+      font-size: 40px;
+      font-weight: bold;
+      color: #10b981;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .highlight-box {
+      background-color: #d1fae5;
+      border: 1px solid #10b981;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .highlight-box strong {
+      color: #059669;
+      font-size: 18px;
+    }
+    .footer {
+      background-color: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 5px 5px;
+    }
+    .footer a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">🎉</div>
+      <h1>Refund Processed Successfully</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">
+        Hello {{userName}},
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Your Refund Has Been Processed</div>
+        <p>Great news! Your refund has been successfully processed and sent to your payment provider.</p>
+        <div class="amount-display">₹{{amount}}</div>
+      </div>
+      
+      <div class="highlight-box">
+        <strong>✓ Refund Completed</strong>
+        <p style="margin-bottom: 0;">The refund has been initiated and will appear in your account within 5-7 business days.</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Refund Details</div>
+        <p><strong>Refund ID:</strong> {{refundId}}</p>
+        <p><strong>Razorpay Refund ID:</strong> {{razorpayRefundId}}</p>
+        <p><strong>Processed Date:</strong> {{processedDate}}</p>
+        <p><strong>Payment Method:</strong> {{paymentMethod}}</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">When Will I See the Money?</div>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li>Credit/Debit Cards: 5-7 business days</li>
+          <li>Net Banking: 5-7 business days</li>
+          <li>UPI/Wallets: 3-5 business days</li>
+        </ul>
+        <p style="margin-top: 15px;"><em>Note: The timeline may vary depending on your bank or payment provider.</em></p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Thank you for your patience. We hope to serve you again soon!</p>
+      <p><a href="{{supportUrl}}">Contact Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

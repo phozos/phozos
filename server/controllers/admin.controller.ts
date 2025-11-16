@@ -25,6 +25,7 @@ import { IBulkSubscriptionAdminService } from '../services/domain/bulk-subscript
 import { ISubscriptionPlanRepository, ISubscriptionPlanAuditRepository } from '../repositories';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
+import { featuresConfig } from '../config/index';
 import { 
   insertUserSchema, 
   insertUniversitySchema,
@@ -3094,6 +3095,10 @@ export class AdminController extends BaseController {
 
   async forceRefundSubscription(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_ADMIN_FORCE_REFUND) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Admin force refund is currently disabled');
+      }
+
       const { id } = req.params;
       const { amount, reason, adminNotes } = req.body;
       const adminId = this.getUserId(req);
@@ -3194,6 +3199,10 @@ export class AdminController extends BaseController {
 
   async approveCancellationRequest(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_USER_CANCELLATION_REQUESTS) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Cancellation request management is currently disabled');
+      }
+
       const { id } = req.params;
       const { adminNotes } = req.body;
       const adminId = this.getUserId(req);
@@ -3220,6 +3229,10 @@ export class AdminController extends BaseController {
 
   async rejectCancellationRequest(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_USER_CANCELLATION_REQUESTS) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Cancellation request management is currently disabled');
+      }
+
       const { id } = req.params;
       const { adminNotes } = req.body;
       const adminId = this.getUserId(req);
@@ -3301,6 +3314,10 @@ export class AdminController extends BaseController {
 
   async approveRefundRequest(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_REFUND_SYSTEM) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Refund system is currently disabled');
+      }
+
       const { id } = req.params;
       const { adminNotes } = req.body;
       const adminId = this.getUserId(req);
@@ -3327,6 +3344,10 @@ export class AdminController extends BaseController {
 
   async rejectRefundRequest(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_REFUND_SYSTEM) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Refund system is currently disabled');
+      }
+
       const { id } = req.params;
       const { adminNotes } = req.body;
       const adminId = this.getUserId(req);
@@ -3458,6 +3479,10 @@ export class AdminController extends BaseController {
 
   async assignDispute(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
       const { id } = req.params;
       const { assignedAdminId } = req.body;
       const adminId = this.getUserId(req);
@@ -3488,6 +3513,10 @@ export class AdminController extends BaseController {
 
   async investigateDispute(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
       const { id } = req.params;
       const adminId = this.getUserId(req);
       
@@ -3512,6 +3541,10 @@ export class AdminController extends BaseController {
 
   async resolveDispute(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
       const { id } = req.params;
       const { resolution } = req.body;
       const adminId = this.getUserId(req);
@@ -3542,6 +3575,10 @@ export class AdminController extends BaseController {
 
   async addDisputeEvidence(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
       const { id } = req.params;
       const { evidence } = req.body;
       const adminId = this.getUserId(req);

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 5px 5px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      background-color: #f9fafb;
+      padding: 30px 20px;
+      border: 1px solid #e5e7eb;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 25px;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      border-left: 4px solid #ef4444;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #dc2626;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .amount-display {
+      font-size: 28px;
+      font-weight: bold;
+      color: #6b7280;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .highlight-box {
+      background-color: #fee2e2;
+      border: 1px solid #ef4444;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .highlight-box strong {
+      color: #dc2626;
+      font-size: 16px;
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 15px 30px;
+      background-color: #3b82f6;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    .footer {
+      background-color: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 5px 5px;
+    }
+    .footer a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">❌</div>
+      <h1>Refund Request Not Approved</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">
+        Hello {{userName}},
+      </div>
+      
+      <div class="section">
+        <div class="section-title">About Your Refund Request</div>
+        <p>After careful review, we're unable to approve your refund request at this time.</p>
+        <div class="amount-display">₹{{amount}}</div>
+        <p><strong>Request ID:</strong> {{requestId}}</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Reason</div>
+        <p>{{rejectionReason}}</p>
+      </div>
+      
+      <div class="highlight-box">
+        <strong>Need More Information?</strong>
+        <p style="margin-bottom: 0;">If you believe this decision was made in error or have additional information to provide, please contact our support team.</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Contact Support</div>
+        <p>Our support team is available to discuss your refund request and answer any questions you may have.</p>
+        <div style="text-align: center;">
+          <a href="{{supportUrl}}" class="cta-button">Contact Support</a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Thank you for your understanding.</p>
+      <p><a href="{{dashboardUrl}}">Go to Dashboard</a></p>
+    </div>
+  </div>
+</body>
+</html>

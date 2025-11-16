@@ -24,6 +24,7 @@ import { injectSEOMeta } from "./middleware/seo-meta";
 import { paymentAlertsScheduler } from "./services/infrastructure/payment-alerts-scheduler";
 import { subscriptionAuditOutboxProcessor } from "./services/infrastructure/subscription-audit-outbox-processor";
 import { archiveOutboxEventsJob } from "./jobs/archive-completed-outbox-events";
+import { jobScheduler } from "./jobs/scheduler";
 
 // Phase 1: Centralized configuration module (replaces scattered process.env usage)
 import config, { isDev, isProd, featuresConfig, corsConfig, securityConfig } from "./config/index";
@@ -367,6 +368,17 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
       console.error('   Archival will not occur automatically.');
       console.error('   This is not a critical error - the server will continue running.');
     }
+
+    // Start subscription management background jobs (refund sync, cleanup, etc.)
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      jobScheduler.start();
+      console.log('✅ Subscription management background jobs started');
+    } catch (error) {
+      console.error('❌ Failed to start subscription management background jobs:', error);
+      console.error('   Background job processing will not occur automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
   });
 
   // Graceful shutdown handlers
@@ -392,6 +404,13 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
       console.log('✅ Archive outbox events job stopped');
     } catch (error) {
       console.error('❌ Error stopping archive outbox events job:', error);
+    }
+
+    try {
+      jobScheduler.stop();
+      console.log('✅ Subscription management background jobs stopped');
+    } catch (error) {
+      console.error('❌ Error stopping subscription management background jobs:', error);
     }
 
     httpServer.close(() => {

@@ -9,6 +9,7 @@ import { IRefundService } from '../services/domain/refund.service';
 import { IDisputeService } from '../services/domain/dispute.service';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
+import { featuresConfig } from '../config/index';
 
 const subscribeSchema = z.object({
   planId: z.string().min(1)
@@ -442,6 +443,10 @@ export class SubscriptionController extends BaseController {
 
   async createCancellationRequest(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_USER_CANCELLATION_REQUESTS) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Cancellation requests are currently disabled');
+      }
+
       const userId = this.getUserId(req);
       const { subscriptionId, reason } = createCancellationRequestSchema.parse(req.body);
       
@@ -477,6 +482,10 @@ export class SubscriptionController extends BaseController {
 
   async createRefundRequest(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_REFUND_SYSTEM) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Refund requests are currently disabled');
+      }
+
       const userId = this.getUserId(req);
       const { subscriptionId, paymentId, amount, reason } = createRefundRequestSchema.parse(req.body);
       
@@ -520,6 +529,10 @@ export class SubscriptionController extends BaseController {
 
   async createDispute(req: AuthenticatedRequest, res: Response) {
     try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
       const userId = this.getUserId(req);
       const { subscriptionId, paymentId, type, reason, amount } = createDisputeSchema.parse(req.body);
       

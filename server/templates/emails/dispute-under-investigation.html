@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 5px 5px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      background-color: #f9fafb;
+      padding: 30px 20px;
+      border: 1px solid #e5e7eb;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 25px;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      border-left: 4px solid #8b5cf6;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #7c3aed;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .highlight-box {
+      background-color: #ede9fe;
+      border: 1px solid #8b5cf6;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .highlight-box strong {
+      color: #7c3aed;
+      font-size: 16px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background-color: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 15px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%);
+      width: 66%;
+    }
+    .footer {
+      background-color: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 5px 5px;
+    }
+    .footer a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">🔬</div>
+      <h1>Dispute Investigation in Progress</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">
+        Hello {{userName}},
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Investigation Update</div>
+        <p>Your dispute is currently under active investigation. Our team is conducting a thorough review of all relevant information.</p>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <p style="text-align: center; color: #6b7280; font-size: 14px;">Investigation Progress</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Dispute Details</div>
+        <p><strong>Dispute ID:</strong> {{disputeId}}</p>
+        <p><strong>Type:</strong> {{disputeType}}</p>
+        <p><strong>Amount:</strong> ₹{{amount}}</p>
+        <p><strong>Investigation Started:</strong> {{investigationStartDate}}</p>
+      </div>
+      
+      <div class="highlight-box">
+        <strong>Comprehensive Review in Progress</strong>
+        <p style="margin-bottom: 0;">Our specialists are carefully examining transaction records, payment processing logs, and all related evidence to ensure a fair and accurate resolution.</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Current Investigation Steps</div>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li>✓ Transaction records reviewed</li>
+          <li>✓ Payment gateway logs analyzed</li>
+          <li>⏳ Third-party verification in progress</li>
+          <li>⏳ Final assessment pending</li>
+        </ul>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Next Steps</div>
+        <p>We're working diligently to resolve your dispute. You can expect a final decision within <strong>5-7 business days</strong>. We'll notify you immediately once the investigation is complete.</p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Thank you for your patience during this thorough investigation.</p>
+      <p><a href="{{supportUrl}}">Contact Support</a></p>
+    </div>
+  </div>
+</body>
+</html>
