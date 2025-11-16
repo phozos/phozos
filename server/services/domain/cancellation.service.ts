@@ -17,6 +17,7 @@ import { logger } from '../../utils/logger';
 import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { CancellationRequestWithDetails, CancellationStats } from '../../repositories/cancellation-request.repository';
 import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
+import { subscriptionAuditService } from '../infrastructure/subscription-audit.service';
 
 export interface ICancellationService {
   createCancellationRequest(data: InsertCancellationRequest): Promise<CancellationRequest>;
@@ -170,17 +171,51 @@ export class CancellationService extends BaseService implements ICancellationSer
 
         const subscription = await this.userSubscriptionRepository.findById(request.subscriptionId, tx);
         if (subscription && subscription.status !== 'cancelled') {
-          await this.userSubscriptionRepository.update(request.subscriptionId, {
+          const oldStatus = subscription.status;
+          const now = new Date();
+          
+          const subscriptionUpdates: any = {
             status: 'cancelled',
-            updatedAt: new Date(),
-          }, tx);
-        }
+            updatedAt: now,
+          };
 
-        logger.info('Cancellation request approved', {
-          requestId: id,
-          adminId,
-          subscriptionId: request.subscriptionId,
-        });
+          if (subscription.autoRenew) {
+            subscriptionUpdates.autoRenew = false;
+          }
+
+          if (!subscription.isLifetime && !subscription.expiresAt) {
+            subscriptionUpdates.expiresAt = now;
+          }
+
+          await this.userSubscriptionRepository.update(request.subscriptionId, subscriptionUpdates, tx);
+
+          await subscriptionAuditService.logEvent(
+            request.subscriptionId,
+            request.userId,
+            'subscription_cancelled',
+            oldStatus,
+            'cancelled',
+            {
+              cancellationRequestId: id,
+              approvedBy: adminId,
+              adminNotes: sanitizedNotes,
+              reason: request.reason,
+              autoRenewDisabled: subscription.autoRenew ? true : false,
+              expiresAtSet: !subscription.isLifetime && !subscription.expiresAt,
+            }
+          );
+
+          logger.info('Cancellation request approved and subscription cancelled', {
+            requestId: id,
+            adminId,
+            subscriptionId: request.subscriptionId,
+            userId: request.userId,
+            oldStatus,
+            newStatus: 'cancelled',
+            autoRenewDisabled: subscription.autoRenew,
+            expiresAtSet: !subscription.isLifetime && !subscription.expiresAt,
+          });
+        }
 
         return updated;
       }, {

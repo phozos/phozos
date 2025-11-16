@@ -18,6 +18,7 @@ import { logger } from '../../utils/logger';
 import { InputSanitizer } from '../../utils/input-sanitizer';
 import type { RefundWithDetails } from '../../repositories/refund.repository';
 import { subscriptionManagementNotificationService } from './subscription-management-notifications.service';
+import { RazorpayService } from '../integration/razorpay.service';
 
 export interface IRefundService {
   createRefundRequest(data: InsertRefund): Promise<Refund>;
@@ -29,6 +30,7 @@ export interface IRefundService {
   approveRefund(id: string, adminId: string, adminNotes?: string): Promise<Refund>;
   rejectRefund(id: string, adminId: string, adminNotes?: string): Promise<Refund>;
   processRefund(id: string, razorpayRefundId: string, razorpayStatus: string): Promise<Refund>;
+  updateRefundStatusFromRazorpay(razorpayRefundId: string, razorpayStatus: string): Promise<void>;
   getTotalRefundedAmount(subscriptionId: string): Promise<number>;
   isRefundEligible(paymentId: string): Promise<{ eligible: boolean; reason?: string }>;
 }
@@ -40,7 +42,8 @@ export class RefundService extends BaseService implements IRefundService {
     private refundRepository: IRefundRepository,
     private userSubscriptionRepository: IUserSubscriptionRepository,
     private paymentRepository: IPaymentRecordRepository,
-    private cancellationRequestRepository: ICancellationRequestRepository
+    private cancellationRequestRepository: ICancellationRequestRepository,
+    private razorpayService: RazorpayService
   ) {
     super();
   }
@@ -205,20 +208,78 @@ export class RefundService extends BaseService implements IRefundService {
           throw new InvalidOperationError('approve refund', `Cannot approve refund with status: ${refund.status}`);
         }
 
+        const payment = await this.paymentRepository.findById(refund.paymentId, tx);
+        if (!payment) {
+          throw new ResourceNotFoundError('Payment', refund.paymentId);
+        }
+
+        if (!payment.paymentReference) {
+          throw new InvalidOperationError('approve refund', 'Payment does not have a Razorpay payment reference');
+        }
+
         const sanitizedNotes = adminNotes ? InputSanitizer.sanitizePlainText(adminNotes) : undefined;
 
-        const updated = await this.refundRepository.updateStatus(id, 'processing', {
-          processedBy: adminId,
-          adminNotes: sanitizedNotes,
-        }, tx);
+        try {
+          const amountInPaise = Math.round(parseFloat(refund.amount) * 100);
 
-        logger.info('Refund approved', {
-          refundId: id,
-          adminId,
-          amount: refund.amount,
-        });
+          logger.info('Initiating Razorpay refund', {
+            refundId: id,
+            paymentReference: payment.paymentReference,
+            amount: refund.amount,
+            amountInPaise,
+          });
 
-        return updated;
+          const razorpayRefund = await this.razorpayService.initiateRefund({
+            paymentId: payment.paymentReference,
+            amount: amountInPaise,
+            notes: {
+              refundId: id,
+              subscriptionId: refund.subscriptionId,
+              userId: refund.userId,
+            },
+            receipt: `refund_${id}`,
+          });
+
+          logger.info('Razorpay refund initiated successfully', {
+            refundId: id,
+            razorpayRefundId: razorpayRefund.id,
+            razorpayStatus: razorpayRefund.status,
+          });
+
+          const refundStatus = razorpayRefund.status === 'processed' ? 'completed' : 'processing';
+
+          const updated = await this.refundRepository.updateStatus(id, refundStatus, {
+            processedBy: adminId,
+            adminNotes: sanitizedNotes,
+            razorpayRefundId: razorpayRefund.id,
+            razorpayStatus: razorpayRefund.status,
+            razorpayResponse: razorpayRefund as any,
+            processedAt: new Date(),
+          }, tx);
+
+          return updated;
+        } catch (razorpayError: any) {
+          const errorMessage = razorpayError.message || 'Razorpay refund initiation failed';
+
+          logger.error('Razorpay refund initiation failed', {
+            refundId: id,
+            paymentReference: payment.paymentReference,
+            error: errorMessage,
+            errorDetails: razorpayError,
+          });
+
+          const combinedNotes = sanitizedNotes
+            ? `${sanitizedNotes}\n\nRazorpay Error: ${errorMessage}`
+            : `Razorpay Error: ${errorMessage}`;
+
+          const updated = await this.refundRepository.updateStatus(id, 'failed', {
+            processedBy: adminId,
+            adminNotes: combinedNotes,
+            processedAt: new Date(),
+          }, tx);
+
+          throw new InvalidOperationError('approve refund', `Razorpay refund failed: ${errorMessage}`);
+        }
       }, {
         isolationLevel: 'serializable',
       });
@@ -284,17 +345,25 @@ export class RefundService extends BaseService implements IRefundService {
           throw new ResourceNotFoundError('Refund', id);
         }
 
-        const status = razorpayStatus === 'processed' ? 'completed' : 'processing';
+        let status: 'completed' | 'processing' | 'failed';
+        if (razorpayStatus === 'processed') {
+          status = 'completed';
+        } else if (razorpayStatus === 'failed') {
+          status = 'failed';
+        } else {
+          status = 'processing';
+        }
 
         const updated = await this.refundRepository.updateStatus(id, status, {
           razorpayRefundId,
           razorpayStatus,
         }, tx);
 
-        logger.info('Refund processed', {
+        logger.info('Refund processed via webhook', {
           refundId: id,
           razorpayRefundId,
           razorpayStatus,
+          newStatus: status,
         });
 
         return updated;
@@ -318,6 +387,46 @@ export class RefundService extends BaseService implements IRefundService {
       return updatedRefund;
     } catch (error) {
       return this.handleError(error, 'RefundService.processRefund');
+    }
+  }
+
+  async updateRefundStatusFromRazorpay(razorpayRefundId: string, razorpayStatus: string): Promise<void> {
+    try {
+      logger.info('Updating refund status from Razorpay webhook', {
+        razorpayRefundId,
+        razorpayStatus,
+      });
+
+      const refund = await this.refundRepository.findByRazorpayRefundId(razorpayRefundId);
+
+      if (!refund) {
+        logger.warn('Refund not found for Razorpay refund ID - webhook may have arrived before approval', {
+          razorpayRefundId,
+          razorpayStatus,
+        });
+        return;
+      }
+
+      logger.info('Found refund record, processing status update', {
+        refundId: refund.id,
+        razorpayRefundId,
+        currentStatus: refund.status,
+        razorpayStatus,
+      });
+
+      await this.processRefund(refund.id, razorpayRefundId, razorpayStatus);
+
+      logger.info('Refund status updated successfully from webhook', {
+        refundId: refund.id,
+        razorpayRefundId,
+        razorpayStatus,
+      });
+    } catch (error) {
+      logger.error('Error updating refund status from Razorpay webhook', {
+        razorpayRefundId,
+        razorpayStatus,
+        error,
+      });
     }
   }
 

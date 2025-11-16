@@ -94,6 +94,7 @@ import { featureAnalyticsService } from './domain/feature-analytics.service';
 import { CancellationService, ICancellationService } from './domain/cancellation.service';
 import { RefundService, IRefundService } from './domain/refund.service';
 import { DisputeService, IDisputeService } from './domain/dispute.service';
+import { razorpayService } from './integration/razorpay.service';
 
 /**
  * DI Container Interface
@@ -293,7 +294,8 @@ class Container implements IContainer {
         refundRepository,
         userSubscriptionRepository,
         paymentRecordRepository,
-        cancellationRequestRepository
+        cancellationRequestRepository,
+        razorpayService
       )
     );
     this.bindings.set(

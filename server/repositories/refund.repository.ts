@@ -38,6 +38,7 @@ export interface IRefundRepository {
   findByPaymentId(paymentId: string, tx?: DbOrTransaction): Promise<Refund[]>;
   findBySubscriptionId(subscriptionId: string, tx?: DbOrTransaction): Promise<Refund[]>;
   findByUserId(userId: string, tx?: DbOrTransaction): Promise<Refund[]>;
+  findByRazorpayRefundId(razorpayRefundId: string, tx?: DbOrTransaction): Promise<Refund | undefined>;
   findPending(tx?: DbOrTransaction): Promise<RefundWithDetails[]>;
   updateStatus(id: string, status: string, razorpayData?: Partial<Refund>, tx?: DbOrTransaction): Promise<Refund>;
   updateRazorpayRefundId(id: string, refundId: string, tx?: DbOrTransaction): Promise<Refund>;
@@ -106,6 +107,21 @@ export class RefundRepository
         .orderBy(desc(refunds.createdAt)) as Refund[];
     } catch (error) {
       handleDatabaseError(error, 'RefundRepository.findByUserId');
+    }
+  }
+
+  async findByRazorpayRefundId(razorpayRefundId: string, tx?: DbOrTransaction): Promise<Refund | undefined> {
+    try {
+      const executor = tx || db;
+      const results = await executor
+        .select()
+        .from(refunds)
+        .where(eq(refunds.razorpayRefundId, razorpayRefundId))
+        .limit(1);
+      
+      return results[0] as Refund | undefined;
+    } catch (error) {
+      handleDatabaseError(error, 'RefundRepository.findByRazorpayRefundId');
     }
   }
 
