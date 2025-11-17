@@ -2855,4 +2855,645 @@ Phase 5 is complete when:
 
 ---
 
+## Phase 6: Critical Bug Fix - Authentication Middleware Misconfiguration
+
+**Generated:** November 17, 2025  
+**Status:** Investigation Complete - Awaiting Implementation Approval  
+**Priority:** P0 - CRITICAL (Blocks ALL customer subscription management)  
+**Investigation Report:** SUBSCRIPTION_DISPUTE_403_INVESTIGATION_PHASE6.md
+
+---
+
+### 6.1 Executive Summary
+
+**Problem:** All customer users receive "403 Forbidden" errors when attempting to access subscription management features (cancellation requests, refund requests, disputes). The system incorrectly requires `team_member` user type instead of allowing `customer` users to manage their own subscriptions.
+
+**Root Cause:** Authentication middleware misconfiguration causing runtime behavior to differ from source code expectations. The middleware is rejecting customer users with a team_member restriction despite source code showing `requireAuth` (which should allow any authenticated user).
+
+**Impact:** 100% of paying customers cannot:
+- Submit cancellation requests
+- Request refunds  
+- File disputes
+- Check refund eligibility
+- View their request history
+
+**Business Risk:** Potential regulatory compliance issues, high support burden, and customer dissatisfaction.
+
+---
+
+### 6.2 Investigation Findings
+
+#### Primary Issue: Authentication Middleware Restriction
+
+**Evidence from Logs:**
+```
+warn: Unauthorized access attempt: user type restriction {
+  "userId": "f8498df2-3a95-46ad-ba40-ccbc64ca35b5",
+  "userType": "customer",
+  "requiredTypes": ["team_member"]
+}
+POST /api/subscriptions/me/dispute 403 in 764ms
+```
+
+**Source Code Analysis:**
+- **File:** `server/routes/subscription.routes.ts` (Line 16)
+- **Expected:** `router.use(requireAuth);` — should allow ANY authenticated user
+- **Runtime Behavior:** Acts as `requireTeamMember` — only allows team_member users
+- **Discrepancy:** Source code shows correct middleware, but runtime rejects customers
+
+#### Secondary Issue: URL Path Mismatch
+
+**Backend Mounting:**
+- `server/routes/index.ts` Line 123: `apiRouter.use('/subscription', subscriptionRoutes);` (singular)
+
+**Frontend Calling:**
+- All hooks use `/api/subscriptions/*` (plural)
+- Examples: Lines 84, 98, 112, 126, 140, 154, 169, 201, 234 in `useSubscriptionManagement.ts`
+
+**Mystery:** Requests ARE reaching backend (not 404), but path mismatch creates routing fragility.
+
+#### Affected Endpoints (7 Total)
+
+All endpoints below return 403 for customer users:
+
+| Endpoint | Method | Purpose | Status |
+|----------|--------|---------|--------|
+| `/api/subscriptions/me/cancel-requests` | GET | List cancellation requests | ❌ BLOCKED |
+| `/api/subscriptions/me/cancel-request` | POST | Create cancellation | ❌ BLOCKED |
+| `/api/subscriptions/me/refund-requests` | GET | List refund requests | ❌ BLOCKED |
+| `/api/subscriptions/me/refund-request` | POST | Create refund | ❌ BLOCKED |
+| `/api/subscriptions/me/disputes` | GET | List disputes | ❌ BLOCKED |
+| `/api/subscriptions/me/dispute` | POST | Create dispute | ❌ BLOCKED |
+| `/api/subscriptions/me/refund-eligibility` | GET | Check eligibility | ❌ BLOCKED |
+
+---
+
+### 6.3 Remediation Plan
+
+#### Fix #1: Verify and Correct Authentication Middleware (P0 - Immediate)
+
+**Objective:** Ensure `requireAuth` middleware is correctly applied to subscription routes
+
+**Files to Modify:**
+- `server/routes/subscription.routes.ts` (verify Line 16)
+
+**Steps:**
+
+1. **Verify Import Statement**
+   ```typescript
+   // Line 2 - Verify this is correct
+   import { requireAuth } from '../middleware/authentication';
+   // NOT: import { requireTeamMember as requireAuth }
+   // NOT: import { requireTeamMember }
+   ```
+
+2. **Verify Middleware Application**
+   ```typescript
+   // Line 16 - Ensure this line is exactly:
+   router.use(requireAuth);
+   // NOT: router.use(requireTeamMember);
+   ```
+
+3. **Check for Middleware Pollution**
+   - Inspect `server/routes/index.ts` for global middleware affecting subscription routes
+   - Ensure no middleware between lines 91-123 adds user type restrictions
+
+4. **Verify No Route Duplication**
+   - Confirm subscription routes are mounted ONLY at line 123
+   - Check for duplicate mounts with different middleware
+
+**Testing:**
+```bash
+# Test with customer token
+curl -H "Authorization: Bearer <customer_token>" \
+  http://localhost:5000/api/subscriptions/me/disputes
+
+# Expected: 200 OK with array
+# Current: 403 Forbidden
+```
+
+**Success Criteria:**
+- ✅ Customer users receive 200 OK for all `/me/*` endpoints
+- ✅ Logs show NO "team_member restriction" warnings for customers
+- ✅ All 7 affected endpoints accessible to customer users
+
+---
+
+#### Fix #2: Standardize URL Paths (P1 - This Week)
+
+**Objective:** Resolve frontend/backend path mismatch for routing stability
+
+**Recommended Approach:** Change backend to plural (matches REST conventions)
+
+**File to Modify:**
+- `server/routes/index.ts` (Line 123)
+
+**Change:**
+```typescript
+// Current
+apiRouter.use('/subscription', subscriptionRoutes);
+
+// Proposed
+apiRouter.use('/subscriptions', subscriptionRoutes);
+```
+
+**Rationale:**
+- ✅ Frontend already uses plural paths
+- ✅ RESTful convention (resource collections use plural)
+- ✅ No frontend code changes required
+- ✅ Single-line backend change
+
+**Alternative (Not Recommended):** Change all frontend paths to singular
+- ❌ Requires updating 9+ API call sites across multiple files
+- ❌ Higher risk of missing calls
+- ❌ Against REST conventions
+
+**Testing After Change:**
+```bash
+# Verify plural path works
+curl http://localhost:5000/api/subscriptions/plans
+# Expected: 200 OK
+
+# Verify singular path returns 404
+curl http://localhost:5000/api/subscription/plans  
+# Expected: 404 Not Found
+```
+
+---
+
+#### Fix #3: Add Runtime Middleware Validation (P2 - This Sprint)
+
+**Objective:** Prevent future middleware misconfiguration through automated validation
+
+**File to Modify:**
+- `server/routes/subscription.routes.ts` (add at end before export)
+
+**Implementation:**
+```typescript
+// Runtime validation for development/staging
+if (process.env.NODE_ENV !== 'production') {
+  console.log('🔐 Subscription Routes Middleware Validation:');
+  const routerStack = (router as any).stack;
+  
+  routerStack.forEach((layer: any, index: number) => {
+    if (layer.handle && layer.handle.name) {
+      console.log(`  Layer ${index}: ${layer.handle.name}`);
+      
+      // Warn if requireTeamMember is detected
+      if (layer.handle.name === 'requireTeamMember') {
+        console.warn('⚠️  WARNING: requireTeamMember detected on subscription routes!');
+        console.warn('   Expected: requireAuth for customer access');
+      }
+    }
+  });
+}
+
+export default router;
+```
+
+**Benefits:**
+- Detects middleware misconfiguration at startup
+- Logs middleware chain for debugging
+- Prevents production deployment with wrong middleware
+
+---
+
+#### Fix #4: Add Comprehensive Middleware Tests (P2 - This Sprint)
+
+**Objective:** Prevent regression through automated testing
+
+**File to Create:**
+- `server/routes/__tests__/subscription.routes.middleware.test.ts`
+
+**Test Cases:**
+```typescript
+describe('Subscription Routes - Middleware Authorization', () => {
+  describe('Customer User Access', () => {
+    it('should allow customers to GET /me/disputes', async () => {
+      const customerToken = await generateCustomerToken();
+      const response = await request(app)
+        .get('/api/subscriptions/me/disputes')
+        .set('Authorization', `Bearer ${customerToken}`);
+      
+      expect(response.status).toBe(200);
+      expect(response.body).toBeInstanceOf(Array);
+    });
+
+    it('should allow customers to POST /me/dispute', async () => {
+      const customerToken = await generateCustomerToken();
+      const csrf = await getCSRFToken();
+      
+      const response = await request(app)
+        .post('/api/subscriptions/me/dispute')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .set('x-csrf-token', csrf)
+        .send({
+          subscriptionId: 'test-sub-id',
+          paymentId: 'test-pay-id',
+          type: 'dispute',
+          reason: 'Test reason',
+          amount: '100.00'
+        });
+      
+      expect(response.status).toBe(201);
+    });
+
+    it('should allow customers to check refund eligibility', async () => {
+      const customerToken = await generateCustomerToken();
+      const response = await request(app)
+        .get('/api/subscriptions/me/refund-eligibility?paymentId=test')
+        .set('Authorization', `Bearer ${customerToken}`);
+      
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('eligible');
+    });
+  });
+
+  describe('Team Member Access', () => {
+    it('should allow team members to access /me/* routes', async () => {
+      const teamToken = await generateTeamMemberToken();
+      const response = await request(app)
+        .get('/api/subscriptions/me/disputes')
+        .set('Authorization', `Bearer ${teamToken}`);
+      
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('Unauthenticated Access', () => {
+    it('should block unauthenticated users', async () => {
+      const response = await request(app)
+        .get('/api/subscriptions/me/disputes');
+      
+      expect(response.status).toBe(401);
+    });
+
+    it('should allow public routes without auth', async () => {
+      const response = await request(app)
+        .get('/api/subscriptions/plans');
+      
+      expect(response.status).toBe(200);
+    });
+  });
+
+  describe('Authorization Edge Cases', () => {
+    it('should reject expired tokens', async () => {
+      const expiredToken = generateExpiredToken();
+      const response = await request(app)
+        .get('/api/subscriptions/me/disputes')
+        .set('Authorization', `Bearer ${expiredToken}`);
+      
+      expect(response.status).toBe(401);
+    });
+
+    it('should reject invalid tokens', async () => {
+      const response = await request(app)
+        .get('/api/subscriptions/me/disputes')
+        .set('Authorization', 'Bearer invalid-token');
+      
+      expect(response.status).toBe(401);
+    });
+  });
+});
+```
+
+**Coverage Goals:**
+- ✅ 100% coverage of customer access scenarios
+- ✅ All 7 affected endpoints tested
+- ✅ Positive and negative test cases
+- ✅ Edge case handling (expired tokens, invalid auth)
+
+---
+
+### 6.4 Implementation Checklist
+
+#### Pre-Implementation
+- [ ] Review investigation report (SUBSCRIPTION_DISPUTE_403_INVESTIGATION_PHASE6.md)
+- [ ] Backup production database
+- [ ] Create rollback plan
+- [ ] Prepare monitoring alerts
+
+#### Implementation (Priority Order)
+
+**P0 - Deploy Immediately (Same Day):**
+- [ ] Fix #1: Verify and correct authentication middleware
+  - [ ] Check import statement in subscription.routes.ts
+  - [ ] Verify line 16 uses `requireAuth` not `requireTeamMember`
+  - [ ] Check for global middleware pollution
+  - [ ] Test locally with customer user token
+  - [ ] Verify logs show no team_member restrictions
+- [ ] Test all 7 affected endpoints with customer token
+- [ ] Deploy to staging
+- [ ] Smoke test in staging
+- [ ] Deploy to production
+- [ ] Monitor logs for 24 hours
+
+**P1 - Deploy This Week:**
+- [ ] Fix #2: Standardize URL paths
+  - [ ] Change `/subscription` to `/subscriptions` in index.ts:123
+  - [ ] Verify all routes respond correctly
+  - [ ] Update route documentation
+  - [ ] Deploy and test
+- [ ] Fix #3: Add runtime middleware validation
+  - [ ] Add validation code to subscription.routes.ts
+  - [ ] Test in development
+  - [ ] Verify warnings appear for misconfigurations
+  - [ ] Deploy with Fix #2
+
+**P2 - Complete This Sprint:**
+- [ ] Fix #4: Add comprehensive middleware tests
+  - [ ] Create test file
+  - [ ] Implement all test cases
+  - [ ] Achieve 100% coverage
+  - [ ] Add to CI/CD pipeline
+  - [ ] Document testing strategy
+
+#### Post-Implementation
+- [ ] Monitor error logs for 48 hours
+- [ ] Verify zero 403 errors for customer subscription operations
+- [ ] Check Razorpay integration still functional
+- [ ] Update team documentation
+- [ ] Update replit.md with Phase 6 completion
+- [ ] Mark Phase 6 as complete
+
+---
+
+### 6.5 Testing Strategy
+
+#### Manual Testing
+
+**Test Case 1: Customer Dispute Submission**
+```
+1. Login as customer user
+2. Navigate to /subscription-management
+3. Click "Dispute" tab
+4. Fill out dispute form:
+   - Type: General Dispute
+   - Amount: 20000.00
+   - Reason: "Test dispute submission"
+5. Click "Submit Dispute"
+6. Expected: Success message "Dispute Submitted"
+7. Current: Error "Submission Failed - Forbidden"
+```
+
+**Test Case 2: Customer Cancellation Request**
+```
+1. Login as customer user
+2. Navigate to /subscription-management
+3. Click "Cancel" tab
+4. Fill out cancellation reason
+5. Submit request
+6. Expected: Success message
+7. Current: 403 Forbidden error
+```
+
+**Test Case 3: Refund Eligibility Check**
+```
+1. Login as customer user (with recent subscription)
+2. Navigate to /subscription-management
+3. Click "Refund" tab
+4. Expected: Countdown timer showing hours remaining
+5. Current: May fail if endpoint blocked
+```
+
+#### Automated Testing
+
+**Endpoint Coverage:**
+- GET /api/subscriptions/me/cancel-requests ✅
+- POST /api/subscriptions/me/cancel-request ✅
+- GET /api/subscriptions/me/refund-requests ✅
+- POST /api/subscriptions/me/refund-request ✅
+- GET /api/subscriptions/me/disputes ✅
+- POST /api/subscriptions/me/dispute ✅
+- GET /api/subscriptions/me/refund-eligibility ✅
+
+**Test Scenarios:**
+- ✅ Customer authentication and authorization
+- ✅ Team member access (should work but not primary use case)
+- ✅ Unauthenticated access rejection
+- ✅ Invalid token rejection
+- ✅ CSRF protection verification
+- ✅ Feature flag checks
+- ✅ Input validation
+
+---
+
+### 6.6 Monitoring & Validation
+
+#### Metrics to Track
+
+**Before Fix (Baseline):**
+```sql
+-- Count 403 errors by endpoint (last 24 hours)
+SELECT 
+  path,
+  COUNT(*) as error_count,
+  COUNT(DISTINCT user_id) as affected_users
+FROM api_logs
+WHERE status_code = 403
+  AND path LIKE '/api/subscriptions/me/%'
+  AND created_at > NOW() - INTERVAL '24 hours'
+GROUP BY path
+ORDER BY error_count DESC;
+```
+
+**After Fix (Goal: Zero):**
+```sql
+-- Verify no 403 errors for customer users
+SELECT COUNT(*) as forbidden_errors
+FROM api_logs
+WHERE status_code = 403
+  AND path LIKE '/api/subscriptions/me/%'
+  AND user_type = 'customer'
+  AND created_at > NOW() - INTERVAL '1 hour';
+
+-- Expected: 0
+```
+
+#### Log Monitoring
+
+**Watch for Authentication Warnings:**
+```bash
+# Should see NO team_member restriction logs after fix
+tail -f logs/combined.log | grep "Unauthorized access attempt"
+```
+
+**Success Indicators:**
+- Zero "team_member restriction" warnings for customer users
+- All POST /me/dispute requests return 201 Created
+- All GET /me/* requests return 200 OK
+- No increase in 401 Unauthorized errors (auth still working)
+
+#### Alert Configuration
+
+**Critical Alert (P0):**
+```
+Trigger: More than 5 403 errors on /api/subscriptions/me/* in 5 minutes
+Action: Page on-call engineer
+Reason: Indicates authentication regression
+```
+
+**Warning Alert (P2):**
+```
+Trigger: Any 403 error on /api/subscriptions/me/* for customer users
+Action: Slack notification to #engineering
+Reason: Potential middleware misconfiguration
+```
+
+---
+
+### 6.7 Rollback Plan
+
+#### If Fix Causes Issues
+
+**Scenario 1: Authentication breaks for all users**
+```bash
+# Rollback steps:
+1. Revert subscription.routes.ts to previous version
+2. Deploy immediately
+3. Restart server
+4. Verify public routes working
+```
+
+**Scenario 2: Path change breaks frontend**
+```bash
+# Rollback steps:
+1. Revert index.ts line 123 to '/subscription'
+2. Deploy
+3. Frontend should continue working (was using plural already)
+```
+
+**Scenario 3: Unexpected side effects**
+```bash
+# Full rollback:
+1. git revert <commit-hash>
+2. Run tests
+3. Deploy
+4. Investigate issue offline
+```
+
+---
+
+### 6.8 Documentation Updates
+
+#### Files to Update
+
+**Technical Documentation:**
+- [ ] Update `replit.md` — Add Phase 6 completion notes
+- [ ] Update API documentation — Document correct middleware expectations
+- [ ] Update architecture docs — Document authentication flow
+
+**Team Knowledge Base:**
+- [ ] Document root cause for future reference
+- [ ] Add troubleshooting guide for middleware issues
+- [ ] Update onboarding docs with middleware best practices
+
+**Code Comments:**
+```typescript
+// server/routes/subscription.routes.ts
+
+// ⚠️ CRITICAL: This middleware MUST be requireAuth (not requireTeamMember)
+// User subscription management endpoints (/me/*) are designed for CUSTOMER users
+// to manage their own subscriptions. Using requireTeamMember blocks all customers.
+// See: SUBSCRIPTION_DISPUTE_403_INVESTIGATION_PHASE6.md for details
+router.use(requireAuth);
+```
+
+---
+
+### 6.9 Success Criteria
+
+Phase 6 is complete when:
+
+✅ **Authentication Fixed:**
+- Customer users can access all 7 subscription management endpoints
+- No 403 Forbidden errors for customer users
+- Logs show zero "team_member restriction" warnings
+- All existing functionality remains working
+
+✅ **URL Paths Standardized:**
+- Backend routes mounted at `/api/subscriptions` (plural)
+- Frontend calls match backend routes
+- No 404 errors on subscription endpoints
+- Documentation updated
+
+✅ **Testing Complete:**
+- 100% test coverage for subscription middleware
+- All automated tests passing
+- Manual testing checklist completed
+- No regressions detected
+
+✅ **Monitoring Active:**
+- Alerts configured for 403 errors
+- Logs monitored for 48 hours post-deployment
+- Zero critical issues reported
+- Customer support tickets reduced
+
+✅ **Documentation Updated:**
+- Investigation report filed
+- Remediation steps documented
+- Team knowledge base updated
+- Code comments added
+
+---
+
+### 6.10 Risk Assessment
+
+**Risk Level:** MEDIUM  
+**Complexity:** LOW-MEDIUM  
+**Impact:** CRITICAL
+
+**Risks:**
+
+1. **Authentication Regression (Medium Risk)**
+   - Mitigation: Comprehensive testing before deployment
+   - Rollback: Quick revert capability
+
+2. **Path Change Side Effects (Low Risk)**
+   - Mitigation: Test all subscription routes after change
+   - Rollback: Single line change revert
+
+3. **Middleware Pollution (Low Risk)**
+   - Mitigation: Runtime validation catches issues
+   - Rollback: Revert middleware changes
+
+**Approval Required Before:**
+- Modifying authentication middleware configuration
+- Changing URL route mounting
+- Deploying to production
+
+---
+
+## Phase 6 Summary
+
+**Total Files Modified:** 3-5 files  
+**Total Estimated Effort:** 4-8 hours (including testing and monitoring)  
+**Priority:** P0 - CRITICAL
+
+**Key Deliverables:**
+1. ✅ Corrected authentication middleware (requireAuth restored)
+2. ✅ Standardized URL paths (backend to plural)
+3. ✅ Runtime middleware validation (prevent future issues)
+4. ✅ Comprehensive middleware tests (100% coverage)
+5. ✅ Monitoring and alerting (detect regressions)
+6. ✅ Documentation and knowledge transfer
+
+**Business Impact:**
+- Unblocks 100% of customer users from subscription management
+- Resolves critical 403 Forbidden errors
+- Prevents regulatory compliance issues
+- Reduces customer support burden
+
+**Technical Debt Addressed:**
+- URL path inconsistency resolved
+- Middleware testing gap closed
+- Runtime validation added
+- Documentation improved
+
+---
+
+**End of Phase 6 Plan**
+
+---
+
 **End of Plan**
