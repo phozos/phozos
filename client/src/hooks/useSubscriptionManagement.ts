@@ -81,7 +81,7 @@ export function useUserSubscription() {
   return useQuery({
     queryKey: ['subscription', 'me'],
     queryFn: async () => {
-      const response = await api.get('/api/subscriptions/me');
+      const response = await api.get('/api/subscription/me');
       return response;
     },
     enabled: !!user,
@@ -95,7 +95,7 @@ export function useSubscriptionHistory() {
   return useQuery<SubscriptionHistory[]>({
     queryKey: ['subscription', 'history'],
     queryFn: async () => {
-      const response = await api.get('/api/subscriptions/me/history');
+      const response = await api.get('/api/subscription/me/history');
       return response as SubscriptionHistory[];
     },
     enabled: !!user,
@@ -109,7 +109,7 @@ export function useCancellationRequests() {
   return useQuery<CancellationRequest[]>({
     queryKey: ['cancellation-requests'],
     queryFn: async () => {
-      const response = await api.get('/api/subscriptions/me/cancel-requests');
+      const response = await api.get('/api/subscription/me/cancel-requests');
       return response as CancellationRequest[];
     },
     enabled: !!user,
@@ -123,7 +123,7 @@ export function useRefundRequests() {
   return useQuery<Refund[]>({
     queryKey: ['refund-requests'],
     queryFn: async () => {
-      const response = await api.get('/api/subscriptions/me/refund-requests');
+      const response = await api.get('/api/subscription/me/refund-requests');
       return response as Refund[];
     },
     enabled: !!user,
@@ -137,7 +137,7 @@ export function useDisputes() {
   return useQuery<ChargebackDispute[]>({
     queryKey: ['disputes'],
     queryFn: async () => {
-      const response = await api.get('/api/subscriptions/me/disputes');
+      const response = await api.get('/api/subscription/me/disputes');
       return response as ChargebackDispute[];
     },
     enabled: !!user,
@@ -151,7 +151,7 @@ export function useRefundEligibility(paymentId?: string) {
   return useQuery<RefundEligibility>({
     queryKey: ['refund-eligibility', paymentId],
     queryFn: async () => {
-      const response = await api.get(`/api/subscriptions/me/refund-eligibility?paymentId=${paymentId}`);
+      const response = await api.get(`/api/subscription/me/refund-eligibility?paymentId=${paymentId}`);
       return response as RefundEligibility;
     },
     enabled: !!user && !!paymentId,
@@ -166,7 +166,7 @@ export function useCreateCancellationRequest() {
 
   return useMutation({
     mutationFn: async (data: { subscriptionId: string; reason: string }) => {
-      const response = await api.post('/api/subscriptions/me/cancel-request', data);
+      const response = await api.post('/api/subscription/me/cancel-request', data);
       return response as CancellationRequest;
     },
     onSuccess: () => {
@@ -198,7 +198,7 @@ export function useCreateRefundRequest() {
       amount: string;
       reason: string;
     }) => {
-      const response = await api.post('/api/subscriptions/me/refund-request', data);
+      const response = await api.post('/api/subscription/me/refund-request', data);
       return response as Refund;
     },
     onSuccess: () => {
@@ -231,7 +231,7 @@ export function useCreateDispute() {
       reason: string;
       amount: string;
     }) => {
-      const response = await api.post('/api/subscriptions/me/dispute', data);
+      const response = await api.post('/api/subscription/me/dispute', data);
       return response as ChargebackDispute;
     },
     onSuccess: () => {
