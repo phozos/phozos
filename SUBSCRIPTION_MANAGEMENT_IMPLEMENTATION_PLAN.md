@@ -1038,4 +1038,793 @@ POST   /api/webhooks/razorpay/refund
 
 ---
 
+## Phase 4: Navigation Integration & User Discovery
+
+**Generated:** November 17, 2025  
+**Goal:** Make subscription management features discoverable and accessible across all user touchpoints  
+**Scope:** Add navigation links in AppShell, dashboards, profile pages, and admin panels
+
+**Investigation Summary:**
+- Examined 8 navigation-critical files (AppShell.tsx, StudentDashboard.tsx, Profile.tsx, AdminDashboard.tsx, TeamDashboard.tsx, CompanyDashboard.tsx, App.tsx, navigation-config.ts)
+- Analyzed existing icon patterns (lucide-react library)
+- Reviewed conditional rendering logic for user types (customer, team_member, company_profile, partner)
+- Studied mobile vs desktop navigation differences
+- Identified routing patterns and protection mechanisms
+
+---
+
+### 4.1 AppShell Navigation (Primary Global Navigation)
+
+**File:** `client/src/components/AppShell.tsx`
+
+#### A. Add to User Navigation Items (Lines 123-141)
+
+**Current Pattern:**
+```typescript
+const userNavigationItems = user ? [
+  ...(user.userType === "customer" ? [
+    { href: "/dashboard/student", label: "Dashboard" },
+    { href: "/applications", label: "Applications" },
+    { href: "/documents", label: "Documents" },
+  ] : []),
+  // ... other user types
+] : [];
+```
+
+**Change Location:** After line 127 (after Documents link)
+
+**Code to Add:**
+```typescript
+...(user.userType === "customer" ? [
+  { href: "/dashboard/student", label: "Dashboard" },
+  { href: "/applications", label: "Applications" },
+  { href: "/documents", label: "Documents" },
+  { href: "/subscription-management", label: "My Subscription" }, // ADD THIS LINE
+] : []),
+```
+
+**Rationale:**
+- Follows existing pattern for customer-only links
+- Places subscription link after Documents (logical flow: Dashboard → Applications → Documents → Subscription)
+- Uses "My Subscription" label (possessive, consistent with user-facing terminology)
+- Only shows for `userType === "customer"` (paying subscribers)
+
+#### B. User Dropdown Menu Enhancement (Lines 332-354)
+
+**Current Pattern:**
+```typescript
+<DropdownMenuContent align="end" className="w-56">
+  <DropdownMenuLabel>...</DropdownMenuLabel>
+  <DropdownMenuSeparator />
+  <DropdownMenuItem onClick={() => navigate(getUserProfileLink())}>
+    <User className="mr-2 h-4 w-4" />
+    Profile
+  </DropdownMenuItem>
+  <DropdownMenuSeparator />
+  <DropdownMenuItem onClick={handleLogout}>
+    <LogOut className="mr-2 h-4 w-4" />
+    Log Out
+  </DropdownMenuItem>
+</DropdownMenuContent>
+```
+
+**Change Location:** After line 349 (after Profile menu item, before final separator)
+
+**Code to Add:**
+```typescript
+<DropdownMenuItem onClick={() => navigate(getUserProfileLink())}>
+  <User className="mr-2 h-4 w-4" />
+  Profile
+</DropdownMenuItem>
+{user.userType === "customer" && (
+  <DropdownMenuItem onClick={() => navigate('/subscription-management')}>
+    <CreditCard className="mr-2 h-4 w-4" />
+    <span>Subscription</span>
+  </DropdownMenuItem>
+)}
+<DropdownMenuSeparator />
+```
+
+**Additional Required Import:**
+```typescript
+// At top of file, add to existing lucide-react import (line ~9-15)
+import { 
+  Bell, 
+  Moon, 
+  Sun, 
+  Menu, 
+  GraduationCap,
+  User,
+  LogOut,
+  Search,
+  ChevronDown,
+  X,
+  Loader2,
+  CreditCard  // ADD THIS
+} from "lucide-react";
+```
+
+**Rationale:**
+- `CreditCard` icon is semantically appropriate for subscription/billing
+- Conditional rendering ensures only customers see this menu item
+- Placed before logout (common pattern: Profile → Settings/Billing → Logout)
+- Uses existing dropdown menu pattern
+
+#### C. Mobile Sheet Navigation (Lines 355-476)
+
+**Investigation Finding:** AppShell has a mobile Sheet component for navigation (not fully visible in code sample)
+
+**Change Location:** Within the mobile Sheet component's navigation list
+
+**Pattern to Follow:**
+Look for the mobile menu rendering section (likely around line 360-400) and add:
+
+```typescript
+{user.userType === "customer" && (
+  <SheetClose asChild>
+    <Link href="/subscription-management">
+      <Button 
+        variant={isActiveLink("/subscription-management") ? "secondary" : "ghost"} 
+        className="w-full justify-start"
+      >
+        <CreditCard className="mr-2 h-4 w-4" />
+        My Subscription
+      </Button>
+    </Link>
+  </SheetClose>
+)}
+```
+
+**Note:** Exact line number depends on mobile sheet structure - developer should locate the mobile navigation list and insert after Documents link.
+
+---
+
+### 4.2 StudentDashboard Integration
+
+**File:** `client/src/pages/StudentDashboard.tsx`
+
+#### A. Hero Section Quick Action Button (Lines 84-120)
+
+**Current Pattern:**
+```typescript
+<div className="flex items-center space-x-4">
+  <Badge className="bg-gradient-to-r from-primary to-amber-500 text-white px-4 py-2 shadow-lg">
+    <GraduationCap className="w-4 h-4 mr-2" />
+    Student Dashboard
+  </Badge>
+  <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 shadow-lg">
+    <Star className="w-4 h-4 mr-2" />
+    Premium Member
+  </Badge>
+</div>
+```
+
+**Change Location:** After line 118 (after Premium Member badge)
+
+**Code to Add:**
+```typescript
+<Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 shadow-lg">
+  <Star className="w-4 h-4 mr-2" />
+  Premium Member
+</Badge>
+<Link href="/subscription-management">
+  <Button 
+    variant="outline" 
+    size="sm" 
+    className="bg-white/80 hover:bg-white border-2 border-primary/20 hover:border-primary/40 shadow-md"
+  >
+    <CreditCard className="w-4 h-4 mr-2" />
+    Manage Subscription
+  </Button>
+</Link>
+```
+
+**Additional Required Imports:**
+```typescript
+// Add to existing imports (top of file)
+import { Link } from "wouter";
+import { 
+  // ... existing icons
+  CreditCard  // ADD THIS
+} from "lucide-react";
+```
+
+**Rationale:**
+- Hero section is prime real estate for important actions
+- "Manage Subscription" is clear call-to-action
+- Consistent with premium badge placement
+- Uses Link component from wouter (existing router)
+
+#### B. Quick Actions Panel (Lines 122-280)
+
+**Investigation Finding:** StudentDashboard has collapsible Quick Actions section
+
+**Suggested Location:** Create new card in the quick actions grid
+
+**Code Pattern:**
+```typescript
+<Card className="liquid-glass dark:liquid-glass-dark liquid-glass-interactive rounded-[2rem] p-6 cursor-pointer hover:shadow-xl transition-all">
+  <Link href="/subscription-management">
+    <div className="flex items-center space-x-4">
+      <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl">
+        <CreditCard className="w-6 h-6 text-white" />
+      </div>
+      <div>
+        <h3 className="font-semibold text-foreground">Subscription</h3>
+        <p className="text-sm text-muted-foreground">Manage your plan</p>
+      </div>
+      <ChevronRight className="w-5 h-5 text-muted-foreground ml-auto" />
+    </div>
+  </Link>
+</Card>
+```
+
+**Note:** Developer should identify the Quick Actions grid structure and add this card alongside existing action cards.
+
+---
+
+### 4.3 Profile Page Integration
+
+**File:** `client/src/pages/Profile.tsx`
+
+#### A. Add Subscription Section (After Line 52)
+
+**Current Pattern:**
+Profile page has two-column grid layout:
+- Column 1: ProfileOverviewCard
+- Column 2: PersonalInfoForm
+
+**Change Location:** After line 52 (after closing div of grid)
+
+**Code to Add:**
+```typescript
+</div>
+
+{/* Subscription Management Section */}
+<Card className="mt-8">
+  <CardHeader>
+    <div className="flex items-center justify-between">
+      <div>
+        <CardTitle className="flex items-center">
+          <CreditCard className="w-5 h-5 mr-2" />
+          Subscription
+        </CardTitle>
+        <p className="text-muted-foreground text-sm mt-1">
+          Manage your subscription, billing, and payment settings
+        </p>
+      </div>
+      <Link href="/subscription-management">
+        <Button variant="outline" size="sm">
+          <Settings className="w-4 h-4 mr-2" />
+          Manage Subscription
+        </Button>
+      </Link>
+    </div>
+  </CardHeader>
+  <CardContent>
+    {/* Subscription overview could be added here in future */}
+    <p className="text-sm text-muted-foreground">
+      View your current plan, request cancellations, refunds, or raise disputes.
+    </p>
+  </CardContent>
+</Card>
+```
+
+**Additional Required Imports:**
+```typescript
+// Add to existing imports
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
+import { CreditCard, Settings } from "lucide-react";
+```
+
+**Rationale:**
+- Profile is where users expect to find account-related settings
+- Separate card makes subscription management prominent
+- Uses existing Card component pattern from ProfileOverviewCard
+- "Manage Subscription" button is clear call-to-action
+
+---
+
+### 4.4 Admin Dashboard Integration
+
+**File:** `client/src/pages/AdminDashboard.tsx`
+
+**Investigation Finding:** AdminDashboard uses tab-based navigation with sidebar
+
+#### A. Admin Sidebar Navigation Links (Location: Lines 1100-1300 approximately)
+
+**Current Pattern:**
+Admin sidebar has sections like "Users", "Universities", "Subscriptions", etc.
+
+**Suggested Change:** Within "Subscriptions" section of sidebar
+
+**Code Pattern to Add:**
+```typescript
+{/* Subscription Management Section */}
+<div className="px-3 py-2">
+  <h3 className="mb-2 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+    Subscription Management
+  </h3>
+  <div className="space-y-1">
+    <Button
+      variant={selectedTab === "cancellation-requests" ? "secondary" : "ghost"}
+      className="w-full justify-start"
+      onClick={() => setSelectedTab("cancellation-requests")}
+    >
+      <XCircle className="mr-2 h-4 w-4" />
+      Cancellation Requests
+    </Button>
+    <Button
+      variant={selectedTab === "refund-requests" ? "secondary" : "ghost"}
+      className="w-full justify-start"
+      onClick={() => setSelectedTab("refund-requests")}
+    >
+      <DollarSign className="mr-2 h-4 w-4" />
+      Refund Requests
+    </Button>
+    <Button
+      variant={selectedTab === "dispute-management" ? "secondary" : "ghost"}
+      className="w-full justify-start"
+      onClick={() => setSelectedTab("dispute-management")}
+    >
+      <AlertTriangle className="mr-2 h-4 w-4" />
+      Disputes
+    </Button>
+  </div>
+</div>
+```
+
+**Additional Required Imports:**
+```typescript
+// Add to existing lucide-react imports (line ~18-74)
+import { 
+  // ... existing icons
+  XCircle,    // for cancellations
+  DollarSign, // for refunds
+  AlertTriangle // for disputes (may already be imported)
+} from "lucide-react";
+```
+
+**Rationale:**
+- Groups all subscription management admin functions together
+- Uses icons semantically: XCircle (cancel), DollarSign (refund), AlertTriangle (dispute)
+- Follows existing sidebar button pattern
+- Consistent with admin navigation structure
+
+#### B. Add Navigation Links to Admin Routes
+
+**File:** `client/src/App.tsx`
+
+**Change Location:** After line 224 (after partner-analytics route)
+
+**Code to Add:**
+```typescript
+<Route path="/dashboard/admin/partner-analytics">
+  <ProtectedRoute {...adminOnly}>
+    <Suspense fallback={<LoadingFallback />}>
+      <PartnerAnalytics />
+    </Suspense>
+  </ProtectedRoute>
+</Route>
+
+{/* Subscription Management Admin Routes */}
+<Route path="/admin/subscription-management/cancellation-requests">
+  <ProtectedRoute {...adminOnly}>
+    <Suspense fallback={<LoadingFallback />}>
+      <CancellationRequests />
+    </Suspense>
+  </ProtectedRoute>
+</Route>
+
+<Route path="/admin/subscription-management/refund-management">
+  <ProtectedRoute {...adminOnly}>
+    <Suspense fallback={<LoadingFallback />}>
+      <RefundManagement />
+    </Suspense>
+  </ProtectedRoute>
+</Route>
+
+<Route path="/admin/subscription-management/dispute-management">
+  <ProtectedRoute {...adminOnly}>
+    <Suspense fallback={<LoadingFallback />}>
+      <DisputeManagement />
+    </Suspense>
+  </ProtectedRoute>
+</Route>
+```
+
+**Note:** These pages already exist (from Phase 3) but routes need to be added if not present.
+
+---
+
+### 4.5 Mobile Navigation Considerations
+
+**File:** `client/src/components/mobile/MobileBottomNav.tsx`
+
+**Investigation Finding:** Mobile bottom nav has 3 tabs: Feed, Search, Profile
+
+**Recommendation:** Do NOT add subscription to bottom nav (already crowded)
+
+**Alternative:** Subscription link should be accessible via:
+1. ✅ Mobile sheet menu in AppShell (Section 4.1.C)
+2. ✅ Profile tab → Subscription section
+3. ✅ Dashboard quick actions
+
+**Rationale:**
+- Bottom nav is for primary app sections only
+- Subscription management is secondary action, not primary navigation
+- Better UX to keep bottom nav simple with 3-4 core actions
+
+---
+
+### 4.6 Additional Navigation Enhancements
+
+#### A. Add Subscription Status Badge to AppShell (Optional Enhancement)
+
+**File:** `client/src/components/AppShell.tsx`
+
+**Change Location:** Near user avatar dropdown (line ~315-330)
+
+**Concept:** Show subscription status indicator
+
+```typescript
+{user.userType === "customer" && user.subscription?.status === "active" && (
+  <Badge variant="secondary" className="hidden lg:flex mr-2 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+    <Shield className="w-3 h-3 mr-1" />
+    Active
+  </Badge>
+)}
+```
+
+**Note:** Requires subscription data to be available in user context. May need useUserSubscription hook.
+
+#### B. Conditional "Upgrade" Link for Non-Subscribers
+
+**File:** `client/src/components/AppShell.tsx`
+
+**Logic:**
+```typescript
+{user.userType === "customer" && !user.subscription ? (
+  <Link href="/plans">
+    <Button size="sm" className="bg-gradient-to-r from-primary to-amber-500">
+      <Zap className="w-4 h-4 mr-2" />
+      Upgrade
+    </Button>
+  </Link>
+) : null}
+```
+
+**Placement:** Right side actions area, before user avatar
+
+---
+
+### 4.7 Routing Configuration Updates
+
+**File:** `client/src/App.tsx`
+
+**Verify Route Exists:** (Should already exist from Phase 2)
+
+```typescript
+<Route path="/subscription-management">
+  <ProtectedRoute {...customerOnly}>
+    <SubscriptionManagement />
+  </ProtectedRoute>
+</Route>
+```
+
+**Location:** Around line 260-280 (user-facing routes section)
+
+**If Missing:** Add this route with `customerOnly` protection
+
+---
+
+### 4.8 Navigation Accessibility & Conditional Logic
+
+#### Conditional Rendering Rules
+
+**User Type Conditions:**
+```typescript
+// Customer (subscriber) only
+{user.userType === "customer" && (
+  <Link to="/subscription-management">...</Link>
+)}
+
+// Admin only
+{user.teamRole === "admin" && (
+  <Link to="/admin/subscription-management/cancellation-requests">...</Link>
+)}
+
+// Not for partners, company profiles, or counselors
+// (Subscription management is customer-only feature)
+```
+
+**Subscription Status Conditions (Future Enhancement):**
+```typescript
+// Only show if user has active/cancelled subscription
+{user.subscription?.status && (
+  <Link to="/subscription-management">...</Link>
+)}
+
+// Show upgrade button if no subscription
+{!user.subscription && (
+  <Link to="/plans">Upgrade</Link>
+)}
+```
+
+---
+
+### 4.9 Icon Reference Guide
+
+**Recommended Icons from lucide-react:**
+
+| Feature | Icon | Semantic Meaning |
+|---------|------|------------------|
+| Subscription Overview | `Shield` | Protection/Coverage |
+| My Subscription (menu) | `CreditCard` | Billing/Payment |
+| Manage Subscription | `Settings` | Configuration |
+| Cancellation | `XCircle` or `X` | Cancel/Stop |
+| Refund | `DollarSign` or `Banknote` | Money/Refund |
+| Dispute | `AlertTriangle` or `AlertCircle` | Warning/Issue |
+| History | `History` or `Clock` | Timeline/Past |
+| Active Status | `CheckCircle` or `Shield` | Verified/Active |
+| Upgrade | `Zap` or `TrendingUp` | Growth/Enhancement |
+
+**Import Pattern:**
+```typescript
+import { 
+  Shield, 
+  CreditCard, 
+  Settings, 
+  XCircle, 
+  DollarSign, 
+  AlertTriangle, 
+  History,
+  CheckCircle,
+  Zap
+} from "lucide-react";
+```
+
+---
+
+### 4.10 Label/Text Consistency Guide
+
+**User-Facing Labels:**
+- ✅ "My Subscription" (possessive, personal)
+- ✅ "Manage Subscription" (action-oriented)
+- ✅ "Subscription Management" (page title)
+- ❌ "Subscription Settings" (too generic)
+- ❌ "Billing" (too narrow, implies only payment)
+
+**Admin-Facing Labels:**
+- ✅ "Cancellation Requests"
+- ✅ "Refund Requests"
+- ✅ "Dispute Management"
+- ✅ "Subscription Analytics"
+
+**Button Text:**
+- Primary action: "Manage Subscription"
+- Secondary: "View Subscription" or "Subscription Details"
+- Upgrade: "Upgrade Plan" or "Upgrade"
+
+---
+
+### 4.11 Testing Requirements
+
+#### Manual Testing Checklist
+
+**Desktop Navigation:**
+- [ ] AppShell main nav shows "My Subscription" for customers
+- [ ] User dropdown menu shows "Subscription" with CreditCard icon
+- [ ] StudentDashboard hero section has "Manage Subscription" button
+- [ ] Profile page has Subscription section card
+- [ ] Admin sidebar shows subscription management links
+- [ ] All links navigate to correct routes
+- [ ] Active link highlighting works correctly
+
+**Mobile Navigation:**
+- [ ] Mobile sheet menu includes "My Subscription"
+- [ ] Links are tappable (min 44px touch target)
+- [ ] Sheet closes after navigation
+- [ ] StudentDashboard quick actions accessible on mobile
+
+**Conditional Rendering:**
+- [ ] Links only show for `userType === "customer"`
+- [ ] Admin links only show for `teamRole === "admin"`
+- [ ] Non-subscribers see upgrade prompt (if implemented)
+- [ ] No subscription links for partners/companies/counselors
+
+**Accessibility:**
+- [ ] All links have proper aria-labels
+- [ ] Icons have text labels (not icon-only)
+- [ ] Keyboard navigation works (Tab, Enter)
+- [ ] Screen reader announces link purpose
+- [ ] Color contrast meets WCAG 2.1 AA standards
+
+#### Automated Testing
+
+**Unit Tests:**
+```typescript
+// AppShell.test.tsx
+describe('AppShell Navigation', () => {
+  it('shows My Subscription link for customers', () => {
+    // Mock user with userType: "customer"
+    // Assert subscription link is rendered
+  });
+
+  it('does not show subscription link for non-customers', () => {
+    // Mock user with userType: "partner"
+    // Assert subscription link is NOT rendered
+  });
+
+  it('navigates to /subscription-management on click', () => {
+    // Click subscription link
+    // Assert navigation occurred
+  });
+});
+```
+
+**Integration Tests:**
+```typescript
+// navigation.integration.test.tsx
+describe('Subscription Navigation Flow', () => {
+  it('allows customer to navigate from dashboard to subscription management', () => {
+    // Login as customer
+    // Navigate to dashboard
+    // Click "Manage Subscription"
+    // Assert at /subscription-management
+  });
+});
+```
+
+---
+
+### 4.12 Implementation Sequence
+
+**Recommended Order:**
+
+1. **AppShell.tsx Updates** (Highest Priority)
+   - User navigation items array
+   - User dropdown menu
+   - Mobile sheet menu
+   - Import icons
+   - Test desktop & mobile
+
+2. **Routing Verification (App.tsx)**
+   - Verify /subscription-management route exists
+   - Verify admin routes exist
+   - Test route protection
+
+3. **StudentDashboard.tsx**
+   - Hero section button
+   - Quick actions card (optional)
+   - Test navigation
+
+4. **Profile.tsx**
+   - Subscription section card
+   - Manage Subscription button
+   - Test link
+
+5. **AdminDashboard.tsx**
+   - Sidebar navigation links
+   - Tab state management
+   - Test admin navigation
+
+6. **Testing & Refinement**
+   - Manual testing all navigation paths
+   - Accessibility audit
+   - Mobile responsiveness check
+   - Fix any bugs/issues
+
+---
+
+### 4.13 Phase 4 Deliverables
+
+✅ **Navigation Updates:**
+- AppShell global navigation (desktop + mobile)
+- StudentDashboard quick actions
+- Profile page subscription section
+- Admin sidebar navigation
+
+✅ **User Experience:**
+- Subscription management discoverable from multiple entry points
+- Clear, consistent labeling
+- Appropriate iconography
+- Conditional rendering based on user type
+
+✅ **Technical:**
+- All routes properly configured
+- Protected routes enforced
+- Accessibility standards met
+- Mobile-responsive design
+
+✅ **Documentation:**
+- This implementation plan
+- Icon reference guide
+- Label consistency guide
+- Testing checklist
+
+---
+
+### 4.14 Known Considerations & Edge Cases
+
+**Edge Case 1: Non-Subscriber Customers**
+- **Issue:** Customer users without subscriptions
+- **Solution:** Add conditional to check `user.subscription` exists before showing link, OR show "Subscribe" link instead
+
+**Edge Case 2: Expired Subscriptions**
+- **Issue:** Users with expired subscriptions
+- **Solution:** Still show subscription management (they may want to renew or view history)
+
+**Edge Case 3: Admin Viewing as Customer**
+- **Issue:** Admins may have both admin and customer roles
+- **Solution:** Show both admin and customer links if applicable
+
+**Edge Case 4: Deep Linking**
+- **Issue:** Users may bookmark /subscription-management
+- **Solution:** Ensure route protection redirects non-customers gracefully
+
+**Edge Case 5: Mobile Performance**
+- **Issue:** Mobile devices may have slower rendering
+- **Solution:** Use lazy loading for subscription management page components
+
+---
+
+### 4.15 Future Enhancements (Post-Phase 4)
+
+**Potential Additions:**
+1. **Notification Badges**
+   - Show pending request count on subscription nav items
+   - Example: "My Subscription (2)" for 2 pending requests
+
+2. **Contextual Prompts**
+   - "Refund window expires in 6 hours" banner
+   - "You have a pending cancellation request" alert
+
+3. **Quick Actions Menu**
+   - Dropdown from subscription link with quick actions:
+     - View Plan
+     - Request Cancellation
+     - Contact Support
+
+4. **Analytics Integration**
+   - Track navigation clicks
+   - Measure feature discovery rate
+   - A/B test placement
+
+---
+
+## Phase 4 Implementation Summary
+
+**Total Changes Required:** ~8 files
+**Estimated Development Time:** 4-6 hours
+**Testing Time:** 2-3 hours
+**Total Phase 4 Effort:** 6-9 hours
+
+**Files Modified:**
+1. `client/src/components/AppShell.tsx` (3 changes)
+2. `client/src/pages/StudentDashboard.tsx` (2 changes)
+3. `client/src/pages/Profile.tsx` (1 change)
+4. `client/src/pages/AdminDashboard.tsx` (1 change)
+5. `client/src/App.tsx` (route verification)
+6. `client/src/components/mobile/MobileBottomNav.tsx` (optional)
+7. Test files (new)
+8. This plan document (updated)
+
+**Success Criteria:**
+- [ ] All navigation links implemented and functional
+- [ ] Icons and labels consistent with design system
+- [ ] Conditional rendering works correctly
+- [ ] Mobile navigation responsive and accessible
+- [ ] All tests passing
+- [ ] Accessibility audit passed
+- [ ] Code review approved
+
+---
+
+**End of Phase 4 Plan**
+
+---
+
 **End of Plan**
