@@ -15,9 +15,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export class SubscriptionManagementNotificationService {
   private sendGridConfigured: boolean = false;
   private templatesPath: string;
+  private appUrl: string;
 
   constructor() {
     this.templatesPath = path.join(__dirname, '../../templates/emails');
+    this.appUrl = this.getAppUrl();
 
     if (config.email.SENDGRID_API_KEY) {
       try {
@@ -30,6 +32,16 @@ export class SubscriptionManagementNotificationService {
     } else {
       logger.warn('SendGrid API key not configured - email notifications will be disabled');
     }
+  }
+
+  private getAppUrl(): string {
+    if (process.env.REPLIT_DOMAINS) {
+      return `https://${process.env.REPLIT_DOMAINS}`;
+    }
+    if (config.app.isDevelopment) {
+      return `http://localhost:${config.app.PORT}`;
+    }
+    return 'https://yourdomain.com';
   }
 
   private get notificationService(): INotificationService {
@@ -98,7 +110,7 @@ export class SubscriptionManagementNotificationService {
           subscriptionPlan: 'Premium Plan',
           submittedDate: new Date().toLocaleDateString(),
           reason: 'Your cancellation request',
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 
@@ -128,7 +140,7 @@ export class SubscriptionManagementNotificationService {
           cancellationDate: currentDate.toLocaleDateString(),
           accessEndDate: endDate.toLocaleDateString(),
           adminNotes: '',
-          plansUrl: config.app.APP_URL + '/plans',
+          plansUrl: this.appUrl + '/plans',
         });
       }
 
@@ -155,8 +167,8 @@ export class SubscriptionManagementNotificationService {
           requestId: subscriptionId,
           subscriptionPlan: 'Premium Plan',
           rejectionReason: reason,
-          supportUrl: config.app.APP_URL + '/support',
-          dashboardUrl: config.app.APP_URL + '/dashboard',
+          supportUrl: this.appUrl + '/support',
+          dashboardUrl: this.appUrl + '/dashboard',
         });
       }
 
@@ -185,7 +197,7 @@ export class SubscriptionManagementNotificationService {
           paymentId: 'pay_' + subscriptionId.slice(0, 8),
           submittedDate: new Date().toLocaleDateString(),
           reason: 'Your refund request',
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 
@@ -211,7 +223,7 @@ export class SubscriptionManagementNotificationService {
           userName: 'User',
           amount: (amount / 100).toFixed(2),
           adminNotes: '',
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 
@@ -238,8 +250,8 @@ export class SubscriptionManagementNotificationService {
           amount: (amount / 100).toFixed(2),
           requestId: subscriptionId,
           rejectionReason: reason,
-          supportUrl: config.app.APP_URL + '/support',
-          dashboardUrl: config.app.APP_URL + '/dashboard',
+          supportUrl: this.appUrl + '/support',
+          dashboardUrl: this.appUrl + '/dashboard',
         });
       }
 
@@ -268,7 +280,7 @@ export class SubscriptionManagementNotificationService {
           razorpayRefundId: 'rfnd_' + subscriptionId.slice(0, 8),
           processedDate: new Date().toLocaleDateString(),
           paymentMethod: 'Original Payment Method',
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 
@@ -296,8 +308,8 @@ export class SubscriptionManagementNotificationService {
           refundId: subscriptionId,
           requestDate: new Date().toLocaleDateString(),
           paymentMethod: 'Original Payment Method',
-          supportUrl: config.app.APP_URL + '/support',
-          dashboardUrl: config.app.APP_URL + '/dashboard',
+          supportUrl: this.appUrl + '/support',
+          dashboardUrl: this.appUrl + '/dashboard',
         });
       }
 
@@ -326,7 +338,7 @@ export class SubscriptionManagementNotificationService {
           disputeType,
           submittedDate: new Date().toLocaleDateString(),
           reason: 'Your dispute',
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 
@@ -354,7 +366,7 @@ export class SubscriptionManagementNotificationService {
           disputeType,
           amount: (amount / 100).toFixed(2),
           investigationStartDate: new Date().toLocaleDateString(),
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 
@@ -386,7 +398,7 @@ export class SubscriptionManagementNotificationService {
           actionDetails: '',
           isRefunded: false,
           adminNotes: '',
-          supportUrl: config.app.APP_URL + '/support',
+          supportUrl: this.appUrl + '/support',
         });
       }
 

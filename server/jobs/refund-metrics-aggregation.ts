@@ -129,7 +129,7 @@ export class RefundMetricsAggregationJob {
     const totalAmount = refundData.reduce((sum, r) => sum + parseFloat(r.amount), 0);
 
     const approvedCount = refundData.filter(
-      (r) => r.status === 'approved' || r.status === 'completed' || r.status === 'processing'
+      (r) => r.status === 'completed' || r.status === 'processing'
     ).length;
     const approvalRate = totalRefunds > 0 ? (approvedCount / totalRefunds) * 100 : 0;
 

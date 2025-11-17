@@ -64,10 +64,7 @@ export class RefundStatusSyncJob {
         .where(
           and(
             isNotNull(refunds.razorpayRefundId),
-            or(
-              eq(refunds.status, 'processing'),
-              eq(refunds.status, 'approved')
-            )
+            eq(refunds.status, 'processing')
           )
         );
 

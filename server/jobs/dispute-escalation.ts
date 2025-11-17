@@ -127,7 +127,6 @@ export class DisputeEscalationJob {
       await tx
         .update(chargebacksDisputes)
         .set({
-          priority: 'high',
           evidence: updatedEvidence,
           updatedAt: new Date(),
         })
@@ -157,7 +156,7 @@ export class DisputeEscalationJob {
       const adminUsers = await db
         .select()
         .from(users)
-        .where(eq(users.role, 'admin'));
+        .where(eq(users.teamRole, 'admin'));
 
       logger.info('Sending dispute escalation alert to admins', {
         disputeId: dispute.id,

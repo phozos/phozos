@@ -262,6 +262,8 @@ export class RefundService extends BaseService implements IRefundService {
             refund.subscriptionId,
             adminId,
             'refund_request_approved',
+            undefined,
+            undefined,
             {
               refundId: id,
               razorpayRefundId: razorpayRefund.id,
@@ -337,6 +339,8 @@ export class RefundService extends BaseService implements IRefundService {
           refund.subscriptionId,
           adminId,
           'refund_request_rejected',
+          undefined,
+          undefined,
           {
             refundId: id,
             reason: sanitizedNotes || 'Refund request rejected',
@@ -400,12 +404,13 @@ export class RefundService extends BaseService implements IRefundService {
         await subscriptionManagementNotificationService.notifyRefundProcessed(
           updatedRefund.userId,
           updatedRefund.subscriptionId,
-          parseFloat(updatedRefund.amount)
+          Math.round(parseFloat(updatedRefund.amount) * 100)
         );
       } else if (razorpayStatus === 'failed') {
         await subscriptionManagementNotificationService.notifyRefundFailed(
           updatedRefund.userId,
-          updatedRefund.subscriptionId
+          updatedRefund.subscriptionId,
+          Math.round(parseFloat(updatedRefund.amount) * 100)
         );
       }
 
