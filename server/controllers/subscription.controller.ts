@@ -123,12 +123,14 @@ export class SubscriptionController extends BaseController {
 
   /**
    * Get current subscription for the authenticated user
+   * Returns subscription with plan details and most recent payment information.
    * 
    * @route GET /api/subscriptions/my-subscription
+   * @route GET /api/subscription/user/subscription
    * @access Protected
    * @param {AuthenticatedRequest} req - Request with authenticated user
    * @param {Response} res - Express response object
-   * @returns {Promise<Response>} Returns user's current subscription
+   * @returns {Promise<Response>} Returns user's current subscription with plan and payment
    * 
    * @throws {401} Unauthorized if user is not authenticated
    * @throws {500} Internal server error
@@ -137,9 +139,13 @@ export class SubscriptionController extends BaseController {
     try {
       const userId = this.getUserId(req);
       const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
-      const subscription = await userSubscriptionService.getCurrentSubscription(userId);
+      const subscriptionData = await userSubscriptionService.getSubscriptionWithPlanAndPayment(userId);
       
-      return this.sendSuccess(res, subscription || { status: 'inactive', plan: null });
+      if (!subscriptionData) {
+        return this.sendSuccess(res, null);
+      }
+      
+      return this.sendSuccess(res, subscriptionData);
     } catch (error) {
       return this.handleError(res, error, 'SubscriptionController.getUserSubscription');
     }

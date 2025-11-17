@@ -182,6 +182,59 @@ export interface SubscriptionWithDetails {
   plan: SubscriptionPlanBasic | null;
 }
 
+export interface SubscriptionWithPlanAndPayment {
+  subscription: {
+    id: string;
+    userId: string;
+    planId: string;
+    status: string;
+    startedAt: Date | null;
+    expiresAt: Date | null;
+    paymentReference: string | null;
+    autoRenew: boolean | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+  };
+  plan: {
+    id: string;
+    name: string;
+    description: string | null;
+    price: string;
+    currency: string;
+    logo: string | null;
+    features: string[];
+    maxUniversities: number;
+    maxCountries: number;
+    universityTier: string;
+    aiMatching: boolean | null;
+    unlimitedApplications: boolean | null;
+    prioritySupport: boolean | null;
+    applicationTracking: boolean | null;
+    collaborationTools: boolean | null;
+    advancedAnalytics: boolean | null;
+    dedicatedAccountManager: boolean | null;
+    customIntegrations: boolean | null;
+    revenueSharePercentage: string | null;
+    stripeProductId: string | null;
+    displayOrder: number;
+    isActive: boolean;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+  } | null;
+  payment: {
+    id: string;
+    userId: string;
+    subscriptionId: string;
+    orderId: string;
+    paymentReference: string;
+    amount: string;
+    currency: string;
+    status: string;
+    paidAt: Date | null;
+    createdAt: Date | null;
+  } | null;
+}
+
 export interface ForumPostWithUser {
   id: string;
   authorId: string;

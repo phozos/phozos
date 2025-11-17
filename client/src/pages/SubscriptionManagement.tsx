@@ -48,7 +48,7 @@ export default function SubscriptionManagement() {
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            You don't have an active subscription. Please subscribe to a plan to access this page.
+            You don't have a subscription. Please subscribe to a plan to access this page.
             <Link href="/subscription-plans">
               <Button variant="link" className="p-0 ml-2">
                 View Plans
@@ -60,15 +60,39 @@ export default function SubscriptionManagement() {
     );
   }
 
-  const { subscription, plan } = subscriptionData;
+  // Destructure subscription data first
+  const { subscription, plan, payment } = subscriptionData;
+
+  // Get status-specific messages
+  const getStatusMessage = () => {
+    switch (subscription.status) {
+      case 'cancelled':
+        return {
+          variant: 'destructive' as const,
+          message: 'Your subscription has been cancelled. You can still access features until the end of your billing period.',
+        };
+      case 'expired':
+        return {
+          variant: 'destructive' as const,
+          message: 'Your subscription has expired. Please renew to continue accessing premium features.',
+        };
+      case 'pending':
+        return {
+          variant: 'default' as const,
+          message: 'Your subscription is pending activation. This usually takes a few minutes.',
+        };
+      default:
+        return null;
+    }
+  };
+
+  const statusMessage = getStatusMessage();
   const existingCancellationRequest = cancellationRequests?.find(
     (req) => req.status === 'pending'
   );
   const existingRefundRequest = refundRequests?.find(
     (req) => req.status === 'pending' || req.status === 'processing'
   );
-
-  const payment = undefined as { id: string; paidAt: string; amount: string } | undefined;
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -86,6 +110,13 @@ export default function SubscriptionManagement() {
         <p className="text-muted-foreground">
           Manage your subscription, request cancellations, refunds, and view request history
         </p>
+        
+        {statusMessage && (
+          <Alert variant={statusMessage.variant} className="mt-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{statusMessage.message}</AlertDescription>
+          </Alert>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

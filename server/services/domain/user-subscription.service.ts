@@ -10,6 +10,7 @@ import { logger } from '../../utils/logger';
 export interface IUserSubscriptionService {
   getCurrentSubscription(userId: string): Promise<UserSubscription | undefined>;
   getSubscriptionWithPlan(userId: string): Promise<any>;
+  getSubscriptionWithPlanAndPayment(userId: string): Promise<any>;
   getAllSubscriptions(): Promise<any[]>;
   getSubscriptionHistory(userId: string): Promise<any[]>;
   createSubscription(subscription: InsertUserSubscription): Promise<UserSubscription>;
@@ -33,7 +34,8 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
 
   async getCurrentSubscription(userId: string): Promise<UserSubscription | undefined> {
     try {
-      return await this.userSubscriptionRepo.findByUser(userId);
+      // Use array of statuses to get any subscription, not just active
+      return await this.userSubscriptionRepo.findByUser(userId, ['active', 'cancelled', 'expired', 'pending']);
     } catch (error) {
       return this.handleError(error, 'UserSubscriptionService.getCurrentSubscription');
     }
@@ -41,9 +43,19 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
 
   async getSubscriptionWithPlan(userId: string): Promise<any> {
     try {
-      return await this.userSubscriptionRepo.findByUserWithPlan(userId);
+      // Use array of statuses to get any subscription, not just active
+      return await this.userSubscriptionRepo.findByUserWithPlan(userId, ['active', 'cancelled', 'expired', 'pending']);
     } catch (error) {
       return this.handleError(error, 'UserSubscriptionService.getSubscriptionWithPlan');
+    }
+  }
+
+  async getSubscriptionWithPlanAndPayment(userId: string): Promise<any> {
+    try {
+      // Use array of statuses to get any subscription, not just active
+      return await this.userSubscriptionRepo.findByUserWithPlanAndPayment(userId, ['active', 'cancelled', 'expired', 'pending']);
+    } catch (error) {
+      return this.handleError(error, 'UserSubscriptionService.getSubscriptionWithPlanAndPayment');
     }
   }
 
@@ -57,7 +69,8 @@ export class UserSubscriptionService extends BaseService implements IUserSubscri
 
   async getSubscriptionHistory(userId: string): Promise<any[]> {
     try {
-      const subscription = await this.userSubscriptionRepo.findByUser(userId);
+      // Use array of statuses to get any subscription, not just active
+      const subscription = await this.userSubscriptionRepo.findByUser(userId, ['active', 'cancelled', 'expired', 'pending']);
       if (!subscription) {
         return [];
       }

@@ -2,12 +2,13 @@ import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   SubscriptionPlan, InsertSubscriptionPlan, subscriptionPlans,
   UserSubscription, InsertUserSubscription, userSubscriptions,
-  users
+  users,
+  payments
 } from '@shared/schema';
 import { db } from '../db';
-import { eq, and, desc, SQL, sql } from 'drizzle-orm';
+import { eq, and, desc, SQL, sql, inArray } from 'drizzle-orm';
 import { handleDatabaseError, NotFoundError } from './errors';
-import { SubscriptionWithPlan, SubscriptionWithDetails } from '../types/repository-responses';
+import { SubscriptionWithPlan, SubscriptionWithDetails, SubscriptionWithPlanAndPayment } from '../types/repository-responses';
 import { SubscriptionPlanFilters, UserSubscriptionFilters } from '../types/repository-filters';
 
 export interface ISubscriptionPlanRepository {
@@ -38,8 +39,9 @@ export interface ISubscriptionPlanRepository {
 export interface IUserSubscriptionRepository {
   findById(id: string, tx?: DbOrTransaction): Promise<UserSubscription>;
   findByIdOptional(id: string, tx?: DbOrTransaction): Promise<UserSubscription | undefined>;
-  findByUser(userId: string): Promise<UserSubscription | undefined>;
-  findByUserWithPlan(userId: string): Promise<SubscriptionWithPlan | undefined>;
+  findByUser(userId: string, status?: string | string[]): Promise<UserSubscription | undefined>;
+  findByUserWithPlan(userId: string, status?: string | string[]): Promise<SubscriptionWithPlan | undefined>;
+  findByUserWithPlanAndPayment(userId: string, status?: string | string[]): Promise<SubscriptionWithPlanAndPayment | undefined>;
   findAll(filters?: UserSubscriptionFilters): Promise<UserSubscription[]>;
   findAllWithDetails(): Promise<SubscriptionWithDetails[]>;
   create(data: InsertUserSubscription, tx?: DbOrTransaction): Promise<UserSubscription>;
@@ -428,15 +430,27 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription,
     super(userSubscriptions, 'id');
   }
 
-  async findByUser(userId: string): Promise<UserSubscription | undefined> {
+  /**
+   * Find subscription by user ID with optional status filter
+   * @param userId - The user ID to search for
+   * @param status - Optional status filter. Can be a single status string or array of statuses.
+   *                 Defaults to 'active' for backward compatibility.
+   * @returns User subscription or undefined if not found
+   */
+  async findByUser(userId: string, status: string | string[] = 'active'): Promise<UserSubscription | undefined> {
     try {
+      const conditions: SQL[] = [eq(userSubscriptions.userId, userId)];
+      
+      if (Array.isArray(status)) {
+        conditions.push(inArray(userSubscriptions.status, status));
+      } else {
+        conditions.push(eq(userSubscriptions.status, status));
+      }
+      
       const results = await db
         .select()
         .from(userSubscriptions)
-        .where(and(
-          eq(userSubscriptions.userId, userId),
-          eq(userSubscriptions.status, "active")
-        ))
+        .where(and(...conditions))
         .limit(1);
       return results[0] as UserSubscription | undefined;
     } catch (error) {
@@ -444,8 +458,23 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription,
     }
   }
 
-  async findByUserWithPlan(userId: string): Promise<SubscriptionWithPlan | undefined> {
+  /**
+   * Find subscription with plan details by user ID with optional status filter
+   * @param userId - The user ID to search for
+   * @param status - Optional status filter. Can be a single status string or array of statuses.
+   *                 Defaults to 'active' for backward compatibility.
+   * @returns Subscription with plan details or undefined if not found
+   */
+  async findByUserWithPlan(userId: string, status: string | string[] = 'active'): Promise<SubscriptionWithPlan | undefined> {
     try {
+      const conditions: SQL[] = [eq(userSubscriptions.userId, userId)];
+      
+      if (Array.isArray(status)) {
+        conditions.push(inArray(userSubscriptions.status, status));
+      } else {
+        conditions.push(eq(userSubscriptions.status, status));
+      }
+      
       const results = await db
         .select({
           subscription: userSubscriptions,
@@ -453,10 +482,7 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription,
         })
         .from(userSubscriptions)
         .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
-        .where(and(
-          eq(userSubscriptions.userId, userId),
-          eq(userSubscriptions.status, "active")
-        ))
+        .where(and(...conditions))
         .limit(1);
       
       const result = results[0];
@@ -468,6 +494,54 @@ export class UserSubscriptionRepository extends BaseRepository<UserSubscription,
       } as SubscriptionWithPlan;
     } catch (error) {
       handleDatabaseError(error, 'UserSubscriptionRepository.findByUserWithPlan');
+    }
+  }
+
+  /**
+   * Find subscription with plan and payment details by user ID with optional status filter
+   * This method joins the payments table to include the most recent payment for the subscription.
+   * 
+   * @param userId - The user ID to search for
+   * @param status - Optional status filter. Can be a single status string or array of statuses.
+   *                 Defaults to 'active' for backward compatibility.
+   * @returns Subscription with plan and payment details or undefined if not found
+   * 
+   * Note: If no payment exists for the subscription, the payment field will be null.
+   * This is expected for subscriptions created before the payment tracking system.
+   */
+  async findByUserWithPlanAndPayment(userId: string, status: string | string[] = 'active'): Promise<SubscriptionWithPlanAndPayment | undefined> {
+    try {
+      const conditions: SQL[] = [eq(userSubscriptions.userId, userId)];
+      
+      if (Array.isArray(status)) {
+        conditions.push(inArray(userSubscriptions.status, status));
+      } else {
+        conditions.push(eq(userSubscriptions.status, status));
+      }
+      
+      const results = await db
+        .select({
+          subscription: userSubscriptions,
+          plan: subscriptionPlans,
+          payment: payments
+        })
+        .from(userSubscriptions)
+        .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+        .leftJoin(payments, eq(userSubscriptions.id, payments.subscriptionId))
+        .where(and(...conditions))
+        .orderBy(desc(payments.paidAt))
+        .limit(1);
+      
+      const result = results[0];
+      if (!result) return undefined;
+      
+      return {
+        subscription: result.subscription,
+        plan: result.plan,
+        payment: result.payment
+      } as SubscriptionWithPlanAndPayment;
+    } catch (error) {
+      handleDatabaseError(error, 'UserSubscriptionRepository.findByUserWithPlanAndPayment');
     }
   }
 
