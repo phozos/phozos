@@ -1827,4 +1827,1032 @@ describe('Subscription Navigation Flow', () => {
 
 ---
 
+## Phase 5: Critical Bug Fixes & System Stabilization
+
+**Generated:** November 17, 2025  
+**Status:** Investigation Complete - Awaiting Implementation Approval  
+**Investigation Report:** `SUBSCRIPTION_MANAGEMENT_PHASE_5_INVESTIGATION_REPORT.md`
+
+### Executive Summary
+
+Phases 1-4 have been successfully implemented with all infrastructure in place:
+- ✅ Database tables, repositories, services
+- ✅ API endpoints (user + admin)
+- ✅ Frontend pages (SubscriptionManagement, Admin pages)
+- ✅ Feature flags, audit logging, email notifications
+
+**However, critical bugs prevent the system from functioning:**
+1. 🔴 **Bug #1:** Hardcoded `status='active'` filter makes non-active subscriptions invisible
+2. 🔴 **Bug #2:** Payment info hardcoded as `undefined`, breaking refund/dispute features
+3. ⚠️ **Gap:** Navigation not integrated into main navigation components
+
+**Phase 5 Goal:** Fix critical bugs and complete navigation integration to make the system fully functional.
+
+---
+
+### 5.1 Critical Bug #1: Repository Status Filter Fix
+
+**Priority:** CRITICAL  
+**Estimated Time:** 2-3 hours
+
+#### Problem Analysis
+
+**Location:** `server/repositories/subscription.repository.ts`
+
+**Affected Methods:**
+- `findByUser(userId)` - Line 438: Hardcoded `status='active'`
+- `findByUserWithPlan(userId)` - Line 457: Hardcoded `status='active'`
+- `findActiveByUserId(userId)` - Line 556: Hardcoded `status='active'` (OK, this is expected)
+- `hasActiveSubscription(userId)` - Line 585: Hardcoded `status='active'` (OK, this is expected)
+
+**Root Cause:**
+- Methods meant to "find user's subscription" are filtering for ONLY `status='active'`
+- Subscriptions with status `'pending'`, `'expired'`, or `'cancelled'` become invisible
+- User "Manpreet" has a subscription with non-active status → system shows "You don't have an active subscription"
+
+**Impact:**
+- Users cannot view their subscription details if status ≠ 'active'
+- Cannot request cancellation/refund for non-active subscriptions
+- Dashboard incorrectly shows "no subscription" message
+- Breaks subscription management page completely
+
+#### Solution Strategy
+
+**Refactor repository methods to separate concerns:**
+
+**Option A: Status Parameter (Recommended)**
+```typescript
+// Make methods flexible with optional status filter
+async findByUser(
+  userId: string, 
+  status?: SubscriptionStatus | SubscriptionStatus[]
+): Promise<UserSubscription | undefined>
+
+async findByUserWithPlan(
+  userId: string, 
+  status?: SubscriptionStatus | SubscriptionStatus[]
+): Promise<SubscriptionWithPlan | undefined>
+```
+
+**Option B: Separate Methods**
+```typescript
+// Keep existing active-only methods, add new any-status methods
+async findByUser(userId: string)  // Any status
+async findActiveByUser(userId: string)  // Active only
+async findByUserWithPlan(userId: string)  // Any status
+async findActiveByUserWithPlan(userId: string)  // Active only
+```
+
+**Recommendation:** Use **Option A** - more flexible, less code duplication
+
+#### Implementation Tasks
+
+**Task 5.1.1: Update Repository Methods**
+- [ ] Modify `findByUser()` to accept optional `status` parameter
+- [ ] Modify `findByUserWithPlan()` to accept optional `status` parameter
+- [ ] Update method signatures in `IUserSubscriptionRepository` interface
+- [ ] Add JSDoc comments explaining status parameter behavior
+- [ ] Keep `findActiveByUserId()` and `hasActiveSubscription()` unchanged (they're correct)
+
+**Code Changes:**
+
+**File:** `server/repositories/subscription.repository.ts`
+
+```typescript
+/**
+ * Find user's subscription with optional status filter
+ * @param userId - User ID
+ * @param status - Optional status filter. If not provided, returns any status. 
+ *                 Can be single status or array of statuses.
+ */
+async findByUser(
+  userId: string,
+  status?: SubscriptionStatus | SubscriptionStatus[]
+): Promise<UserSubscription | undefined> {
+  try {
+    const whereConditions = [eq(userSubscriptions.userId, userId)];
+    
+    if (status) {
+      if (Array.isArray(status)) {
+        whereConditions.push(inArray(userSubscriptions.status, status));
+      } else {
+        whereConditions.push(eq(userSubscriptions.status, status));
+      }
+    }
+    
+    const results = await db
+      .select()
+      .from(userSubscriptions)
+      .where(and(...whereConditions))
+      .orderBy(desc(userSubscriptions.createdAt)) // Get most recent
+      .limit(1);
+      
+    return results[0] as UserSubscription | undefined;
+  } catch (error) {
+    handleDatabaseError(error, 'UserSubscriptionRepository.findByUser');
+  }
+}
+
+/**
+ * Find user's subscription with plan, with optional status filter
+ * @param userId - User ID
+ * @param status - Optional status filter
+ */
+async findByUserWithPlan(
+  userId: string,
+  status?: SubscriptionStatus | SubscriptionStatus[]
+): Promise<SubscriptionWithPlan | undefined> {
+  try {
+    const whereConditions = [eq(userSubscriptions.userId, userId)];
+    
+    if (status) {
+      if (Array.isArray(status)) {
+        whereConditions.push(inArray(userSubscriptions.status, status));
+      } else {
+        whereConditions.push(eq(userSubscriptions.status, status));
+      }
+    }
+    
+    const results = await db
+      .select({
+        subscription: userSubscriptions,
+        plan: subscriptionPlans
+      })
+      .from(userSubscriptions)
+      .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+      .where(and(...whereConditions))
+      .orderBy(desc(userSubscriptions.createdAt)) // Get most recent
+      .limit(1);
+    
+    if (results.length === 0) return undefined;
+    
+    return {
+      subscription: results[0].subscription as UserSubscription,
+      plan: results[0].plan as SubscriptionPlan
+    };
+  } catch (error) {
+    handleDatabaseError(error, 'UserSubscriptionRepository.findByUserWithPlan');
+  }
+}
+```
+
+**Task 5.1.2: Update Service Layer Callers**
+- [ ] Review all service methods calling `findByUser()` or `findByUserWithPlan()`
+- [ ] Determine appropriate status filter for each use case:
+  - **Subscription Management Page:** Any status (user should see their subscription regardless)
+  - **Feature Access Checks:** Active only (use `hasActiveSubscription()`)
+  - **Cancellation Requests:** Any status (can request for expired/cancelled too)
+  - **Refund Requests:** Any status (might refund cancelled subscription)
+- [ ] Update service method calls with appropriate status parameter
+
+**Files to Review:**
+- `server/services/domain/user-subscription.service.ts`
+- `server/services/domain/cancellation.service.ts`
+- `server/services/domain/refund.service.ts`
+- `server/controllers/subscription.controller.ts`
+
+**Task 5.1.3: Controller Updates**
+
+**File:** `server/controllers/subscription.controller.ts`
+
+**Method:** `getUserSubscription()` (Line ~136-145)
+
+**Current Code:**
+```typescript
+const subscription = await userSubscriptionService.getCurrentSubscription(userId);
+if (!subscription) {
+  return res.json({ status: 'inactive', plan: null });
+}
+```
+
+**Updated Code:**
+```typescript
+// Get user's subscription regardless of status
+// (User should be able to see cancelled/expired subscriptions)
+const subscription = await userSubscriptionService.getCurrentSubscription(userId);
+
+if (!subscription) {
+  return res.json({ 
+    subscription: null, 
+    plan: null,
+    message: 'No subscription found' 
+  });
+}
+
+// Return subscription with status for frontend to handle appropriately
+return res.json({
+  subscription: subscription.subscription,
+  plan: subscription.plan,
+  status: subscription.subscription.status
+});
+```
+
+**Task 5.1.4: Testing**
+- [ ] Unit test: `findByUser()` without status parameter returns any status
+- [ ] Unit test: `findByUser(userId, 'active')` returns only active
+- [ ] Unit test: `findByUser(userId, ['active', 'expired'])` returns active or expired
+- [ ] Integration test: User with cancelled subscription can view subscription page
+- [ ] Integration test: User with expired subscription can view subscription page
+- [ ] Integration test: Feature access still properly checks active status
+
+---
+
+### 5.2 Critical Bug #2: Payment Info Missing in API Response
+
+**Priority:** CRITICAL  
+**Estimated Time:** 1-2 hours
+
+#### Problem Analysis
+
+**Location:** `client/src/pages/SubscriptionManagement.tsx` (Line 71)
+
+**Current Code:**
+```typescript
+const payment = undefined as { id: string; paidAt: string; amount: string } | undefined;
+```
+
+**Impact:**
+- Refund panel always shows "No Payment Found" (lines 136-149)
+- Dispute panel cannot function (lines 169-176)
+- Users cannot request refunds or raise disputes
+- Features are 100% broken despite UI existing
+
+**Root Cause:**
+1. Backend API `getUserSubscription()` doesn't include payment record in response
+2. Frontend hardcoded payment as `undefined` instead of fetching it
+3. No API endpoint to retrieve payment info for subscription
+
+#### Solution Strategy
+
+**Add payment record to subscription API response:**
+
+1. Update backend to join payment record when fetching subscription
+2. Update API response type to include payment
+3. Update frontend to use real payment data instead of undefined
+
+#### Implementation Tasks
+
+**Task 5.2.1: Backend - Update Repository**
+
+**File:** `server/repositories/subscription.repository.ts`
+
+**Add new method:**
+```typescript
+/**
+ * Find user's subscription with plan AND latest payment
+ * @param userId - User ID
+ * @param status - Optional status filter
+ */
+async findByUserWithPlanAndPayment(
+  userId: string,
+  status?: SubscriptionStatus | SubscriptionStatus[]
+): Promise<SubscriptionWithPlanAndPayment | undefined> {
+  try {
+    const whereConditions = [eq(userSubscriptions.userId, userId)];
+    
+    if (status) {
+      if (Array.isArray(status)) {
+        whereConditions.push(inArray(userSubscriptions.status, status));
+      } else {
+        whereConditions.push(eq(userSubscriptions.status, status));
+      }
+    }
+    
+    const results = await db
+      .select({
+        subscription: userSubscriptions,
+        plan: subscriptionPlans,
+        payment: payments
+      })
+      .from(userSubscriptions)
+      .leftJoin(subscriptionPlans, eq(userSubscriptions.planId, subscriptionPlans.id))
+      .leftJoin(payments, eq(userSubscriptions.id, payments.subscriptionId))
+      .where(and(...whereConditions))
+      .orderBy(desc(userSubscriptions.createdAt))
+      .limit(1);
+    
+    if (results.length === 0) return undefined;
+    
+    return {
+      subscription: results[0].subscription as UserSubscription,
+      plan: results[0].plan as SubscriptionPlan,
+      payment: results[0].payment as Payment | null
+    };
+  } catch (error) {
+    handleDatabaseError(error, 'UserSubscriptionRepository.findByUserWithPlanAndPayment');
+  }
+}
+```
+
+**Task 5.2.2: Backend - Update Type Definitions**
+
+**File:** `shared/types.ts` or `server/types/subscription.types.ts`
+
+```typescript
+export interface SubscriptionWithPlanAndPayment {
+  subscription: UserSubscription;
+  plan: SubscriptionPlan | null;
+  payment: Payment | null;
+}
+```
+
+**Task 5.2.3: Backend - Update Service**
+
+**File:** `server/services/domain/user-subscription.service.ts`
+
+**Update method:**
+```typescript
+async getCurrentSubscription(userId: string): Promise<SubscriptionWithPlanAndPayment | undefined> {
+  // Use new method that includes payment
+  return this.userSubscriptionRepo.findByUserWithPlanAndPayment(userId);
+}
+```
+
+**Task 5.2.4: Backend - Update Controller**
+
+**File:** `server/controllers/subscription.controller.ts`
+
+**Update response structure:**
+```typescript
+async getUserSubscription(req: Request, res: Response) {
+  const userId = req.user!.id;
+  
+  const data = await userSubscriptionService.getCurrentSubscription(userId);
+  
+  if (!data) {
+    return res.json({ 
+      subscription: null, 
+      plan: null,
+      payment: null,
+      message: 'No subscription found' 
+    });
+  }
+  
+  return res.json({
+    subscription: data.subscription,
+    plan: data.plan,
+    payment: data.payment ? {
+      id: data.payment.id,
+      amount: data.payment.amount,
+      currency: data.payment.currency,
+      paidAt: data.payment.createdAt, // or paidAt field if exists
+      razorpayPaymentId: data.payment.razorpayPaymentId,
+      status: data.payment.status
+    } : null
+  });
+}
+```
+
+**Task 5.2.5: Frontend - Update API Hook**
+
+**File:** `client/src/hooks/useUserSubscription.tsx`
+
+**Update response type:**
+```typescript
+interface UserSubscriptionResponse {
+  subscription: UserSubscription | null;
+  plan: SubscriptionPlan | null;
+  payment: {
+    id: string;
+    amount: string;
+    currency: string;
+    paidAt: string;
+    razorpayPaymentId: string;
+    status: string;
+  } | null;
+  message?: string;
+}
+```
+
+**Task 5.2.6: Frontend - Update SubscriptionManagement Page**
+
+**File:** `client/src/pages/SubscriptionManagement.tsx`
+
+**Replace line 71:**
+```typescript
+// OLD: const payment = undefined as { id: string; paidAt: string; amount: string } | undefined;
+
+// NEW: Use actual payment from API
+const payment = subscriptionData?.payment;
+```
+
+**Update conditionals to handle null payment:**
+```typescript
+// Refund Tab (lines 136-149)
+<TabsContent value="refund" className="space-y-6">
+  {payment ? (
+    <RefundRequestPanel
+      subscriptionId={subscription.id}
+      paymentId={payment.id}
+      paymentAmount={payment.amount}
+      paidAt={payment.paidAt}
+      currency={plan?.currency || payment.currency}
+      existingRequest={existingRefundRequest}
+    />
+  ) : (
+    <Card>
+      <CardHeader>
+        <CardTitle>Payment Information Not Available</CardTitle>
+        <CardDescription>
+          Unable to find payment record for this subscription. 
+          Please contact support if you need to request a refund.
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  )}
+</TabsContent>
+```
+
+**Task 5.2.7: Testing**
+- [ ] Backend test: API returns payment record in response
+- [ ] Backend test: API handles subscriptions without payment gracefully
+- [ ] Frontend test: Payment info displayed correctly in UI
+- [ ] Integration test: Refund panel shows payment info correctly
+- [ ] Integration test: Dispute panel shows payment info correctly
+- [ ] E2E test: Complete refund request flow works end-to-end
+
+---
+
+### 5.3 Navigation Integration Completion
+
+**Priority:** HIGH  
+**Estimated Time:** 1 hour
+
+#### Problem Analysis
+
+Navigation links for subscription management are missing from main navigation components, making features hard to discover.
+
+**Gaps:**
+- ❌ Not in `Navigation.tsx` main navigation
+- ❌ Not in `navigation-config.ts` configuration
+- ❌ User must manually type URL or find links in dashboard
+
+#### Implementation Tasks
+
+**Task 5.3.1: Add to Navigation Config**
+
+**File:** `client/src/config/navigation-config.ts` (if exists)
+
+```typescript
+export const customerNavigationItems = [
+  // ... existing items
+  {
+    id: 'subscription',
+    label: 'My Subscription',
+    path: '/subscription-management',
+    icon: 'CreditCard',
+    requiresSubscription: true, // Only show if user has subscription
+  }
+];
+```
+
+**Task 5.3.2: Update Navigation Component**
+
+**File:** `client/src/components/Navigation.tsx`
+
+Add subscription management link to customer navigation section:
+```typescript
+{user.role === 'customer' && user.subscription && (
+  <Link 
+    href="/subscription-management" 
+    className="nav-link"
+  >
+    <CreditCard className="w-4 h-4" />
+    <span>My Subscription</span>
+  </Link>
+)}
+```
+
+**Task 5.3.3: Update AppShell (if not already done in Phase 4)**
+
+**File:** `client/src/components/AppShell.tsx`
+
+Ensure subscription link in user dropdown menu:
+```typescript
+const userMenuItems = [
+  { label: 'Dashboard', path: '/dashboard', icon: Home },
+  { label: 'Profile', path: '/profile', icon: User },
+  { label: 'My Subscription', path: '/subscription-management', icon: CreditCard }, // Add this
+  { label: 'Logout', path: '/logout', icon: LogOut }
+];
+```
+
+**Task 5.3.4: Conditional Rendering**
+
+Add logic to only show subscription link if user has a subscription:
+```typescript
+{userSubscription && (
+  <NavigationItem href="/subscription-management">
+    <CreditCard /> My Subscription
+  </NavigationItem>
+)}
+```
+
+**Task 5.3.5: Testing**
+- [ ] Navigation link appears for users with subscriptions
+- [ ] Navigation link hidden for users without subscriptions
+- [ ] Link navigates to correct page
+- [ ] Active state highlights correctly
+- [ ] Mobile navigation shows link
+- [ ] Admin users see admin links
+
+---
+
+### 5.4 Additional Fixes & Improvements
+
+**Priority:** MEDIUM  
+**Estimated Time:** 1-2 hours
+
+#### Task 5.4.1: Frontend Status Handling
+
+**File:** `client/src/pages/SubscriptionManagement.tsx`
+
+**Update to handle different subscription statuses:**
+```typescript
+// Show appropriate message based on status
+if (!subscriptionData || !subscriptionData.subscription) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>No Subscription</CardTitle>
+        <CardDescription>
+          You don't have an active subscription. <Link href="/plans">View Plans</Link>
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
+const { subscription, plan, payment } = subscriptionData;
+
+// Show status-specific warnings
+{subscription.status === 'cancelled' && (
+  <Alert variant="warning">
+    <AlertTriangle className="h-4 w-4" />
+    <AlertTitle>Subscription Cancelled</AlertTitle>
+    <AlertDescription>
+      Your subscription was cancelled on {formatDate(subscription.updatedAt)}
+    </AlertDescription>
+  </Alert>
+)}
+
+{subscription.status === 'expired' && (
+  <Alert variant="warning">
+    <AlertTriangle className="h-4 w-4" />
+    <AlertTitle>Subscription Expired</AlertTitle>
+    <AlertDescription>
+      Your subscription expired on {formatDate(subscription.expiresAt)}
+    </AlertDescription>
+  </Alert>
+)}
+
+{subscription.status === 'pending' && (
+  <Alert variant="info">
+    <Info className="h-4 w-4" />
+    <AlertTitle>Payment Processing</AlertTitle>
+    <AlertDescription>
+      Your payment is being verified. This usually takes a few minutes.
+    </AlertDescription>
+  </Alert>
+)}
+```
+
+#### Task 5.4.2: Feature Flag Verification
+
+**Files:** 
+- `server/config/feature-flags.ts`
+- `.env` file
+
+**Verify flags are enabled:**
+```bash
+ENABLE_USER_CANCELLATION_REQUESTS=true
+ENABLE_REFUND_SYSTEM=true
+ENABLE_DISPUTE_MANAGEMENT=true
+```
+
+#### Task 5.4.3: Database Verification for User Manpreet
+
+Run SQL query to check Manpreet's subscription status:
+```sql
+SELECT 
+  id, 
+  user_id, 
+  plan_id, 
+  status, 
+  started_at, 
+  expires_at,
+  created_at,
+  updated_at
+FROM user_subscriptions 
+WHERE user_id = (SELECT id FROM users WHERE email = 'manpreet@example.com' OR name LIKE '%Manpreet%')
+ORDER BY created_at DESC
+LIMIT 1;
+```
+
+**Expected Actions:**
+- If status is 'pending' → Update to 'active' manually OR investigate why payment didn't set it to active
+- If status is 'cancelled' → This explains the bug, system is working correctly but status is wrong
+- If status is 'expired' → Check if expiresAt is in the past
+
+---
+
+### 5.5 Testing & Validation Plan
+
+**Priority:** HIGH  
+**Estimated Time:** 2-3 hours
+
+#### Test Suite 5.5.1: Repository Tests
+
+**File:** `server/tests/repositories/subscription.repository.test.ts`
+
+```typescript
+describe('UserSubscriptionRepository - Status Filter Fix', () => {
+  it('findByUser() without status returns any subscription', async () => {
+    // Create subscriptions with different statuses
+    await createTestSubscription(userId, { status: 'cancelled' });
+    const result = await repo.findByUser(userId);
+    expect(result).toBeDefined();
+    expect(result.status).toBe('cancelled');
+  });
+  
+  it('findByUser() with status filter returns only matching status', async () => {
+    await createTestSubscription(userId, { status: 'cancelled' });
+    const result = await repo.findByUser(userId, 'active');
+    expect(result).toBeUndefined();
+  });
+  
+  it('findByUser() with array status returns any matching', async () => {
+    await createTestSubscription(userId, { status: 'expired' });
+    const result = await repo.findByUser(userId, ['active', 'expired']);
+    expect(result).toBeDefined();
+    expect(result.status).toBe('expired');
+  });
+  
+  it('findByUserWithPlanAndPayment() includes payment record', async () => {
+    const result = await repo.findByUserWithPlanAndPayment(userId);
+    expect(result.subscription).toBeDefined();
+    expect(result.plan).toBeDefined();
+    expect(result.payment).toBeDefined();
+    expect(result.payment.id).toBeDefined();
+  });
+});
+```
+
+#### Test Suite 5.5.2: API Integration Tests
+
+**File:** `server/tests/integration/subscription.api.test.ts`
+
+```typescript
+describe('GET /api/subscription/user/subscription', () => {
+  it('returns subscription with payment info', async () => {
+    const response = await request(app)
+      .get('/api/subscription/user/subscription')
+      .set('Cookie', authCookie)
+      .expect(200);
+    
+    expect(response.body.subscription).toBeDefined();
+    expect(response.body.plan).toBeDefined();
+    expect(response.body.payment).toBeDefined();
+    expect(response.body.payment.id).toBeDefined();
+    expect(response.body.payment.amount).toBeDefined();
+  });
+  
+  it('returns cancelled subscription correctly', async () => {
+    await updateUserSubscription(userId, { status: 'cancelled' });
+    
+    const response = await request(app)
+      .get('/api/subscription/user/subscription')
+      .expect(200);
+    
+    expect(response.body.subscription.status).toBe('cancelled');
+    expect(response.body.subscription).toBeDefined(); // Should still return it
+  });
+});
+```
+
+#### Test Suite 5.5.3: Frontend Component Tests
+
+**File:** `client/src/pages/__tests__/SubscriptionManagement.test.tsx`
+
+```typescript
+describe('SubscriptionManagement - Bug Fixes', () => {
+  it('displays subscription with cancelled status', async () => {
+    mockAPI({
+      subscription: { id: '123', status: 'cancelled' },
+      plan: { name: 'Pro Plan' },
+      payment: { id: 'pay_123', amount: '1667' }
+    });
+    
+    render(<SubscriptionManagement />);
+    
+    expect(screen.getByText('Subscription Cancelled')).toBeInTheDocument();
+    expect(screen.queryByText("You don't have an active subscription")).not.toBeInTheDocument();
+  });
+  
+  it('displays payment info in refund panel', async () => {
+    mockAPI({
+      subscription: { id: '123', status: 'active' },
+      plan: { name: 'Pro Plan' },
+      payment: { id: 'pay_123', amount: '1667', paidAt: '2025-11-15' }
+    });
+    
+    render(<SubscriptionManagement />);
+    
+    await userEvent.click(screen.getByText('Refund'));
+    
+    expect(screen.queryByText('No Payment Found')).not.toBeInTheDocument();
+    expect(screen.getByText(/1667/)).toBeInTheDocument(); // Amount displayed
+  });
+});
+```
+
+#### Manual Testing Checklist
+
+**Bug #1 Verification:**
+- [ ] Create test user with cancelled subscription
+- [ ] Navigate to /subscription-management
+- [ ] Verify page loads and shows subscription details
+- [ ] Verify status badge shows "Cancelled"
+- [ ] Verify no "You don't have an active subscription" error
+
+**Bug #2 Verification:**
+- [ ] Login as user with active subscription and payment
+- [ ] Navigate to /subscription-management
+- [ ] Click "Refund" tab
+- [ ] Verify payment info is displayed (not "No Payment Found")
+- [ ] Verify refund eligibility countdown appears
+- [ ] Click "Dispute" tab
+- [ ] Verify payment amount and date displayed
+
+**Navigation Verification:**
+- [ ] Check main navigation has "My Subscription" link
+- [ ] Click link navigates to /subscription-management
+- [ ] User without subscription doesn't see link
+- [ ] Mobile navigation includes link
+- [ ] Active state highlights correctly
+
+---
+
+### 5.6 Deployment & Rollout Plan
+
+**Priority:** CRITICAL  
+**Estimated Time:** 1 hour
+
+#### Pre-Deployment Checklist
+
+**Database:**
+- [ ] Run migration verification query
+- [ ] Check all 3 new tables exist
+- [ ] Verify foreign key constraints
+- [ ] Check indexes exist
+
+**Environment Variables:**
+- [ ] Feature flags enabled in production `.env`
+- [ ] Razorpay credentials configured
+- [ ] Email service configured
+
+**Code Review:**
+- [ ] All bug fixes reviewed
+- [ ] Type definitions updated
+- [ ] Tests passing
+- [ ] No console errors
+
+#### Deployment Sequence
+
+**Step 1: Backend Deployment**
+1. Deploy repository changes
+2. Deploy service layer changes
+3. Deploy controller changes
+4. Restart backend server
+5. Verify API endpoints respond correctly
+
+**Step 2: Database Migration** (if needed)
+1. Backup database
+2. Run any new migrations
+3. Verify schema changes
+
+**Step 3: Frontend Deployment**
+1. Deploy updated components
+2. Deploy updated hooks
+3. Clear CDN cache
+4. Verify pages load
+
+**Step 4: Feature Flag Enablement**
+1. Enable `ENABLE_USER_CANCELLATION_REQUESTS=true`
+2. Enable `ENABLE_REFUND_SYSTEM=true`
+3. Enable `ENABLE_DISPUTE_MANAGEMENT=true`
+4. Monitor error logs
+
+**Step 5: Smoke Testing**
+1. Login as test user
+2. Navigate to subscription management
+3. Verify all tabs load
+4. Test one cancellation request
+5. Test one refund request (if within window)
+6. Verify admin pages load
+
+#### Rollback Plan
+
+If critical issues arise:
+```bash
+# 1. Disable feature flags
+ENABLE_USER_CANCELLATION_REQUESTS=false
+ENABLE_REFUND_SYSTEM=false
+ENABLE_DISPUTE_MANAGEMENT=false
+
+# 2. Revert frontend deployment
+# 3. Revert backend deployment
+# 4. Restore database backup (if schema changes made)
+```
+
+---
+
+### 5.7 Post-Deployment Monitoring
+
+**Priority:** HIGH  
+**Estimated Time:** Ongoing for 48 hours
+
+#### Metrics to Monitor
+
+**Application Metrics:**
+- [ ] `/subscription-management` page load success rate
+- [ ] API endpoint response times (`/api/subscription/user/subscription`)
+- [ ] Error rates for refund/cancellation requests
+- [ ] Payment retrieval success rate
+
+**Business Metrics:**
+- [ ] Number of users accessing subscription management
+- [ ] Cancellation request volume
+- [ ] Refund request volume
+- [ ] Dispute creation rate
+
+**Error Monitoring:**
+- [ ] Watch for "Payment not found" errors
+- [ ] Watch for "Subscription not found" errors
+- [ ] Monitor database query performance
+- [ ] Check for 500 errors
+
+#### Alert Thresholds
+
+Set up alerts for:
+- Error rate > 5% on subscription endpoints
+- Page load time > 3 seconds
+- Database query time > 1 second
+- Any 500 errors on new endpoints
+
+---
+
+### 5.8 Documentation Updates
+
+**Priority:** MEDIUM  
+**Estimated Time:** 1 hour
+
+#### Update Documentation Files
+
+**File:** `README.md`
+- [ ] Update with Phase 5 completion status
+- [ ] Document bug fixes
+- [ ] Update feature list
+
+**File:** `SUBSCRIPTION_MANAGEMENT_IMPLEMENTATION_PLAN.md` (this file)
+- [ ] Mark Phase 5 tasks as complete
+- [ ] Add completion date
+- [ ] Update success criteria
+
+**File:** `docs/API.md` (if exists)
+- [ ] Document updated API response structure
+- [ ] Add payment field to subscription endpoint docs
+- [ ] Document status parameter behavior
+
+**File:** `replit.md`
+- [ ] Update project status
+- [ ] Document Phase 5 completion
+- [ ] Note any remaining issues
+
+---
+
+### 5.9 Phase 5 Implementation Checklist
+
+#### Critical Bug Fixes
+- [ ] **Bug #1: Repository Status Filter**
+  - [ ] Add status parameter to `findByUser()`
+  - [ ] Add status parameter to `findByUserWithPlan()`
+  - [ ] Update method signatures in interface
+  - [ ] Update all service layer callers
+  - [ ] Update controller to handle non-active statuses
+  - [ ] Write unit tests
+  - [ ] Write integration tests
+  - [ ] Test with user "Manpreet"
+  
+- [ ] **Bug #2: Payment Info Missing**
+  - [ ] Create `findByUserWithPlanAndPayment()` repository method
+  - [ ] Add `SubscriptionWithPlanAndPayment` type
+  - [ ] Update service to use new method
+  - [ ] Update controller to include payment in response
+  - [ ] Update frontend API hook types
+  - [ ] Update SubscriptionManagement page to use real payment
+  - [ ] Test refund panel shows payment info
+  - [ ] Test dispute panel shows payment info
+
+#### Navigation Integration
+- [ ] Add to navigation config
+- [ ] Update Navigation.tsx component
+- [ ] Update AppShell user menu
+- [ ] Add conditional rendering logic
+- [ ] Test desktop navigation
+- [ ] Test mobile navigation
+
+#### Additional Improvements
+- [ ] Add status-specific UI messages (cancelled, expired, pending)
+- [ ] Verify feature flags enabled
+- [ ] Check Manpreet's subscription in database
+- [ ] Update status if needed
+
+#### Testing
+- [ ] Run all repository tests
+- [ ] Run all API integration tests
+- [ ] Run all frontend component tests
+- [ ] Perform manual testing checklist
+- [ ] Test with different subscription statuses
+- [ ] Test payment info display
+- [ ] Test navigation links
+
+#### Deployment
+- [ ] Code review approved
+- [ ] All tests passing
+- [ ] Deploy backend changes
+- [ ] Deploy frontend changes
+- [ ] Enable feature flags
+- [ ] Smoke test in production
+- [ ] Monitor for 48 hours
+
+#### Documentation
+- [ ] Update README
+- [ ] Update API docs
+- [ ] Update this implementation plan
+- [ ] Update replit.md
+
+---
+
+### 5.10 Success Criteria
+
+Phase 5 is complete when:
+
+✅ **Bug #1 Fixed:**
+- Users with cancelled/expired subscriptions can view subscription management page
+- No more "You don't have an active subscription" for valid subscriptions
+- System correctly differentiates between "no subscription" and "non-active subscription"
+
+✅ **Bug #2 Fixed:**
+- Payment info displays correctly in subscription management page
+- Refund panel shows payment details (not "No Payment Found")
+- Dispute panel shows payment details
+- Users can successfully request refunds and raise disputes
+
+✅ **Navigation Complete:**
+- "My Subscription" link visible in main navigation
+- Link only shows for users with subscriptions
+- Mobile navigation includes link
+- All navigation paths work correctly
+
+✅ **System Functional:**
+- All Phase 1-4 features work end-to-end
+- User can request cancellation, refunds, disputes
+- Admin can approve/reject/process all requests
+- No critical errors in logs
+- All tests passing
+
+---
+
+## Phase 5 Summary
+
+**Total Files Modified:** ~12 files  
+**Total Estimated Effort:** 6-9 hours  
+**Priority:** CRITICAL - System is non-functional without these fixes
+
+**Key Deliverables:**
+1. Repository methods accept status parameter (flexible querying)
+2. Payment info included in subscription API response
+3. Frontend uses real payment data instead of undefined
+4. Navigation integration complete
+5. Status-specific UI messaging
+6. Comprehensive test coverage
+7. Production deployment with monitoring
+
+**Risk Assessment:**
+- **Risk:** Low - Changes are isolated and well-tested
+- **Impact:** High - Fixes critical bugs blocking all subscription management features
+- **Complexity:** Medium - Requires careful update of multiple layers
+
+**Approval Required Before:**
+- Modifying repository method signatures
+- Updating API response structure (breaking change)
+- Deploying to production
+
+---
+
+**End of Phase 5 Plan**
+
+---
+
 **End of Plan**
