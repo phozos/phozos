@@ -35,7 +35,8 @@ import {
   ChevronUp,
   Lightbulb,
   Heart,
-  Bookmark
+  Bookmark,
+  CreditCard
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -182,6 +183,16 @@ export default function StudentDashboard() {
                         <Star className="w-4 h-4 mr-2" />
                         Premium Member
                       </Badge>
+                      <Link href="/subscription-management">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="bg-white/80 hover:bg-white border-2 border-primary/20 hover:border-primary/40 shadow-md"
+                        >
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Manage Subscription
+                        </Button>
+                      </Link>
                     </div>
                   </div>
                   <div className="hidden md:block">
@@ -405,6 +416,12 @@ export default function StudentDashboard() {
                         label: "Browse Universities", 
                         href: "/universities",
                         color: "text-amber-600"
+                      },
+                      { 
+                        icon: CreditCard, 
+                        label: "Manage Subscription", 
+                        href: "/subscription-management",
+                        color: "text-purple-600"
                       },
                       { 
                         icon: Settings, 

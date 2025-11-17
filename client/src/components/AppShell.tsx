@@ -36,7 +36,8 @@ import {
   Search,
   ChevronDown,
   X,
-  Loader2
+  Loader2,
+  CreditCard
 } from "lucide-react";
 
 export default function AppShell() {
@@ -125,6 +126,7 @@ export default function AppShell() {
       { href: "/dashboard/student", label: "Dashboard" },
       { href: "/applications", label: "Applications" },
       { href: "/documents", label: "Documents" },
+      { href: "/subscription-management", label: "My Subscription" },
     ] : []),
     ...(user.teamRole === "admin" ? [
       { href: "/dashboard/admin", label: "Admin Dashboard" },
@@ -347,6 +349,12 @@ export default function AppShell() {
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </DropdownMenuItem>
+                  {user.userType === "customer" && (
+                    <DropdownMenuItem onClick={() => navigate('/subscription-management')}>
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      <span>Subscription</span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={handleLogout}
@@ -416,6 +424,9 @@ export default function AppShell() {
                             variant={isActiveLink(item.href) ? "default" : "ghost"}
                             className="w-full justify-start"
                           >
+                            {item.href === "/subscription-management" && (
+                              <CreditCard className="mr-2 h-4 w-4" />
+                            )}
                             {item.label}
                           </Button>
                         </Link>

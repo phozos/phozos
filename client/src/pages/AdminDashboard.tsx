@@ -68,6 +68,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  XCircle,
   TestTube,
   History,
   Wallet
@@ -2136,6 +2137,38 @@ export default function AdminDashboard() {
             >
               <Wallet className="w-4 h-4 mr-3" />
               Payouts
+            </Link>
+
+            <Separator className="my-4" />
+
+            <div className="px-3 mb-2">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Subscription Management
+              </h3>
+            </div>
+
+            <Link 
+              href="/admin/subscriptions/cancellation-requests"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <XCircle className="w-4 h-4 mr-3" />
+              Cancellation Requests
+            </Link>
+
+            <Link 
+              href="/admin/subscriptions/refund-management"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <DollarSign className="w-4 h-4 mr-3" />
+              Refund Management
+            </Link>
+
+            <Link 
+              href="/admin/subscriptions/dispute-management"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <AlertTriangle className="w-4 h-4 mr-3" />
+              Dispute Management
             </Link>
           </nav>
         </div>
