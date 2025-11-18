@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import MathCaptcha from "@/components/MathCaptcha";
 import { useApiQuery } from "@/hooks/api-hooks";
 import { api } from "@/lib/api-client";
-import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
+import { parsePhoneNumber, isValidPhoneNumber, getCountryCallingCode } from 'libphonenumber-js';
 import { SEO } from "@/components/SEO";
 
 /**
@@ -39,6 +39,103 @@ interface ReferralInfo {
   clickId: string | null;
 }
 
+// Interface for cached country data
+interface CachedCountry {
+  code: string;
+  expires: number;
+  timestamp: string;
+}
+
+// Constants for country detection caching
+const CACHE_KEY = 'phozos_detected_country';
+const CACHE_DURATION_DAYS = 30;
+
+// Helper functions for country detection and caching
+async function detectCountryCode(): Promise<string | null> {
+  const cached = getCachedCountry();
+  if (cached) {
+    console.log('📍 Using cached country:', cached);
+    return cached;
+  }
+
+  try {
+    const response = await fetch('https://api.ipgeolocation.io/ipgeo?fields=country_code2', {
+      signal: AbortSignal.timeout(3000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const country = data.country_code2;
+      
+      if (country) {
+        cacheCountry(country);
+        console.log('📍 Detected country from IP:', country);
+        return country;
+      }
+    }
+  } catch (error) {
+    console.warn('Primary geolocation API failed:', error);
+  }
+
+  try {
+    const response = await fetch('https://ipinfo.io/json', {
+      signal: AbortSignal.timeout(3000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const country = data.country;
+      
+      if (country) {
+        cacheCountry(country);
+        console.log('📍 Detected country from fallback API:', country);
+        return country;
+      }
+    }
+  } catch (error) {
+    console.error('Fallback geolocation API failed:', error);
+  }
+
+  return null;
+}
+
+function getCachedCountry(): string | null {
+  try {
+    const stored = localStorage.getItem(CACHE_KEY);
+    if (!stored) return null;
+
+    const cached: CachedCountry = JSON.parse(stored);
+    
+    if (Date.now() > cached.expires) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+
+    return cached.code;
+  } catch (error) {
+    console.error('Error reading cached country:', error);
+    return null;
+  }
+}
+
+function cacheCountry(code: string): void {
+  try {
+    const cached: CachedCountry = {
+      code,
+      expires: Date.now() + (CACHE_DURATION_DAYS * 24 * 60 * 60 * 1000),
+      timestamp: new Date().toISOString()
+    };
+    
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
+  } catch (error) {
+    console.error('Error caching country:', error);
+  }
+}
+
+function clearCachedCountry(): void {
+  localStorage.removeItem(CACHE_KEY);
+}
+
 export default function Auth() {
   const [location, navigate] = useLocation();
   const { login, getCsrfToken } = useAuth();
@@ -62,6 +159,10 @@ export default function Auth() {
   const [searchQuery, setSearchQuery] = useState("");
   const [hasReferral, setHasReferral] = useState(false);
   const [referralInfo, setReferralInfo] = useState<ReferralInfo>({ code: null, clickId: null });
+  const [detectedCountry, setDetectedCountry] = useState<string | null>(null);
+  const [isDetectingCountry, setIsDetectingCountry] = useState<boolean>(false);
+  const [contactPickerSupported, setContactPickerSupported] = useState<boolean>(false);
+  const [showContactPickerButton, setShowContactPickerButton] = useState<boolean>(false);
 
   // Handle phone number validation and country detection
   const handlePhoneChange = (phoneNumber: string) => {
@@ -127,10 +228,94 @@ export default function Auth() {
       'BD': 'Bangladesh',
       'PK': 'Pakistan',
       'NP': 'Nepal',
-      'LK': 'Sri Lanka'
+      'LK': 'Sri Lanka',
+      'AF': 'Afghanistan',
+      'AR': 'Argentina',
+      'AT': 'Austria',
+      'BE': 'Belgium',
+      'CH': 'Switzerland',
+      'CL': 'Chile',
+      'CO': 'Colombia',
+      'CZ': 'Czech Republic',
+      'DK': 'Denmark',
+      'FI': 'Finland',
+      'GR': 'Greece',
+      'HK': 'Hong Kong',
+      'IE': 'Ireland',
+      'IL': 'Israel',
+      'IQ': 'Iraq',
+      'JO': 'Jordan',
+      'KW': 'Kuwait',
+      'LB': 'Lebanon',
+      'NL': 'Netherlands',
+      'NO': 'Norway',
+      'NZ': 'New Zealand',
+      'OM': 'Oman',
+      'PE': 'Peru',
+      'PL': 'Poland',
+      'PT': 'Portugal',
+      'QA': 'Qatar',
+      'RO': 'Romania',
+      'SE': 'Sweden',
+      'TR': 'Turkey',
+      'UA': 'Ukraine',
+      'UY': 'Uruguay',
+      'VE': 'Venezuela'
     };
     
     return countryNames[countryCode] || countryCode;
+  };
+
+  // Get calling code from country code
+  const getCallingCode = (countryCode: string): string => {
+    try {
+      const code = getCountryCallingCode(countryCode as any);
+      return `+${code}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Open Contact Picker API for mobile users
+  const openContactPicker = async (): Promise<void> => {
+    if (!('contacts' in navigator)) {
+      console.warn('Contact Picker API not supported');
+      return;
+    }
+
+    try {
+      const props = ['tel', 'name'];
+      const opts = { multiple: false };
+
+      // @ts-ignore - ContactsManager not in TS types yet
+      const contacts = await navigator.contacts.select(props, opts);
+      
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0];
+        
+        if (contact.tel && contact.tel.length > 0) {
+          const phoneNumber = contact.tel[0];
+          handlePhoneChange(phoneNumber);
+          
+          if (contact.name && contact.name.length > 0) {
+            const fullName = contact.name[0];
+            const nameParts = fullName.split(' ');
+            
+            if (!formData.firstName && nameParts.length > 0) {
+              setFormData(prev => ({
+                ...prev,
+                firstName: nameParts[0],
+                lastName: nameParts.slice(1).join(' ') || ''
+              }));
+            }
+          }
+
+          console.log('📱 Contact selected from picker:', contact);
+        }
+      }
+    } catch (error) {
+      console.log('Contact picker cancelled or failed:', error);
+    }
   };
 
   // Query security settings to check team login visibility
@@ -192,6 +377,45 @@ export default function Auth() {
       console.log('📎 Referral detected:', { referralCode, clickId });
     }
   }, []);
+
+  // Detect country on component mount (signup only)
+  useEffect(() => {
+    async function detectAndSetCountry() {
+      setIsDetectingCountry(true);
+      
+      const country = await detectCountryCode();
+      
+      if (country) {
+        setDetectedCountry(country);
+        
+        const callingCode = getCallingCode(country);
+        if (callingCode) {
+          const phoneInput = document.getElementById('phone') as HTMLInputElement;
+          if (phoneInput) {
+            phoneInput.placeholder = `${callingCode} XXXXXXXXXX`;
+          }
+        }
+      }
+      
+      setIsDetectingCountry(false);
+    }
+
+    if (isSignup && loginType === 'student') {
+      detectAndSetCountry();
+    }
+  }, [isSignup, loginType]);
+
+  // Check Contact Picker support
+  useEffect(() => {
+    const isSupported = 'contacts' in navigator && 'ContactsManager' in window;
+    setContactPickerSupported(isSupported);
+    
+    setShowContactPickerButton(isSignup && isSupported);
+    
+    if (isSupported) {
+      console.log('📱 Contact Picker API supported');
+    }
+  }, [isSignup]);
 
   const handleStudentAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -540,13 +764,33 @@ export default function Auth() {
 
               {isSignup && (
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    
+                    {isDetectingCountry && (
+                      <span className="text-xs text-muted-foreground">
+                        Detecting location...
+                      </span>
+                    )}
+                    
+                    {detectedCountry && !isDetectingCountry && (
+                      <span className="text-xs text-green-600 flex items-center gap-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        Detected: {getCountryName(detectedCountry)}
+                      </span>
+                    )}
+                  </div>
+                  
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+1234567890 (include country code)"
+                      placeholder={
+                        detectedCountry 
+                          ? `${getCallingCode(detectedCountry)} XXXXXXXXXX`
+                          : "+1234567890 (include country code)"
+                      }
                       value={formData.phone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
                       className={`pl-10 ${
@@ -556,6 +800,19 @@ export default function Auth() {
                       required
                     />
                   </div>
+                  
+                  {showContactPickerButton && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={openContactPicker}
+                      className="w-full"
+                    >
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Select from Contacts
+                    </Button>
+                  )}
                   
                   {phoneCountry && phoneValid && (
                     <div className="flex items-center gap-2 text-sm text-green-600">
@@ -572,8 +829,24 @@ export default function Auth() {
                   )}
                   
                   <p className="text-xs text-muted-foreground">
-                    Include country code so counselors can contact you easily
+                    {detectedCountry 
+                      ? `We detected you're in ${getCountryName(detectedCountry)}. Include country code so counselors can contact you.`
+                      : 'Include country code so counselors can contact you easily'
+                    }
                   </p>
+                  
+                  {detectedCountry && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearCachedCountry();
+                        setDetectedCountry(null);
+                      }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Wrong country? Click to reset
+                    </button>
+                  )}
                 </div>
               )}
 
