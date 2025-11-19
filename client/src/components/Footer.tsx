@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
-import { CORPORATE_OFFICE, REGISTERED_OFFICE } from "@/lib/company-info";
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
 
 export default function Footer() {
   return (
@@ -45,6 +45,8 @@ export default function Footer() {
                     <div>{CORPORATE_OFFICE.abbreviated}</div>
                     <div className="text-xs font-semibold text-white/70 mt-1">Registered Office</div>
                     <div>{REGISTERED_OFFICE.abbreviated}</div>
+                    <div className="text-xs font-semibold text-white/70 mt-1">US Office</div>
+                    <div>{US_OFFICE.abbreviated}</div>
                   </div>
                 </div>
               </li>

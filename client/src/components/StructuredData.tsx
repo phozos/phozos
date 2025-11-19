@@ -1,5 +1,5 @@
 import { Helmet } from 'react-helmet-async';
-import { CORPORATE_OFFICE, REGISTERED_OFFICE } from '@/lib/company-info';
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from '@/lib/company-info';
 
 interface BreadcrumbItem {
   name: string;
@@ -52,6 +52,17 @@ export function StructuredData({
         "addressCountry": REGISTERED_OFFICE.address.countryCode,
         "name": REGISTERED_OFFICE.label,
         "description": REGISTERED_OFFICE.full
+      },
+      {
+        "@type": "PostalAddress",
+        "streetAddress": US_OFFICE.address.street,
+        "addressLocality": US_OFFICE.address.city,
+        "addressRegion": US_OFFICE.address.state,
+        "postalCode": US_OFFICE.address.postalCode,
+        "addressCountry": US_OFFICE.address.countryCode,
+        "name": US_OFFICE.label,
+        "description": US_OFFICE.full,
+        "telephone": US_OFFICE.phone
       }
     ],
     "areaServed": {

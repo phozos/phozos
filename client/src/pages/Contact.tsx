@@ -4,7 +4,7 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import { SEO } from "@/components/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CORPORATE_OFFICE, REGISTERED_OFFICE } from "@/lib/company-info";
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
 import { 
   Mail, 
   Phone, 
@@ -127,11 +127,11 @@ export default function Contact() {
             <div className="text-center mb-12">
               <h2 className="text-4xl font-bold mb-4">Our Offices</h2>
               <p className="text-xl text-muted-foreground">
-                Visit us at our locations in India
+                Visit us at our locations worldwide
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-8">
               <Card className="border-2 hover:shadow-lg transition-shadow">
                 <CardContent className="p-8">
                   <div className="flex items-start gap-4">
@@ -166,6 +166,36 @@ export default function Contact() {
                         {REGISTERED_OFFICE.address.country}
                       </p>
                       <Badge variant="secondary">Legal Address</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-2 hover:shadow-lg transition-shadow">
+                <CardContent className="p-8">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold mb-2">{US_OFFICE.label}</h3>
+                      <p className="text-muted-foreground mb-4">
+                        {US_OFFICE.address.street}<br />
+                        {US_OFFICE.address.city}, {US_OFFICE.address.state} {US_OFFICE.address.postalCode}<br />
+                        {US_OFFICE.address.country}
+                      </p>
+                      {US_OFFICE.phone && (
+                        <div className="flex items-center gap-2 text-sm mb-4">
+                          <Phone className="w-4 h-4 text-primary" />
+                          <a 
+                            href={`tel:${US_OFFICE.phone.replace(/[^\d+]/g, '')}`}
+                            className="font-medium hover:text-primary transition-colors"
+                          >
+                            {US_OFFICE.phone}
+                          </a>
+                        </div>
+                      )}
+                      <Badge variant="secondary">US Operations</Badge>
                     </div>
                   </div>
                 </CardContent>

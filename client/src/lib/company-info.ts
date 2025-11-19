@@ -14,11 +14,12 @@ export interface Address {
 }
 
 export interface CompanyOffice {
-  type: 'corporate' | 'registered';
+  type: 'corporate' | 'registered' | 'us';
   label: string;
   address: Address;
   abbreviated: string; // For compact displays like footer
   full: string; // For full displays
+  phone?: string; // Optional phone number
 }
 
 /**
@@ -62,9 +63,30 @@ export const REGISTERED_OFFICE: CompanyOffice = {
 };
 
 /**
+ * United States Office
+ * Location: San Francisco, California
+ */
+export const US_OFFICE: CompanyOffice = {
+  type: 'us',
+  label: 'United States Office',
+  address: {
+    street: 'Salesforce Tower, 415 Mission Street',
+    area: '',
+    city: 'San Francisco',
+    state: 'CA',
+    postalCode: '94105',
+    country: 'United States',
+    countryCode: 'US'
+  },
+  abbreviated: 'San Francisco, CA',
+  full: 'Salesforce Tower, 415 Mission Street, San Francisco, CA 94105, United States',
+  phone: '+1 (201) 276-4555'
+};
+
+/**
  * All company offices
  */
-export const COMPANY_OFFICES = [CORPORATE_OFFICE, REGISTERED_OFFICE] as const;
+export const COMPANY_OFFICES = [CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE] as const;
 
 /**
  * Company contact information
@@ -74,5 +96,6 @@ export const COMPANY_INFO = {
   description: 'Study Abroad Platform',
   offices: COMPANY_OFFICES,
   corporateOffice: CORPORATE_OFFICE,
-  registeredOffice: REGISTERED_OFFICE
+  registeredOffice: REGISTERED_OFFICE,
+  usOffice: US_OFFICE
 } as const;
