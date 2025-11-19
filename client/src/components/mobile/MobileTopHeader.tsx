@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 interface MobileTopHeaderProps {
   user: {
@@ -28,8 +29,11 @@ export const MobileTopHeader = ({ user }: MobileTopHeaderProps) => {
     <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
       <div className="flex items-center justify-between h-16 px-4">
         {/* Logo */}
-        <div className="flex items-center">
-          <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+        <div className="flex items-center space-x-2">
+          <div className="w-6 h-6 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-lg flex items-center justify-center p-0.5">
+            <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
+          </div>
+          <h1 className="text-lg font-bold text-foreground">
             Phozos
           </h1>
         </div>

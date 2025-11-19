@@ -30,7 +30,6 @@ import {
   Moon, 
   Sun, 
   Menu, 
-  GraduationCap,
   User,
   LogOut,
   Search,
@@ -39,6 +38,7 @@ import {
   Loader2,
   CreditCard
 } from "lucide-react";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 export default function AppShell() {
   const { user, logout, loading } = useAuth();
@@ -179,8 +179,8 @@ export default function AppShell() {
             onClick={handleLogoClick}
             data-testid="logo-button"
           >
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-amber-500 rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-lg flex items-center justify-center p-1">
+              <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
             </div>
             <span className="text-xl font-bold text-foreground">Phozos</span>
           </div>
