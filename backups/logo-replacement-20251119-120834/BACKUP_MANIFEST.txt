@@ -1,0 +1,47 @@
+LOGO REPLACEMENT BACKUP MANIFEST
+=================================
+Date: Wed Nov 19 12:09:11 PM UTC 2025
+Backup Location: backups/logo-replacement-20251119-120834/
+
+FILES BACKED UP (11 total):
+
+1. Active Logo (1 file):
+   ✓ attached_assets/branding/logo/logo-white.png → logo-white.png.backup (22KB)
+   
+2. Orphaned Logo (1 file):
+   ✓ client/src/assets/branding/logo/logo-white.png → logo-white-orphaned.png.backup (22KB)
+   
+3. Favicon Files (7 files):
+   ✓ client/public/favicon.ico → favicon.ico.backup (7.3KB)
+   ✓ client/public/favicon-16x16.png → favicon-16x16.png.backup (938KB)
+   ✓ client/public/favicon-32x32.png → favicon-32x32.png.backup (938KB)
+   ✓ client/public/favicon-48x48.png → favicon-48x48.png.backup (938KB)
+   ✓ client/public/android-chrome-192x192.png → android-chrome-192x192.png.backup (938KB)
+   ✓ client/public/android-chrome-512x512.png → android-chrome-512x512.png.backup (938KB)
+   ✓ client/public/apple-touch-icon.png → apple-touch-icon.png.backup (938KB)
+   
+4. Configuration Files (2 files):
+   ✓ client/index.html → index.html.backup (2.0KB)
+   ✓ client/public/site.webmanifest → site.webmanifest.backup (455 bytes)
+
+TOTAL BACKUP SIZE: 5.6MB
+
+MD5 CHECKSUMS:
+See all-backups.md5 file
+
+ROLLBACK INSTRUCTIONS:
+To restore all files to their original state:
+  cd backups/logo-replacement-20251119-120834/
+  ./restore-backup.sh
+
+NOTES:
+- This backup was created before implementing the logo replacement plan
+- Original favicon files were severely oversized (938KB each, all 512x512)
+- Expected improvement after replacement: ~99.5% size reduction
+- Active logo path uses @assets alias → attached_assets/branding/logo/
+- Orphaned logo in client/src/assets/ is not referenced by any component
+
+VERIFICATION:
+To verify backup integrity:
+  cd backups/logo-replacement-20251119-120834/
+  md5sum -c all-backups.md5
