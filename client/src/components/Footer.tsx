@@ -1,11 +1,18 @@
 import { Link } from "wouter";
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
 import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 export default function Footer() {
   return (
     <footer className="bg-gradient-to-r from-primary via-purple-700 to-pink-600 border-t border-purple-600/20 py-12">
       <div className="container mx-auto px-4">
+        {/* Logo Branding Section */}
+        <div className="flex items-center gap-3 mb-8">
+          <img src={logoWhite} alt="Phozos Logo" className="h-8 w-auto" />
+          <span className="text-white text-xl font-semibold">Phozos</span>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Column 1: Company */}
           <div>

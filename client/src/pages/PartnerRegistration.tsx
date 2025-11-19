@@ -24,6 +24,7 @@ import { Building2, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle } from "lu
 import { useToast } from "@/hooks/use-toast";
 import { SEO } from "@/components/SEO";
 import { BUSINESS_TYPES } from "@shared/types/partner-types";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 // Zod validation schema
 const partnerRegistrationSchema = z.object({
@@ -155,8 +156,8 @@ export default function PartnerRegistration() {
           {/* Registration Card */}
           <Card className="w-full">
             <CardHeader className="text-center space-y-2">
-              <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-2xl flex items-center justify-center mx-auto">
-                <Building2 className="w-8 h-8 text-white" />
+              <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-2xl flex items-center justify-center mx-auto p-2">
+                <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
               </div>
               <CardTitle className="text-3xl">Partner Registration</CardTitle>
               <CardDescription>
