@@ -9,7 +9,7 @@ export default function Footer() {
       <div className="container mx-auto px-4">
         {/* Logo Branding Section */}
         <div className="flex items-center gap-3 mb-8">
-          <img src={logoWhite} alt="Phozos Logo" className="h-8 w-auto" />
+          <img src={logoWhite} alt="Phozos Logo" className="h-8 w-auto" loading="lazy" />
           <span className="text-white text-xl font-semibold">Phozos</span>
         </div>
 

@@ -608,7 +608,7 @@ export default function Auth() {
           {/* Logo and Title */}
           <div className="text-center space-y-2">
             <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-2xl flex items-center justify-center mx-auto p-2">
-              <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
+              <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" loading="lazy" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">Welcome to Phozos</h1>
             <p className="text-muted-foreground">Choose how you'd like to sign in</p>
@@ -715,7 +715,7 @@ export default function Auth() {
           <Card className="w-full">
             <CardHeader className="text-center space-y-2">
               <div className="w-12 h-12 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center mx-auto p-2">
-                <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
+                <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" loading="lazy" />
               </div>
               <CardTitle className="text-2xl">
                 {isSignup ? "Get Started - Create Account" : "Sign In to Your Account"}

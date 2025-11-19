@@ -157,7 +157,7 @@ export default function PartnerRegistration() {
           <Card className="w-full">
             <CardHeader className="text-center space-y-2">
               <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-2xl flex items-center justify-center mx-auto p-2">
-                <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
+                <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" loading="lazy" />
               </div>
               <CardTitle className="text-3xl">Partner Registration</CardTitle>
               <CardDescription>
