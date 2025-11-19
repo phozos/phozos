@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
+import { CORPORATE_OFFICE, REGISTERED_OFFICE } from "@/lib/company-info";
 
 export default function Footer() {
   return (
@@ -40,8 +41,10 @@ export default function Footer() {
                 <div className="text-white/90 inline-flex items-start gap-2 mt-2">
                   <MapPin size={16} className="mt-1 flex-shrink-0" />
                   <div>
-                    <div>Bengaluru, Karnataka</div>
-                    <div>Bathinda, Punjab</div>
+                    <div className="text-xs font-semibold text-white/70">Corporate Office</div>
+                    <div>{CORPORATE_OFFICE.abbreviated}</div>
+                    <div className="text-xs font-semibold text-white/70 mt-1">Registered Office</div>
+                    <div>{REGISTERED_OFFICE.abbreviated}</div>
                   </div>
                 </div>
               </li>
