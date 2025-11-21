@@ -113,6 +113,24 @@ router.get('/payment-settings', asyncHandler((req: AuthenticatedRequest, res: Re
 router.put('/payment-settings/:gateway', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updatePaymentSettings(req, res)));
 router.patch('/payment-settings/:gateway/toggle', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.togglePaymentGateway(req, res)));
 
+// Webhook Metrics (Phase 4 - Monitoring & Testing)
+router.get('/webhook-metrics', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+  const { webhookQueueService } = await import('../services/infrastructure/webhook-queue.service');
+  
+  const metrics = webhookMetricsService.getDetailedMetrics();
+  const queueStats = await webhookQueueService.getQueueStats();
+  
+  res.json({
+    success: true,
+    data: {
+      metrics,
+      queue: queueStats,
+      summary: webhookMetricsService.getSummary(),
+    }
+  });
+}));
+
 // Subscription Plans
 router.get('/subscription-plans', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionPlans(req, res)));
 router.post('/subscription-plans', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createSubscriptionPlan(req, res)));

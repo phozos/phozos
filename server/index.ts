@@ -25,6 +25,7 @@ import { paymentAlertsScheduler } from "./services/infrastructure/payment-alerts
 import { subscriptionAuditOutboxProcessor } from "./services/infrastructure/subscription-audit-outbox-processor";
 import { archiveOutboxEventsJob } from "./jobs/archive-completed-outbox-events";
 import { jobScheduler } from "./jobs/scheduler";
+import { webhookProcessor } from "./jobs/webhook-processor";
 
 // Phase 1: Centralized configuration module (replaces scattered process.env usage)
 import config, { isDev, isProd, featuresConfig, corsConfig, securityConfig } from "./config/index";
@@ -385,6 +386,17 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
       console.error('   This is not a critical error - the server will continue running.');
     }
 
+    // Start webhook processor for async webhook processing (Phase 3)
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      webhookProcessor.start();
+      console.log('✅ Webhook processor started for async webhook processing');
+    } catch (error) {
+      console.error('❌ Failed to start webhook processor:', error);
+      console.error('   Webhook processing will not occur asynchronously.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
+
     // Start archive outbox events job for cleanup
     // This runs after server is listening to ensure all services are initialized
     try {
@@ -424,6 +436,13 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
       console.log('✅ Subscription audit outbox processor stopped');
     } catch (error) {
       console.error('❌ Error stopping subscription audit outbox processor:', error);
+    }
+
+    try {
+      webhookProcessor.stop();
+      console.log('✅ Webhook processor stopped');
+    } catch (error) {
+      console.error('❌ Error stopping webhook processor:', error);
     }
 
     try {

@@ -519,25 +519,53 @@ export class PaymentController extends BaseController {
    * @access Public (but verified via HMAC signature)
    */
   async handleWebhook(req: Request, res: Response) {
+    // PHASE 4: Track webhook metrics for monitoring
+    const startTime = Date.now();
+    const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+    webhookMetricsService.recordWebhookReceived();
+
     try {
       logger.info('Webhook received from Razorpay');
 
       // Verify we received raw body (Buffer) for signature verification
       if (!Buffer.isBuffer(req.body)) {
-        logger.error('Webhook received parsed body instead of raw Buffer');
-        return res.status(400).json({
-          error: 'Webhook must receive raw body for signature verification. Check middleware order in server/index.ts'
+        logger.error('Webhook received parsed body instead of raw Buffer', {
+          bodyType: typeof req.body,
+          urgency: 'high',
+          action: 'Check middleware order in server/index.ts'
         });
+        // Return 200 OK to prevent Razorpay retries (configuration issue, not webhook issue)
+        return res.status(200).send('OK');
       }
 
+      // PHASE 2: Extract event ID from HTTP header (NOT body) for proper idempotency
+      // Razorpay provides x-razorpay-event-id header with unique event identifier
+      const eventId = req.headers['x-razorpay-event-id'] as string;
       const signature = req.headers['x-razorpay-signature'] as string;
       
-      if (!signature) {
-        logger.error('Webhook missing signature header');
-        return res.status(400).json({
-          success: false,
-          message: 'Missing webhook signature'
+      if (!eventId) {
+        const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+        webhookMetricsService.recordResponseTime(Date.now() - startTime);
+        logger.error('Webhook missing x-razorpay-event-id header', {
+          headers: Object.keys(req.headers),
+          urgency: 'high',
+          action: 'Verify Razorpay webhook version and configuration'
         });
+        // Return 200 OK to prevent retries (missing required header)
+        return res.status(200).send('OK');
+      }
+
+      if (!signature) {
+        const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+        webhookMetricsService.recordResponseTime(Date.now() - startTime);
+        logger.error('Webhook missing signature header', {
+          eventId,
+          headers: Object.keys(req.headers),
+          urgency: 'high',
+          action: 'Verify Razorpay webhook configuration'
+        });
+        // Return 200 OK to prevent Razorpay retries (invalid request format)
+        return res.status(200).send('OK');
       }
 
       // req.body will be a Buffer when using express.raw() middleware
@@ -547,10 +575,20 @@ export class PaymentController extends BaseController {
       const isValid = razorpayService.verifyWebhookSignature(webhookBody, signature);
 
       if (!isValid) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid webhook signature'
+        const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+        webhookMetricsService.recordSignatureFailure();
+        webhookMetricsService.recordResponseTime(Date.now() - startTime);
+        logger.error('Webhook signature verification failed', {
+          eventId,
+          receivedSignaturePrefix: signature.substring(0, 16) + '...',
+          bodyLength: webhookBody.length,
+          contentType: req.headers['content-type'],
+          clientIp: req.ip,
+          urgency: 'critical',
+          action: 'Verify RAZORPAY_WEBHOOK_SECRET environment variable'
         });
+        // Return 200 OK to prevent infinite retries (signature mismatch could be transient)
+        return res.status(200).send('OK');
       }
 
       // Parse JSON after signature verification
@@ -561,20 +599,20 @@ export class PaymentController extends BaseController {
 
       const event = parsedBody.event;
       const payload = parsedBody.payload;
-      const eventId = parsedBody.event_id || parsedBody.id;
 
       // TIMESTAMP VALIDATION: Prevent replay attacks by rejecting old webhooks
       const createdAt = parsedBody.created_at;
       
       if (!createdAt) {
         logger.warn('Webhook missing created_at timestamp - rejecting as invalid', {
+          eventId,
           event,
-          orderId: parsedBody.payload?.payment?.entity?.order_id
+          orderId: parsedBody.payload?.payment?.entity?.order_id,
+          urgency: 'medium',
+          action: 'Logged for monitoring, webhook ignored'
         });
-        return res.status(400).json({
-          error: 'WEBHOOK_INVALID',
-          message: 'Webhook missing created_at timestamp'
-        });
+        // Return 200 OK to prevent retries (malformed webhook)
+        return res.status(200).send('OK');
       }
 
       // Calculate webhook age in seconds (Razorpay created_at is Unix timestamp in seconds)
@@ -583,38 +621,34 @@ export class PaymentController extends BaseController {
 
       // Reject webhooks older than 5 minutes (300 seconds)
       if (age > 300) {
+        const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+        webhookMetricsService.recordTimestampFailure();
+        webhookMetricsService.recordResponseTime(Date.now() - startTime);
         logger.warn('Webhook timestamp too old - possible replay attack', {
+          eventId,
           age: age.toFixed(2),
           createdAt: new Date(createdAt * 1000).toISOString(),
           currentTime: new Date(currentTimestamp * 1000).toISOString(),
-          event
+          event,
+          urgency: 'high',
+          action: 'Possible replay attack detected, webhook ignored'
         });
-        return res.status(400).json({
-          error: 'WEBHOOK_TOO_OLD',
-          message: 'Webhook timestamp too old, possible replay attack'
-        });
+        // Return 200 OK to prevent retries (potential replay attack)
+        return res.status(200).send('OK');
       }
 
       logger.info('Webhook timestamp validated successfully', {
+        eventId,
         age: age.toFixed(2),
         event
       });
 
-      // DEDUPLICATION: Check if this event has already been processed
-      if (!eventId) {
-        logger.error('Webhook missing event_id', {
-          event,
-          payload: parsedBody
-        });
-        return res.status(400).json({
-          success: false,
-          message: 'Webhook missing event_id'
-        });
-      }
-
       // Check if event already processed
       const isProcessed = await webhookDeduplicationService.isEventProcessed(eventId);
       if (isProcessed) {
+        const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+        webhookMetricsService.recordDuplicate();
+        webhookMetricsService.recordResponseTime(Date.now() - startTime);
         logger.info('Webhook event already processed - idempotent response', {
           eventId,
           event
@@ -625,58 +659,36 @@ export class PaymentController extends BaseController {
       // Record new event in database
       await webhookDeduplicationService.recordEvent(eventId, event, parsedBody);
 
-      try {
-        // Handle different webhook events
-        switch (event) {
-          case 'payment.captured':
-            await this.handlePaymentCaptured(payload.payment.entity);
-            break;
+      // PHASE 3: Queue webhook for async processing (fast path)
+      // This decouples webhook receipt from business logic processing
+      // Target: <100ms response time vs. 660ms synchronous processing
+      const { webhookQueueService } = await import('../services/infrastructure/webhook-queue.service');
+      await webhookQueueService.enqueue(eventId, event, parsedBody);
 
-          case 'payment.failed':
-            await this.handlePaymentFailed(payload.payment.entity);
-            break;
+      logger.info('Webhook queued for async processing', { eventId, event });
 
-          case 'order.paid':
-            await this.handleOrderPaid(payload.order.entity);
-            break;
+      // PHASE 4: Record successful webhook response time
+      const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+      webhookMetricsService.recordResponseTime(Date.now() - startTime);
 
-          default:
-            logger.info('Unhandled webhook event received', {
-              event,
-              eventId
-            });
-        }
-
-        // Mark event as successfully processed
-        await webhookDeduplicationService.markSuccess(eventId);
-
-        // Always respond 200 OK to Razorpay
-        return res.status(200).send('OK');
-      } catch (processingError) {
-        // Mark event as failed with error details
-        const errorMessage = processingError instanceof Error 
-          ? processingError.message 
-          : 'Unknown error during webhook processing';
-        
-        await webhookDeduplicationService.markFailed(eventId, errorMessage);
-        
-        logger.error('Webhook processing error', {
-          error: processingError instanceof Error ? processingError.message : 'Unknown error',
-          stack: processingError instanceof Error ? processingError.stack : undefined,
-          eventId,
-          event
-        });
-        
-        // Still return 200 OK to prevent Razorpay retries
-        // The event is marked as failed in our database for manual review
-        return res.status(200).send('OK');
-      }
+      // Return 200 OK immediately (fast path complete)
+      // Background processor will handle business logic asynchronously
+      return res.status(200).send('OK');
     } catch (error) {
+      // PHASE 4: Record processing error
+      const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+      webhookMetricsService.recordProcessingError();
+      webhookMetricsService.recordResponseTime(Date.now() - startTime);
+
       logger.error('Webhook error - top level catch', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
+        urgency: 'critical',
+        action: 'Unexpected error in webhook handler, investigate immediately'
       });
-      return res.status(500).send('Internal server error');
+      // Return 200 OK to prevent infinite retries even on unexpected errors
+      // Log for manual investigation and alerting
+      return res.status(200).send('OK');
     }
   }
 
@@ -1031,20 +1043,39 @@ export class PaymentController extends BaseController {
 
       // Verify we received raw body (Buffer) for signature verification
       if (!Buffer.isBuffer(req.body)) {
-        logger.error('Refund webhook received parsed body instead of raw Buffer');
-        return res.status(400).json({
-          error: 'Webhook must receive raw body for signature verification. Check middleware order in server/index.ts'
+        logger.error('Refund webhook received parsed body instead of raw Buffer', {
+          bodyType: typeof req.body,
+          urgency: 'high',
+          action: 'Check middleware order in server/index.ts'
         });
+        // Return 200 OK to prevent Razorpay retries (configuration issue, not webhook issue)
+        return res.status(200).send('OK');
       }
 
+      // PHASE 2: Extract event ID from HTTP header (NOT body) for proper idempotency
+      // Razorpay provides x-razorpay-event-id header with unique event identifier
+      const eventId = req.headers['x-razorpay-event-id'] as string;
       const signature = req.headers['x-razorpay-signature'] as string;
       
-      if (!signature) {
-        logger.error('Refund webhook missing signature header');
-        return res.status(400).json({
-          success: false,
-          message: 'Missing webhook signature'
+      if (!eventId) {
+        logger.error('Refund webhook missing x-razorpay-event-id header', {
+          headers: Object.keys(req.headers),
+          urgency: 'high',
+          action: 'Verify Razorpay webhook version and configuration'
         });
+        // Return 200 OK to prevent retries (missing required header)
+        return res.status(200).send('OK');
+      }
+
+      if (!signature) {
+        logger.error('Refund webhook missing signature header', {
+          eventId,
+          headers: Object.keys(req.headers),
+          urgency: 'high',
+          action: 'Verify Razorpay webhook configuration'
+        });
+        // Return 200 OK to prevent Razorpay retries (invalid request format)
+        return res.status(200).send('OK');
       }
 
       // req.body will be a Buffer when using express.raw() middleware
@@ -1054,10 +1085,17 @@ export class PaymentController extends BaseController {
       const isValid = razorpayService.verifyWebhookSignature(webhookBody, signature);
 
       if (!isValid) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid webhook signature'
+        logger.error('Refund webhook signature verification failed', {
+          eventId,
+          receivedSignaturePrefix: signature.substring(0, 16) + '...',
+          bodyLength: webhookBody.length,
+          contentType: req.headers['content-type'],
+          clientIp: req.ip,
+          urgency: 'critical',
+          action: 'Verify RAZORPAY_WEBHOOK_SECRET environment variable'
         });
+        // Return 200 OK to prevent infinite retries (signature mismatch could be transient)
+        return res.status(200).send('OK');
       }
 
       // Parse JSON after signature verification
@@ -1069,29 +1107,30 @@ export class PaymentController extends BaseController {
         payload = JSON.parse(bodyString);
       } catch (parseError) {
         logger.error('Failed to parse refund webhook JSON', {
-          error: parseError instanceof Error ? parseError.message : 'Unknown error'
+          eventId,
+          error: parseError instanceof Error ? parseError.message : 'Unknown error',
+          urgency: 'high',
+          action: 'Malformed JSON in webhook payload'
         });
-        return res.status(400).json({
-          error: 'WEBHOOK_PARSE_ERROR',
-          message: 'Failed to parse webhook payload'
-        });
+        // Return 200 OK to prevent retries (malformed JSON)
+        return res.status(200).send('OK');
       }
 
       const event = payload.event;
-      const eventId = payload.event_id || payload.id;
 
       // TIMESTAMP VALIDATION: Prevent replay attacks by rejecting old webhooks
       const createdAt = payload.created_at;
       
       if (!createdAt) {
         logger.warn('Refund webhook missing created_at timestamp - rejecting as invalid', {
+          eventId,
           event,
-          refundId: payload.payload?.refund?.entity?.id
+          refundId: payload.payload?.refund?.entity?.id,
+          urgency: 'medium',
+          action: 'Logged for monitoring, webhook ignored'
         });
-        return res.status(400).json({
-          error: 'WEBHOOK_INVALID',
-          message: 'Webhook missing created_at timestamp'
-        });
+        // Return 200 OK to prevent retries (malformed webhook)
+        return res.status(200).send('OK');
       }
 
       // Calculate webhook age in seconds (Razorpay created_at is Unix timestamp in seconds)
@@ -1101,33 +1140,23 @@ export class PaymentController extends BaseController {
       // Reject webhooks older than 5 minutes (300 seconds)
       if (age > 300) {
         logger.warn('Refund webhook timestamp too old - possible replay attack', {
+          eventId,
           age: age.toFixed(2),
           createdAt: new Date(createdAt * 1000).toISOString(),
           currentTime: new Date(currentTimestamp * 1000).toISOString(),
-          event
+          event,
+          urgency: 'high',
+          action: 'Possible replay attack detected, webhook ignored'
         });
-        return res.status(400).json({
-          error: 'WEBHOOK_TOO_OLD',
-          message: 'Webhook timestamp too old, possible replay attack'
-        });
+        // Return 200 OK to prevent retries (potential replay attack)
+        return res.status(200).send('OK');
       }
 
       logger.info('Refund webhook timestamp validated successfully', {
+        eventId,
         age: age.toFixed(2),
         event
       });
-
-      // DEDUPLICATION: Check if this event has already been processed
-      if (!eventId) {
-        logger.error('Refund webhook missing event_id', {
-          event,
-          payload
-        });
-        return res.status(400).json({
-          success: false,
-          message: 'Webhook missing event_id'
-        });
-      }
 
       // Check if event already processed
       const isProcessed = await webhookDeduplicationService.isEventProcessed(eventId);
@@ -1184,9 +1213,13 @@ export class PaymentController extends BaseController {
     } catch (error) {
       logger.error('Refund webhook error - top level catch', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
+        urgency: 'critical',
+        action: 'Unexpected error in refund webhook handler, investigate immediately'
       });
-      return res.status(500).send('Internal server error');
+      // Return 200 OK to prevent infinite retries even on unexpected errors
+      // Log for manual investigation and alerting
+      return res.status(200).send('OK');
     }
   }
 

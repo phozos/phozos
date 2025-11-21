@@ -31,6 +31,7 @@ export const supportTypeEnum = pgEnum("support_type", ["email", "whatsapp", "pho
 export const universityTierEnum = pgEnum("university_tier", ["general", "top500", "top200", "top100", "ivy_league"]);
 export const reportReasonEnum = pgEnum("report_reason", ["spam", "inappropriate", "harassment", "misinformation", "off_topic", "other"]);
 export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "completed", "failed"]);
+export const webhookQueueStatusEnum = pgEnum("webhook_queue_status", ["pending", "processing", "success", "failed"]);
 export const deprecationPhaseEnum = pgEnum("deprecation_phase", ["announcement", "grace_period", "soft_disable", "hard_removal"]);
 export const deprecationStatusEnum = pgEnum("deprecation_status", ["scheduled", "in_progress", "completed", "cancelled"]);
 export const paymentTypeEnum = pgEnum("payment_type", ["new_subscription", "upgrade", "renewal"]);
@@ -1125,6 +1126,21 @@ export const webhookEvents = pgTable("webhook_events", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Webhook Queue table (for async webhook processing)
+export const webhookQueue = pgTable("webhook_queue", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: text("event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload").notNull(),
+  status: webhookQueueStatusEnum("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  nextRetryAt: timestamp("next_retry_at").defaultNow(),
+});
+
 // Subscription Events table (for audit trail)
 export const subscriptionEvents = pgTable("subscription_events", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1489,6 +1505,8 @@ export type PaymentSettings = typeof paymentSettings.$inferSelect;
 export type InsertPaymentSettings = z.infer<typeof insertPaymentSettingsSchema>;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
+export type WebhookQueueItem = typeof webhookQueue.$inferSelect;
+export type InsertWebhookQueueItem = typeof webhookQueue.$inferInsert;
 export type SubscriptionEvent = typeof subscriptionEvents.$inferSelect;
 export type InsertSubscriptionEvent = z.infer<typeof insertSubscriptionEventSchema>;
 export type Payment = typeof payments.$inferSelect;
