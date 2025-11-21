@@ -125,11 +125,38 @@ app.use(cors({
 
 // CRITICAL: Webhook endpoint must receive raw body for signature verification
 // This MUST come before express.json() middleware
-// Limit webhook payload to 1KB to prevent large payload attacks
-app.use('/api/payment/webhook', express.raw({ type: 'application/json', limit: '1kb' }));
+// Razorpay webhooks: Max observed ~1.2KB, using 2KB for safety margin
+// Blocks payloads >2KB to prevent DDoS attacks while allowing legitimate webhooks
+app.use('/api/payment/webhook', express.raw({ type: 'application/json', limit: '2kb' }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Global body size limits to prevent large payload attacks
+// 100KB is Express default; reducing to 10KB for better security
+// Most API requests are <5KB; 10KB provides comfortable margin
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+
+// Custom error handler for body size limit exceeded
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.too.large') {
+    // Log rejected oversized payloads for security monitoring
+    console.warn('Request body too large rejected', {
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      contentLength: req.headers['content-length'],
+      limit: err.limit,
+    });
+    
+    return res.status(413).json({
+      success: false,
+      error: 'PAYLOAD_TOO_LARGE',
+      message: 'Request body exceeds maximum allowed size',
+      limit: err.limit,
+    });
+  }
+  next(err);
+});
+
 app.use(cookieParser());
 
 // Add CSRF token provider globally (safe - only adds token generation capability)

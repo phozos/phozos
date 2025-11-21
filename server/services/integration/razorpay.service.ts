@@ -83,7 +83,17 @@ export class RazorpayService {
 
   /**
    * Verify webhook signature for security
+   * 
+   * SECURITY: Uses constant-time comparison to prevent timing attacks
+   * - Converts signatures to Buffers for crypto.timingSafeEqual()
+   * - Comparison time is independent of signature content
+   * - Prevents attackers from leaking signature bytes via timing analysis
+   * 
    * Accepts Buffer (raw body) or string
+   * 
+   * @param webhookBody - Raw webhook body (Buffer or string)
+   * @param signature - x-razorpay-signature header value (hex string)
+   * @returns true if signature is valid, false otherwise
    */
   verifyWebhookSignature(
     webhookBody: Buffer | string,
@@ -98,7 +108,25 @@ export class RazorpayService {
       .update(bodyString)
       .digest('hex');
 
-    return expectedSignature === signature;
+    // Use timing-safe comparison to prevent timing attacks
+    // Both signatures are hex strings (64 chars each)
+    // Convert to Buffer for constant-time comparison
+    try {
+      const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+      const actualBuffer = Buffer.from(signature, 'hex');
+      
+      // timingSafeEqual throws if buffers have different lengths
+      // This is safe - length check happens in constant time
+      if (expectedBuffer.length !== actualBuffer.length) {
+        return false;
+      }
+      
+      return crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+    } catch (error) {
+      // Buffer.from or timingSafeEqual can throw on invalid input
+      // Invalid signature format = failed verification
+      return false;
+    }
   }
 
   /**
