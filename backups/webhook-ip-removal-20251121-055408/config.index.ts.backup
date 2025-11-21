@@ -202,14 +202,6 @@ const razorpayConfigSchema = z.object({
   keyId: z.string().min(1, 'RAZORPAY_KEY_ID is required'),
   keySecret: z.string().min(1, 'RAZORPAY_KEY_SECRET is required'),
   webhookSecret: z.string().min(1, 'RAZORPAY_WEBHOOK_SECRET is required'),
-  /**
-   * @deprecated As of November 2025
-   * @reason IP whitelisting removed in favor of signature-only verification
-   * @see WEBHOOK_IP_WHITELIST_REMOVAL_IMPLEMENTATION_PLAN.md
-   * 
-   * Kept for backward compatibility and rollback capability.
-   * Not used in production webhook validation.
-   */
   webhookIps: commaSeparatedSchema.transform((ips) => {
     // Default to Razorpay's official webhook IP addresses if not configured
     if (ips.length === 0) {

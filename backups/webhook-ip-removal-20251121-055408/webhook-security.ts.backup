@@ -1,22 +1,13 @@
 /**
  * Webhook Security Middleware
  * 
- * Provides rate limiting for webhook endpoints to protect against DDoS attacks.
+ * Provides IP whitelisting and rate limiting for webhook endpoints
+ * to protect against DDoS attacks and unauthorized access.
  * 
- * SECURITY ARCHITECTURE (Updated November 2025):
- * This module previously included IP whitelisting, which has been deprecated in favor
- * of signature-only verification (industry best practice). The current security model uses:
- * 
- * 1. Rate Limiting (10 req/min per IP) - DDoS protection
- * 2. HMAC Signature Verification - Cryptographic authentication
- * 3. Timestamp Validation - Replay attack prevention
- * 4. Event Deduplication - Duplicate processing prevention
- * 
- * IP whitelisting removed because:
- * - Cloud proxies make IP validation unreliable (Replit, AWS, Heroku)
- * - Requires platform-specific TRUST_PROXY configuration
- * - Not recommended by payment providers (Stripe, Razorpay, PayPal)
- * - Signature verification provides superior cryptographic security
+ * CRITICAL: Handles IPv6-mapped IPv4 addresses from proxies
+ * Production webhooks arrive through proxies (Nginx, AWS ALB) which
+ * expose IPs as IPv6-mapped format (::ffff:3.7.71.51 instead of 3.7.71.51).
+ * This middleware normalizes all IPs before validation to prevent false rejections.
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -25,18 +16,11 @@ import logger from '../utils/logger';
 import { razorpayConfig } from '../config';
 
 /**
- * @deprecated As of November 2025
- * @reason IP whitelisting removed in favor of signature-only verification
- * @see https://razorpay.com/docs/webhooks/ - Recommends signature verification
- * @migration Use HMAC signature verification instead (razorpayService.verifyWebhookSignature)
- * 
  * Normalize IPv6-mapped IPv4 addresses to pure IPv4 format
  * 
  * Converts: ::ffff:3.7.71.51 → 3.7.71.51
  * Preserves: 3.7.71.51 → 3.7.71.51
  * Preserves: 2001:db8::1 → 2001:db8::1 (pure IPv6)
- * 
- * KEPT FOR ROLLBACK CAPABILITY ONLY - Not used in production
  * 
  * @param ip - IP address to normalize
  * @returns Normalized IP address
@@ -53,31 +37,18 @@ function normalizeIp(ip: string): string {
 }
 
 /**
- * @deprecated As of November 2025
- * @reason IP whitelisting is unreliable in cloud proxy environments (Replit, AWS, Heroku)
- * @replacement Use signature-only verification (razorpayService.verifyWebhookSignature)
- * @see WEBHOOK_IP_WHITELIST_REMOVAL_IMPLEMENTATION_PLAN.md for details
- * 
  * IP Whitelist Middleware for Razorpay Webhooks
  * 
  * Validates that webhook requests come from authorized Razorpay IP addresses.
  * Rejects requests from non-whitelisted IPs with 403 Forbidden.
  * 
- * DEPRECATED RATIONALE:
- * - Cloud proxies (Replit, AWS ELB, Heroku) make IP validation fragile
- * - Requires complex TRUST_PROXY configuration that varies by platform
- * - Not recommended by payment providers (Stripe, GitHub, PayPal use signature-only)
- * - HMAC signature verification provides cryptographically superior security
+ * SECURITY: Uses Express's req.ip for IP validation
+ * - Express automatically handles X-Forwarded-For when trust proxy is enabled
+ * - Prevents IP spoofing attacks (manual header parsing removed)
+ * - Normalizes IPv6-mapped IPv4 addresses (::ffff:3.7.71.51 → 3.7.71.51)
+ * - Validates against Razorpay's official webhook IP ranges
  * 
- * MIGRATION PATH:
- * This function is kept intact for rollback capability but is not used in production routes.
- * All webhook security now relies on:
- * 1. Rate limiting (webhookRateLimit) - DDoS protection
- * 2. Signature verification (controller) - Cryptographic authentication
- * 3. Timestamp validation (controller) - Replay attack prevention
- * 4. Event deduplication (controller) - Duplicate processing prevention
- * 
- * KEPT FOR ROLLBACK CAPABILITY ONLY - Not used in production
+ * REQUIRES: Express trust proxy must be enabled (app.set('trust proxy', true))
  * 
  * @param req - Express request object
  * @param res - Express response object

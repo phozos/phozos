@@ -32,17 +32,28 @@ Your application has **two webhook endpoints** configured:
 
 ### Security Measures
 
-Your webhook implementation uses **4-layer security architecture** (Updated November 2025):
+Your webhook implementation has **multi-layered security**:
 
-**Security Philosophy**: Relies on HMAC-SHA256 cryptographic verification (industry best practice) rather than IP-based filtering. This approach is more reliable in cloud proxy environments and recommended by major payment providers (Stripe, PayPal, Razorpay).
+#### Layer 1: IP Whitelisting
+- **Middleware**: `webhookIpWhitelist` in `server/middleware/webhook-security.ts`
+- **Function**: Only accepts webhooks from Razorpay's official IP addresses
+- **Default IPs**:
+  - `3.7.71.51`
+  - `3.7.71.52`
+  - `3.7.71.53`
+- **Features**:
+  - Normalizes IPv6-mapped IPv4 addresses (e.g., `::ffff:3.7.71.51` → `3.7.71.51`)
+  - Requires `trust proxy` to be configured correctly
+  - Returns `403 Forbidden` for unauthorized IPs
+  - Logs all rejected attempts
 
-#### Layer 1: Rate Limiting
+#### Layer 2: Rate Limiting
 - **Middleware**: `webhookRateLimit` in `server/middleware/webhook-security.ts`
 - **Limits**: 10 requests per minute per IP
 - **Purpose**: Prevents DDoS attacks and webhook spam
 - **Response**: `429 Too Many Requests` when exceeded
 
-#### Layer 2: Signature Verification (Primary Security)
+#### Layer 3: Signature Verification
 - **Method**: HMAC SHA256 signature verification
 - **Header**: `x-razorpay-signature`
 - **Secret**: Uses `RAZORPAY_WEBHOOK_SECRET` environment variable
@@ -52,13 +63,13 @@ Your webhook implementation uses **4-layer security architecture** (Updated Nove
   3. Compares computed signature with received signature
   4. Rejects if signatures don't match
 
-#### Layer 3: Timestamp Validation
+#### Layer 4: Timestamp Validation
 - **Purpose**: Prevents replay attacks
 - **Validation**: Rejects webhooks older than 5 minutes (300 seconds)
 - **Field**: Uses `created_at` field from webhook payload
 - **Response**: `400 WEBHOOK_TOO_OLD` for expired webhooks
 
-#### Layer 4: Event Deduplication
+#### Layer 5: Deduplication
 - **Purpose**: Prevents duplicate processing of the same event
 - **Table**: `webhook_events` in database
 - **Fields**:

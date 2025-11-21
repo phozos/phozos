@@ -2,7 +2,7 @@ import express, { Router, Response } from 'express';
 import { paymentController } from '../controllers/payment.controller';
 import { requireAuth } from '../middleware/authentication';
 import { asyncHandler } from '../middleware/error-handler';
-import { webhookRateLimit } from '../middleware/webhook-security';
+import { webhookIpWhitelist, webhookRateLimit } from '../middleware/webhook-security';
 import { AuthenticatedRequest } from '../types/auth';
 
 const router = Router();
@@ -16,14 +16,14 @@ router.post('/verify', requireAuth, asyncHandler((req: AuthenticatedRequest, res
   paymentController.verifyPayment(req, res)
 ));
 
-// Public webhook endpoint (verified via HMAC signature)
+// Public webhook endpoint (verified via signature)
 // Raw body handling configured globally in server/index.ts
-// Security: Rate limit first, then signature verification in controller
-router.post('/webhook', webhookRateLimit, asyncHandler((req: AuthenticatedRequest, res: Response) => 
+// Security: IP whitelist first, then rate limit, then handler
+router.post('/webhook', webhookIpWhitelist, webhookRateLimit, asyncHandler((req: AuthenticatedRequest, res: Response) => 
   paymentController.handleWebhook(req, res)
 ));
 
-router.post('/webhook/refund', webhookRateLimit, asyncHandler((req: AuthenticatedRequest, res: Response) => 
+router.post('/webhook/refund', webhookIpWhitelist, webhookRateLimit, asyncHandler((req: AuthenticatedRequest, res: Response) => 
   paymentController.handleRefundWebhook(req, res)
 ));
 
