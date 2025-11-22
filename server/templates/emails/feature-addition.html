@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 5px 5px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      background-color: #f9fafb;
+      padding: 30px 20px;
+      border: 1px solid #e5e7eb;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 25px;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      border-left: 4px solid #10b981;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #059669;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .feature-name {
+      font-size: 22px;
+      font-weight: bold;
+      color: #10b981;
+      margin-bottom: 15px;
+    }
+    .benefits-list {
+      margin: 15px 0;
+      padding-left: 0;
+      list-style: none;
+    }
+    .benefits-list li {
+      padding: 10px 0;
+      padding-left: 30px;
+      position: relative;
+    }
+    .benefits-list li:before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #10b981;
+      font-weight: bold;
+      font-size: 20px;
+    }
+    .highlight-box {
+      background-color: #d1fae5;
+      border: 1px solid #10b981;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .highlight-box strong {
+      color: #059669;
+      font-size: 16px;
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 15px 30px;
+      background-color: #10b981;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .cta-button:hover {
+      background-color: #059669;
+    }
+    .footer {
+      background-color: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 5px 5px;
+    }
+    .footer a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">🎉</div>
+      <h1>New Feature Available!</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">
+        Hello,
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Great News for Your {{planName}} Plan</div>
+        <div class="feature-name">{{featureName}}</div>
+        <p>We're excited to announce that your plan now includes this powerful new feature!</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">What You Can Do Now:</div>
+        <ul class="benefits-list">
+          <li>Access enhanced functionality tailored to your needs</li>
+          <li>Improve your workflow with new capabilities</li>
+          <li>Take advantage of additional resources and support</li>
+        </ul>
+      </div>
+      
+      <div class="highlight-box">
+        <strong>✓ This feature is now active in your account. No action needed!</strong>
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="{{migrationGuideUrl}}" class="cta-button">Learn More About This Feature</a>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Effective Date</div>
+        <p><strong>{{effectiveDate}}</strong></p>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>Thank you for being a valued subscriber!</p>
+      <p>If you have any questions, feel free to <a href="#">contact our support team</a>.</p>
+      <p style="margin-top: 15px; font-size: 12px;">This is an automated notification from your subscription management system.</p>
+    </div>
+  </div>
+</body>
+</html>

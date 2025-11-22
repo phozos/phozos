@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      padding: 30px 20px;
+      border-radius: 5px 5px 0 0;
+      text-align: center;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+    .header .emoji {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    .content {
+      background-color: #f9fafb;
+      padding: 30px 20px;
+      border: 1px solid #e5e7eb;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1f2937;
+      margin-bottom: 20px;
+    }
+    .section {
+      margin-bottom: 25px;
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      border-left: 4px solid #10b981;
+    }
+    .section-title {
+      font-weight: bold;
+      color: #059669;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .amount-display {
+      font-size: 36px;
+      font-weight: bold;
+      color: #10b981;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .highlight-box {
+      background-color: #d1fae5;
+      border: 1px solid #10b981;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .highlight-box strong {
+      color: #059669;
+      font-size: 16px;
+    }
+    .footer {
+      background-color: #f3f4f6;
+      padding: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #6b7280;
+      border-radius: 0 0 5px 5px;
+    }
+    .footer a {
+      color: #2563eb;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="emoji">✅</div>
+      <h1>Refund Request Approved</h1>
+    </div>
+    
+    <div class="content">
+      <div class="greeting">
+        Hello {{userName}},
+      </div>
+      
+      <div class="section">
+        <div class="section-title">Great News!</div>
+        <p>Your refund request has been approved and is now being processed.</p>
+        <div class="amount-display">₹{{amount}}</div>
+      </div>
+      
+      <div class="highlight-box">
+        <strong>✓ Refund Approved</strong>
+        <p style="margin-bottom: 0;">Your refund is being processed and will be credited to your original payment method.</p>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">What Happens Next?</div>
+        <ul style="margin: 0; padding-left: 20px;">
+          <li>Refund will be processed within 1-2 business days</li>
+          <li>Amount will be credited to your original payment method</li>
+          <li>Bank processing may take an additional 5-7 business days</li>
+          <li>You'll receive confirmation once the refund is complete</li>
+        </ul>
+      </div>
+      
+      {{#if adminNotes}}
+      <div class="section">
+        <div class="section-title">Note from Our Team</div>
+        <p>{{adminNotes}}</p>
+      </div>
+      {{/if}}
+    </div>
+    
+    <div class="footer">
+      <p>Thank you for your patience. We hope to serve you again soon!</p>
+      <p><a href="{{supportUrl}}">Contact Support</a></p>
+    </div>
+  </div>
+</body>
+</html>

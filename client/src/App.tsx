@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
+import { Switch, Route, useRoute } from "wouter";
 import { useAuth, AuthProvider } from "./hooks/useAuth";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -18,10 +18,17 @@ import TeamDashboard from "@/pages/TeamDashboard";
 import AdminProfile from "@/pages/AdminProfile";
 import CounselorProfile from "@/pages/CounselorProfile";
 import CompanyProfile from "@/pages/CompanyProfile";
+import PartnerDashboard from "@/pages/PartnerDashboard";
+import PartnerProfile from "@/pages/PartnerProfile";
+import PartnerRegistration from "@/pages/PartnerRegistration";
+import PartnerReferralLinks from "@/pages/PartnerReferralLinks";
+import PartnerCommissions from "@/pages/PartnerCommissions";
+import PartnerPayouts from "@/pages/PartnerPayouts";
 import Auth from "@/pages/Auth";
 import StaffInvite from "@/pages/StaffInvite";
 import StudentProfileDetail from "@/pages/StudentProfileDetail";
 import SubscriptionPlans from "@/pages/SubscriptionPlans";
+import SubscriptionManagement from "@/pages/SubscriptionManagement";
 import PublicPlans from "@/pages/PublicPlans";
 import ConversionTest from "@/pages/ConversionTest";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
@@ -37,6 +44,17 @@ import { CookieBanner } from "@/components/CookieConsent";
 // Heavy dashboard components with large dependency trees
 const Community = lazy(() => import("@/pages/Community"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
+const SubscriptionAnalytics = lazy(() => import("@/pages/admin/SubscriptionAnalytics"));
+const PlanAnalytics = lazy(() => import("@/pages/admin/PlanAnalytics"));
+const PlanMigrations = lazy(() => import("@/pages/admin/PlanMigrations"));
+const FeatureManagementDashboard = lazy(() => import("@/pages/admin/FeatureManagementDashboard"));
+const PartnerManagement = lazy(() => import("@/pages/admin/PartnerManagement"));
+const CommissionManagement = lazy(() => import("@/pages/admin/CommissionManagement"));
+const PayoutProcessing = lazy(() => import("@/pages/admin/PayoutProcessing"));
+const PartnerAnalytics = lazy(() => import("@/pages/admin/PartnerAnalytics"));
+const CancellationRequests = lazy(() => import("@/pages/admin/subscriptions/CancellationRequests"));
+const RefundManagement = lazy(() => import("@/pages/admin/subscriptions/RefundManagement"));
+const DisputeManagement = lazy(() => import("@/pages/admin/subscriptions/DisputeManagement"));
 const StudentChat = lazy(() => import("@/pages/StudentChat"));
 const CompanyDashboard = lazy(() => import("@/pages/CompanyDashboard"));
 // Feature-heavy pages that aren't critical for initial render
@@ -57,20 +75,42 @@ const LoadingFallback = () => (
   </div>
 );
 
+// Referral Redirect Component - handles /ref/:code route
+const ReferralRedirect = () => {
+  const [, params] = useRoute("/ref/:code");
+  
+  useEffect(() => {
+    if (params?.code) {
+      window.location.href = `/api/ref/${params.code}`;
+    }
+  }, [params]);
+  
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex flex-col items-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <p className="text-muted-foreground">Processing referral link...</p>
+      </div>
+    </div>
+  );
+};
+
 function AppContent() {
   const { user } = useAuth();
 
   // Phase 4: Consolidated protection patterns for cleaner routing
-  const customerOnly = { allowedUserTypes: ['customer'] as ('customer' | 'team_member' | 'company_profile')[] };
-  const companyOnly = { allowedUserTypes: ['company_profile'] as ('customer' | 'team_member' | 'company_profile')[] };
-  const teamMemberOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile')[] };
-  const adminOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile')[], allowedRoles: ['admin'] };
-  const counselorOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile')[], allowedRoles: ['counselor'] };
-  const anyAuth = { allowedUserTypes: ['customer', 'team_member', 'company_profile'] as ('customer' | 'team_member' | 'company_profile')[] };
+  const customerOnly = { allowedUserTypes: ['customer'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const companyOnly = { allowedUserTypes: ['company_profile'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const teamMemberOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const partnerOnly = { allowedUserTypes: ['partner'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
+  const adminOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[], allowedRoles: ['admin'] };
+  const counselorOnly = { allowedUserTypes: ['team_member'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[], allowedRoles: ['counselor'] };
+  const anyAuth = { allowedUserTypes: ['customer', 'team_member', 'company_profile', 'partner'] as ('customer' | 'team_member' | 'company_profile' | 'partner')[] };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Switch>
+        <Route path="/ref/:code" component={ReferralRedirect} />
         <Route path="/" component={Home} />
         <Route path="/auth" component={Auth} />
         <Route path="/auth/staff-invite/:token" component={StaffInvite} />
@@ -114,9 +154,97 @@ function AppContent() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/admin/analytics">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <SubscriptionAnalytics />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/plan-analytics">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PlanAnalytics />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/features">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <FeatureManagementDashboard />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/migrations">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PlanMigrations />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
         <Route path="/dashboard/admin/profile">
           <ProtectedRoute {...adminOnly}>
             <AdminProfile />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/partners">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PartnerManagement />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/commissions">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <CommissionManagement />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/payouts">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PayoutProcessing />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/admin/partner-analytics">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <PartnerAnalytics />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/subscriptions/cancellation-requests">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <CancellationRequests />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/subscriptions/refund-management">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <RefundManagement />
+            </Suspense>
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin/subscriptions/dispute-management">
+          <ProtectedRoute {...adminOnly}>
+            <Suspense fallback={<LoadingFallback />}>
+              <DisputeManagement />
+            </Suspense>
           </ProtectedRoute>
         </Route>
 
@@ -130,6 +258,41 @@ function AppContent() {
           <ProtectedRoute {...companyOnly}>
             <CompanyProfile />
           </ProtectedRoute>
+        </Route>
+
+        {/* Partner Routes */}
+        <Route path="/dashboard/partner">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerDashboard />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/profile">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerProfile />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/referral-links">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerReferralLinks />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/commissions">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerCommissions />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/dashboard/partner/payouts">
+          <ProtectedRoute {...partnerOnly}>
+            <PartnerPayouts />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/partner/register">
+          <PartnerRegistration />
         </Route>
 
         <Route path="/test/conversions">
@@ -154,6 +317,12 @@ function AppContent() {
         <Route path="/profile">
           <ProtectedRoute {...anyAuth}>
             <Profile />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/subscription-management">
+          <ProtectedRoute {...customerOnly}>
+            <SubscriptionManagement />
           </ProtectedRoute>
         </Route>
 

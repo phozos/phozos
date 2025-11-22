@@ -10,6 +10,7 @@ import { IAdminTestimonialService } from '../services/domain/admin/testimonial-a
 import { IAdminForumModerationService } from '../services/domain/admin/forum-moderation.service';
 import { IAdminStaffInvitationService } from '../services/domain/admin/staff-invitation.service';
 import { IAdminAnalyticsService } from '../services/domain/admin/analytics-admin.service';
+import { ISubscriptionAnalyticsService } from '../services/domain/subscription-analytics.service';
 import { IUserProfileService } from '../services/domain/user-profile.service';
 import { IRegistrationService } from '../services/domain/registration.service';
 import { ICompanyProfileService } from '../services/domain/company-profile.service';
@@ -19,13 +20,30 @@ import { ICounselorDashboardService } from '../services/domain/counselor-dashboa
 import { ISubscriptionService } from '../services/domain/subscription.service';
 import { IUserSubscriptionService } from '../services/domain/user-subscription.service';
 import { IPaymentService } from '../services/domain/payment.service';
+import { IPlanMigrationService } from '../services/domain/plan-migration.service';
+import { IBulkSubscriptionAdminService } from '../services/domain/bulk-subscription-admin.service';
+import { ISubscriptionPlanRepository, ISubscriptionPlanAuditRepository } from '../repositories';
 import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
+import { featuresConfig } from '../config/index';
 import { 
   insertUserSchema, 
   insertUniversitySchema,
   insertSubscriptionPlanSchema 
 } from '@shared/schema';
+import { 
+  createPlanVersionSchema,
+  updatePlanPriceSchema,
+  deprecatePlanSchema,
+  archivePlanSchema,
+  rollbackPlanVersionSchema,
+  createMigrationSchema,
+  startMigrationSchema,
+  cancelMigrationSchema,
+  bulkMigrateSubscribersSchema,
+  bulkCancelSubscriptionsSchema,
+  exportSubscribersSchema
+} from '../services/validation/schemas';
 import { CreateStaffRequestSchema } from '@shared/api-contracts';
 import { VALID_ACCOUNT_STATUSES } from '@shared/account-status';
 import { AccountId, StudentProfileId, toAccountId, toStudentProfileId } from '@shared/types/branded-ids';
@@ -103,7 +121,55 @@ const updateSubscriptionPlanBodySchema = z.object({
   description: z.string().optional(),
   price: z.number().transform(val => val.toString()).optional(),
   features: z.array(z.string()).optional(),
-  isActive: z.boolean().optional()
+  isActive: z.boolean().optional(),
+  changeReason: z.string().optional(),
+  forceUpdate: z.boolean().optional(),
+  includeLoanAssistance: z.boolean().optional(),
+  includeVisaSupport: z.boolean().optional(),
+  includeCounselorSession: z.boolean().optional(),
+  includeScholarshipPlanning: z.boolean().optional(),
+  includeMockInterview: z.boolean().optional(),
+  includeExpertEditing: z.boolean().optional(),
+  includePostAdmitSupport: z.boolean().optional(),
+  includeDedicatedManager: z.boolean().optional(),
+  includeNetworkingEvents: z.boolean().optional(),
+  includeFlightAccommodation: z.boolean().optional(),
+  maxUniversities: z.number().optional(),
+  maxCountries: z.number().optional(),
+  universityTier: z.enum(['general', 'top500', 'top200', 'top100', 'ivy_league']).optional(),
+  supportType: z.enum(['email', 'whatsapp', 'phone', 'premium']).optional(),
+  turnaroundDays: z.number().optional(),
+  
+  // Category 1: Core Application Services
+  includeCourseCountrySelection: z.boolean().optional(),
+  includeUniversityShortlisting: z.boolean().optional(),
+  includeOneOnOneEditing: z.boolean().optional(),
+  includeProfileBuilding: z.boolean().optional(),
+  includeTop50Counselling: z.boolean().optional(),
+  
+  // Category 2: Student Support & Mentorship
+  supportTypes: z.array(z.enum(['email', 'whatsapp', 'phone', 'premium']))
+    .min(1, 'At least one support type is required')
+    .refine((types) => new Set(types).size === types.length, {
+      message: 'Support types must not contain duplicates'
+    })
+    .optional(),
+  
+  // Category 3: Phozos AI
+  phozosAiTier: z.enum(['none', 'basic', 'pro', 'ultra']).optional(),
+  
+  // Category 4: Financial & Scholarship Services
+  includeForexServices: z.boolean().optional(),
+  
+  // Category 5: Visa & Post-Admission
+  includePreDepartureSession: z.boolean().optional(),
+  
+  // Category 6: Phozos Prep
+  phozosPrepTier: z.enum(['none', 'basic', 'pro', 'ultra']).optional(),
+  phozosPrepDescription: z.string()
+    .max(1000, 'Phozos Prep description must not exceed 1000 characters')
+    .optional()
+    .nullable()
 });
 
 const updateStudentSubscriptionSchema = z.object({
@@ -1159,7 +1225,12 @@ export class AdminController extends BaseController {
     try {
       const validatedData = insertSubscriptionPlanSchema.parse(req.body);
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
-      const plan = await subscriptionService.createSubscriptionPlan(validatedData);
+      const plan = await subscriptionService.createSubscriptionPlan(
+        validatedData,
+        req.user!.id,
+        req.ip,
+        req.get('user-agent')
+      );
       
       res.status(201);
       return this.sendSuccess(res, plan);
@@ -1189,8 +1260,118 @@ export class AdminController extends BaseController {
     try {
       const { id } = req.params;
       const validatedData = updateSubscriptionPlanBodySchema.parse(req.body);
+      const { changeReason, forceUpdate, ...updateData } = validatedData;
+      
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
-      const updated = await subscriptionService.updateSubscriptionPlan(id, validatedData);
+      const subscriptionPlanRepo = getService<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository);
+      
+      // Get current plan to detect feature changes
+      const currentPlan = await subscriptionPlanRepo.findById(id);
+      
+      // Check subscriber count
+      const subscriberCount = await subscriptionPlanRepo.getSubscriberCount(id);
+      
+      // CRITICAL: Block price changes for plans with active subscribers
+      // Price changes require versioning to preserve grandfathering
+      if (subscriberCount > 0 && updateData.price && Number(updateData.price) !== Number(currentPlan.price)) {
+        return this.sendError(
+          res,
+          400,
+          'PRICE_CHANGE_NOT_ALLOWED',
+          `Cannot change price for plan with ${subscriberCount} active subscribers`,
+          {
+            subscriberCount,
+            currentPrice: currentPlan.price,
+            attemptedPrice: updateData.price,
+            recommendation: 'Use createPlanVersion() to preserve grandfathering for existing users',
+            alternativeEndpoint: `/api/admin/subscription-plans/${currentPlan.basePlanId}/versions`,
+            priceUpdateEndpoint: `/api/admin/subscription-plans/${currentPlan.basePlanId}/price`
+          }
+        );
+      }
+      
+      // Protected feature fields that affect user entitlements
+      const PROTECTED_FEATURE_FIELDS = [
+        'features',
+        'includeLoanAssistance',
+        'includeVisaSupport',
+        'includeCounselorSession',
+        'includeScholarshipPlanning',
+        'includeMockInterview',
+        'includeExpertEditing',
+        'includePostAdmitSupport',
+        'includeDedicatedManager',
+        'includeNetworkingEvents',
+        'includeFlightAccommodation',
+        'maxUniversities',
+        'maxCountries',
+        'universityTier',
+        'supportType',
+        'turnaroundDays'
+      ];
+      
+      // Detect if any protected features are being changed
+      const featureChanges: { field: string; oldValue: any; newValue: any }[] = [];
+      
+      for (const field of PROTECTED_FEATURE_FIELDS) {
+        if (field in updateData) {
+          const oldValue = (currentPlan as any)[field];
+          const newValue = (updateData as any)[field];
+          
+          if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+            featureChanges.push({
+              field,
+              oldValue,
+              newValue
+            });
+          }
+        }
+      }
+      
+      // If there are feature changes and plan has active subscribers
+      if (featureChanges.length > 0 && subscriberCount > 0) {
+        if (!forceUpdate) {
+          // Return warning instead of updating
+          return res.status(400).json({
+            success: false,
+            error: 'FEATURE_CHANGE_WARNING',
+            message: 'Cannot modify features on plans with active subscribers. Use forceUpdate=true with changeReason if you must proceed.',
+            code: 400,
+            data: {
+              subscriberCount,
+              featureChanges,
+              recommendation: 'Use createPlanVersion() to preserve grandfathering for existing users',
+              requiresForceUpdate: true
+            }
+          });
+        }
+        
+        // Force update enabled - require change reason
+        if (!changeReason) {
+          return this.sendError(
+            res,
+            400,
+            'CHANGE_REASON_REQUIRED',
+            'Change reason is required when forcing feature updates on plans with active subscribers'
+          );
+        }
+        
+        // Log warning about forced feature changes
+        console.warn(`⚠️ FORCED FEATURE UPDATE: Plan ${id} (${currentPlan.name}) with ${subscriberCount} subscribers`);
+        console.warn(`Changed fields:`, featureChanges.map(c => c.field).join(', '));
+        console.warn(`Reason: ${changeReason}`);
+        console.warn(`Admin: ${req.user!.id}`);
+      }
+      
+      const updated = await subscriptionService.updateSubscriptionPlan(
+        id,
+        updateData,
+        req.user!.id,
+        changeReason,
+        req.ip,
+        req.get('user-agent')
+      );
+      
       return this.sendSuccess(res, updated);
     } catch (error: any) {
       if (error instanceof z.ZodError) {
@@ -1217,7 +1398,12 @@ export class AdminController extends BaseController {
     try {
       const { id } = req.params;
       const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
-      const success = await subscriptionService.deleteSubscriptionPlan(id);
+      const success = await subscriptionService.deleteSubscriptionPlan(
+        id,
+        req.user!.id,
+        req.ip,
+        req.get('user-agent')
+      );
       
       if (!success) {
         return this.sendError(res, 404, 'NOT_FOUND', 'Subscription plan not found');
@@ -1226,6 +1412,414 @@ export class AdminController extends BaseController {
       return this.sendEmptySuccess(res);
     } catch (error) {
       return this.handleError(res, error, 'AdminController.deleteSubscriptionPlan');
+    }
+  }
+
+  async getPlanChangeHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const auditRepository = getService<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository);
+      const history = await auditRepository.getChangeHistory(id);
+      return this.sendSuccess(res, history);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanChangeHistory');
+    }
+  }
+
+  async getRecentPlanChanges(req: AuthenticatedRequest, res: Response) {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+      const auditRepository = getService<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository);
+      const changes = await auditRepository.getRecentChanges(limit);
+      return this.sendSuccess(res, changes);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getRecentPlanChanges');
+    }
+  }
+
+  /**
+   * Create a new version of a subscription plan
+   * 
+   * @route POST /api/admin/subscription-plans/:basePlanId/versions
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId and version details
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns the newly created plan version with enriched metadata
+   */
+  async createPlanVersion(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId } = req.params;
+      const validatedData = createPlanVersionSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const subscriptionPlanRepo = getService<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository);
+      
+      const { price, ...restUpdates } = validatedData.updates;
+      const updates = {
+        ...restUpdates,
+        ...(price !== undefined && { price: price.toString() })
+      };
+      
+      const newVersion = await subscriptionService.createPlanVersion(
+        basePlanId,
+        updates,
+        adminId,
+        validatedData.releaseNotes
+      );
+
+      // Enhanced response with subscriber counts
+      const subscribersAffected = await subscriptionPlanRepo.getSubscriberCount(basePlanId);
+
+      res.status(201);
+      return this.sendSuccess(res, {
+        newVersion,
+        subscribersAffected,
+        message: `Version ${newVersion.version} created successfully`
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.createPlanVersion');
+    }
+  }
+
+  /**
+   * Get all versions of a subscription plan
+   * 
+   * @route GET /api/admin/subscription-plans/:basePlanId/versions
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns array of all plan versions
+   */
+  async getPlanVersions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId } = req.params;
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const versions = await subscriptionService.getPlanVersions(basePlanId);
+
+      return this.sendSuccess(res, versions);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanVersions');
+    }
+  }
+
+  /**
+   * Get a specific version of a subscription plan
+   * 
+   * @route GET /api/admin/subscription-plans/:basePlanId/versions/:version
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId and version number
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns the specific plan version
+   */
+  async getPlanVersion(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId, version } = req.params;
+      const versionNumber = parseInt(version, 10);
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const planVersion = await subscriptionService.getPlanVersion(basePlanId, versionNumber);
+
+      if (!planVersion) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Plan version not found');
+      }
+
+      return this.sendSuccess(res, planVersion);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanVersion');
+    }
+  }
+
+  /**
+   * Update plan price with versioning (dedicated price update endpoint)
+   * 
+   * Creates a new plan version with updated pricing while preserving existing subscriber terms.
+   * This is the recommended way to change prices for plans with active subscribers.
+   * 
+   * @route POST /api/admin/subscription-plans/:basePlanId/price
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with price update data
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns new version with price update confirmation
+   * 
+   * @example
+   * // Request body:
+   * {
+   *   "newPrice": 14999,
+   *   "effectiveDate": "2025-12-01T00:00:00Z",
+   *   "notifySubscribers": true
+   * }
+   */
+  async updatePlanPrice(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId } = req.params;
+      const validatedData = updatePlanPriceSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+      
+      const effectiveDateParsed = new Date(validatedData.effectiveDate);
+      
+      if (isNaN(effectiveDateParsed.getTime())) {
+        return this.sendError(res, 400, 'INVALID_DATE', 'effectiveDate must be a valid ISO 8601 date');
+      }
+      
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      
+      // Create release notes with effective date information
+      const releaseNotes = `Price updated to ${validatedData.newPrice}. Effective date: ${effectiveDateParsed.toISOString()}`;
+      
+      // Call service with correct parameter order: planId, newPrice, adminId, releaseNotes, notifySubscribers
+      const newVersion = await subscriptionService.updatePlanPrice(
+        basePlanId,
+        validatedData.newPrice,
+        adminId,
+        releaseNotes,
+        validatedData.notifySubscribers ?? true,
+        req.ip,
+        req.get('user-agent')
+      );
+      
+      return this.sendSuccess(res, {
+        message: 'Price updated successfully',
+        newVersion,
+        effectiveDate: effectiveDateParsed,
+        subscribersNotified: validatedData.notifySubscribers ?? true
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.updatePlanPrice');
+    }
+  }
+
+  /**
+   * Get plan version history with subscriber counts
+   * 
+   * Returns all versions of a plan family with active subscriber counts for each version.
+   * This helps admins understand the impact of versioning and grandfathering.
+   * 
+   * @route GET /api/admin/subscription-plans/:basePlanId/versions/history
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with basePlanId
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns version history with subscriber metadata
+   */
+  async getPlanVersionHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { basePlanId } = req.params;
+      
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const subscriptionPlanRepo = getService<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository);
+      
+      const versions = await subscriptionService.getPlanVersions(basePlanId);
+      
+      // Enrich with subscriber counts for each version
+      const versionsWithCounts = await Promise.all(
+        versions.map(async (version) => ({
+          ...version,
+          activeSubscribers: await subscriptionPlanRepo.getSubscriberCount(version.id)
+        }))
+      );
+      
+      return this.sendSuccess(res, {
+        basePlanId,
+        versions: versionsWithCounts,
+        latestVersion: versionsWithCounts.find(v => v.isLatestVersion)
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanVersionHistory');
+    }
+  }
+
+  /**
+   * Deprecate a subscription plan
+   * 
+   * Marks a plan as deprecated and optionally specifies a successor plan.
+   * Existing subscribers can continue using the plan, but new subscriptions are not allowed.
+   * 
+   * @route POST /api/admin/subscription-plans/:id/deprecate
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with id, successorPlanId, and reason
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns deprecation confirmation with details
+   */
+  async deprecatePlan(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const validatedData = deprecatePlanSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+      
+      if (!validatedData.reason || validatedData.reason.trim().length === 0) {
+        return this.sendError(res, 400, 'REASON_REQUIRED', 'Deprecation reason is required');
+      }
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      await subscriptionService.deprecatePlan(
+        id, 
+        validatedData.successorPlanId || undefined, 
+        adminId, 
+        validatedData.reason
+      );
+
+      let migrationId: string | null = null;
+
+      // Create migration workflow if requested and successor plan is specified
+      if (validatedData.createMigration && validatedData.successorPlanId) {
+        const migrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+        const deprecatedPlan = await subscriptionService.getSubscriptionPlan(id);
+        const successorPlan = await subscriptionService.getSubscriptionPlan(validatedData.successorPlanId);
+        
+        if (deprecatedPlan && successorPlan) {
+          const migration = await migrationService.createMigration({
+            name: `Migration from ${deprecatedPlan.name} to ${successorPlan.name}`,
+            sourcePlanId: id,
+            targetPlanId: validatedData.successorPlanId,
+            migrationType: 'voluntary',
+            startDate: new Date(),
+            incentiveType: undefined,
+            incentiveValue: undefined
+          }, adminId);
+          
+          migrationId = migration.id;
+        }
+      }
+
+      return this.sendSuccess(res, {
+        message: 'Plan deprecated successfully',
+        deprecatedPlanId: id,
+        successorPlanId: validatedData.successorPlanId || null,
+        reason: validatedData.reason,
+        migrationCreated: !!migrationId,
+        migrationId: migrationId
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.deprecatePlan');
+    }
+  }
+
+  /**
+   * Archive a subscription plan (only if no active subscribers)
+   * 
+   * Permanently archives a plan that has no active subscribers.
+   * This is typically used for cleanup of old, unused plans.
+   * 
+   * @route POST /api/admin/subscription-plans/:id/archive
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with id and reason
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns archive confirmation with details
+   */
+  async archivePlan(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const validatedData = archivePlanSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+      
+      if (!validatedData.reason || validatedData.reason.trim().length === 0) {
+        return this.sendError(res, 400, 'REASON_REQUIRED', 'Archive reason is required');
+      }
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      await subscriptionService.archivePlan(id, adminId, validatedData.reason);
+
+      return this.sendSuccess(res, {
+        message: 'Plan archived successfully',
+        archivedPlanId: id,
+        reason: validatedData.reason
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.archivePlan');
+    }
+  }
+
+  /**
+   * P3.4: Rollback plan to a previous version
+   * 
+   * Creates a new version with fields copied from the target version.
+   * Historical data remains immutable - this creates a new version with incremented version number.
+   * Useful for reverting unwanted price or feature changes.
+   * 
+   * @route POST /api/admin/subscription-plans/:planId/rollback
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with planId and rollback data
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns new version created from rollback
+   * 
+   * @example
+   * // Request body:
+   * {
+   *   "targetVersion": 2,
+   *   "reason": "Reverting price increase due to customer feedback",
+   *   "notifySubscribers": false
+   * }
+   */
+  async rollbackPlanVersion(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+      const validatedData = rollbackPlanVersionSchema.parse(req.body);
+      const adminId = this.getUserId(req);
+      
+      if (!validatedData.reason || validatedData.reason.trim().length === 0) {
+        return this.sendError(res, 400, 'REASON_REQUIRED', 'Rollback reason is required');
+      }
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      
+      const newVersion = await subscriptionService.rollbackPlanVersion(
+        planId,
+        validatedData.targetVersion,
+        adminId,
+        validatedData.reason,
+        validatedData.notifySubscribers ?? false
+      );
+
+      return this.sendSuccess(res, {
+        message: 'Plan rolled back successfully',
+        newVersion,
+        rolledBackTo: validatedData.targetVersion,
+        reason: validatedData.reason,
+        subscribersNotified: validatedData.notifySubscribers ?? false
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      return this.handleError(res, error, 'AdminController.rollbackPlanVersion');
+    }
+  }
+
+  /**
+   * Get analytics for a subscription plan
+   * 
+   * Returns comprehensive analytics for a specific plan version including
+   * subscriber count, revenue, deprecation status, and successor information.
+   * 
+   * @route GET /api/admin/subscription-plans/:id/analytics
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with id
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns plan analytics including subscriber count and revenue
+   */
+  async getPlanAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const subscriptionService = getService<ISubscriptionService>(TYPES.ISubscriptionService);
+      const analytics = await subscriptionService.getPlanAnalytics(id);
+
+      return this.sendSuccess(res, analytics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getPlanAnalytics');
     }
   }
 
@@ -1692,6 +2286,1357 @@ export class AdminController extends BaseController {
       return this.sendFileDownload(res, csvContent, 'universities-sample.csv', 'text/csv');
     } catch (error) {
       return this.handleError(res, error, 'AdminController.getSampleCSV');
+    }
+  }
+
+  async getSubscriptionAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const [subscriptionMetrics, churnMetrics, paymentMetrics, upgradeDowngradeMetrics] = await Promise.all([
+        analyticsService.getSubscriptionMetrics(),
+        analyticsService.getChurnMetrics(),
+        analyticsService.getPaymentMetrics(),
+        analyticsService.getUpgradeDowngradeMetrics()
+      ]);
+
+      return this.sendSuccess(res, {
+        subscriptions: subscriptionMetrics,
+        churn: churnMetrics,
+        payments: paymentMetrics,
+        upgradesDowngrades: upgradeDowngradeMetrics
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getSubscriptionAnalytics');
+    }
+  }
+
+  async getRevenueAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const revenueMetrics = await analyticsService.getRevenueMetrics();
+
+      return this.sendSuccess(res, revenueMetrics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getRevenueAnalytics');
+    }
+  }
+
+  async getSubscriptionGrowth(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const growthData = await analyticsService.getSubscriptionGrowth();
+
+      return this.sendSuccess(res, growthData);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getSubscriptionGrowth');
+    }
+  }
+
+  /**
+   * Get lifetime subscription metrics
+   * 
+   * @route GET /api/admin/analytics/lifetime-metrics
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns lifetime subscription metrics including total revenue, ATV, upgrade rate, plan distribution, revenue by tier, and lifetime value by plan
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getLifetimeMetrics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const analyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      
+      const lifetimeMetrics = await analyticsService.getLifetimeMetrics();
+
+      return this.sendSuccess(res, lifetimeMetrics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getLifetimeMetrics');
+    }
+  }
+
+  /**
+   * Cancel a user's subscription
+   * 
+   * @route DELETE /api/admin/user-subscriptions/:subscriptionId
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with subscription ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns success message
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   * @throws {404} Subscription not found
+   */
+  async cancelUserSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { subscriptionId } = req.params;
+
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const cancelled = await userSubscriptionService.cancelSubscription(subscriptionId);
+
+      if (!cancelled) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Subscription not found');
+      }
+
+      return this.sendSuccess(res, { message: 'Subscription cancelled successfully', subscriptionId });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.cancelUserSubscription');
+    }
+  }
+
+  /**
+   * Get all failed payments
+   * 
+   * @route GET /api/admin/failed-payments
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns list of failed payments with user and plan details
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getFailedPayments(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { db } = await import('../db');
+      const { failedPayments, users, subscriptionPlans } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const failedPaymentsData = await db
+        .select({
+          id: failedPayments.id,
+          userId: failedPayments.userId,
+          planId: failedPayments.planId,
+          orderId: failedPayments.orderId,
+          paymentId: failedPayments.paymentId,
+          amount: failedPayments.amount,
+          currency: failedPayments.currency,
+          failureReason: failedPayments.failureReason,
+          razorpayErrorCode: failedPayments.razorpayErrorCode,
+          razorpayErrorDescription: failedPayments.razorpayErrorDescription,
+          failedAt: failedPayments.failedAt,
+          notifiedAt: failedPayments.notifiedAt,
+          createdAt: failedPayments.createdAt,
+          userEmail: users.email,
+          userFirstName: users.firstName,
+          userLastName: users.lastName,
+          planName: subscriptionPlans.name,
+          planPrice: subscriptionPlans.price,
+        })
+        .from(failedPayments)
+        .leftJoin(users, eq(failedPayments.userId, users.id))
+        .leftJoin(subscriptionPlans, eq(failedPayments.planId, subscriptionPlans.id))
+        .orderBy(failedPayments.failedAt);
+
+      return this.sendSuccess(res, failedPaymentsData);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFailedPayments');
+    }
+  }
+
+  /**
+   * Get payment history for a user
+   * 
+   * @route GET /api/admin/user-subscriptions/:userId/payment-history
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with user ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns payment history for the user
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getUserPaymentHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { userId } = req.params;
+      const { db } = await import('../db');
+      const { payments, subscriptionPlans } = await import('@shared/schema');
+      const { eq, desc } = await import('drizzle-orm');
+
+      const paymentHistoryData = await db
+        .select({
+          id: payments.id,
+          userId: payments.userId,
+          planId: payments.planId,
+          planName: subscriptionPlans.name,
+          paymentType: payments.paymentType,
+          amount: payments.amount,
+          currency: payments.currency,
+          orderId: payments.orderId,
+          paymentReference: payments.paymentReference,
+          paymentGateway: payments.paymentGateway,
+          paidAt: payments.paidAt,
+        })
+        .from(payments)
+        .leftJoin(subscriptionPlans, eq(payments.planId, subscriptionPlans.id))
+        .where(eq(payments.userId, userId))
+        .orderBy(desc(payments.paidAt));
+
+      const paymentTypeLabels: Record<string, string> = {
+        'new_subscription': 'Initial Purchase',
+        'upgrade': 'Upgrade',
+        'renewal': 'Renewal',
+      };
+
+      const paymentHistory = paymentHistoryData.map(payment => ({
+        ...payment,
+        planId: payment.planId || '',
+        planName: payment.planName || 'Unknown Plan',
+        paymentType: payment.paymentType 
+          ? paymentTypeLabels[payment.paymentType] || 'Payment'
+          : 'Payment'
+      }));
+
+      return this.sendSuccess(res, paymentHistory);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getUserPaymentHistory');
+    }
+  }
+
+  /**
+   * Get subscription events for a user
+   * 
+   * @route GET /api/admin/user-subscriptions/:userId/events
+   * @access Admin
+   * @param {AuthenticatedRequest} req - Express request object with user ID
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns subscription lifecycle events for the user
+   * 
+   * @throws {401} Unauthorized if user is not authenticated
+   * @throws {403} Forbidden if user is not an admin
+   */
+  async getUserSubscriptionEvents(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { userId } = req.params;
+      const { subscriptionAuditService } = await import('../services/infrastructure/subscription-audit.service');
+      
+      const events = await subscriptionAuditService.getUserSubscriptionEvents(userId);
+
+      return this.sendSuccess(res, events);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getUserSubscriptionEvents');
+    }
+  }
+
+  async getOutboxMetrics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq, and, gte, sql } = await import('drizzle-orm');
+      const { subscriptionAuditOutboxProcessor } = await import('../services/infrastructure/subscription-audit-outbox-processor');
+
+      const now = new Date();
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const allEvents = await db.select().from(subscriptionAuditOutbox);
+
+      const pendingEvents = allEvents.filter(e => e.status === 'pending');
+      const failedEvents = allEvents.filter(e => e.status === 'failed');
+      const completedInLastHour = allEvents.filter(
+        e => e.status === 'completed' && e.processedAt && new Date(e.processedAt) >= oneHourAgo
+      );
+      const retriesInLastHour = allEvents.filter(
+        e => e.createdAt >= oneHourAgo && e.retries > 0
+      ).reduce((sum, e) => sum + e.retries, 0);
+
+      const oldestPending = pendingEvents.length > 0
+        ? pendingEvents.reduce((oldest, event) => 
+            new Date(event.createdAt) < new Date(oldest.createdAt) ? event : oldest
+          )
+        : null;
+
+      const processingLagSeconds = oldestPending
+        ? Math.floor((now.getTime() - new Date(oldestPending.createdAt).getTime()) / 1000)
+        : 0;
+
+      const throughputPerMinute = completedInLastHour.length / 60;
+
+      const metrics = {
+        outbox_pending_events: pendingEvents.length,
+        outbox_processing_lag: processingLagSeconds,
+        outbox_dlq_count: failedEvents.length,
+        outbox_retry_count: retriesInLastHour,
+        outbox_throughput: parseFloat(throughputPerMinute.toFixed(2)),
+        worker_health: subscriptionAuditOutboxProcessor['isRunning'] || false,
+      };
+
+      return this.sendSuccess(res, metrics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getOutboxMetrics');
+    }
+  }
+
+  async getOutboxEvents(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq, desc, and, or, like, sql } = await import('drizzle-orm');
+
+      const { 
+        status, 
+        page = '1', 
+        limit = '50',
+        search 
+      } = req.query;
+
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+      const offset = (pageNum - 1) * limitNum;
+
+      let whereConditions: any[] = [];
+
+      if (status) {
+        whereConditions.push(eq(subscriptionAuditOutbox.status, status as string));
+      }
+
+      if (search) {
+        whereConditions.push(
+          or(
+            like(subscriptionAuditOutbox.subscriptionId, `%${search}%`),
+            like(subscriptionAuditOutbox.userId, `%${search}%`)
+          )
+        );
+      }
+
+      const query = db
+        .select()
+        .from(subscriptionAuditOutbox)
+        .orderBy(desc(subscriptionAuditOutbox.createdAt))
+        .limit(limitNum)
+        .offset(offset);
+
+      const events = whereConditions.length > 0
+        ? await query.where(and(...whereConditions))
+        : await query;
+
+      const totalQuery = whereConditions.length > 0
+        ? db.select({ count: sql`count(*)` }).from(subscriptionAuditOutbox).where(and(...whereConditions))
+        : db.select({ count: sql`count(*)` }).from(subscriptionAuditOutbox);
+
+      const totalResult = await totalQuery;
+      const total = Number(totalResult[0].count);
+
+      return this.sendSuccess(res, {
+        events,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getOutboxEvents');
+    }
+  }
+
+  async retryOutboxEvent(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const event = await db.query.subscriptionAuditOutbox.findFirst({
+        where: eq(subscriptionAuditOutbox.id, id),
+      });
+
+      if (!event) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Outbox event not found');
+      }
+
+      if (event.status !== 'failed') {
+        return this.sendError(res, 400, 'INVALID_STATUS', 'Only failed events can be retried');
+      }
+
+      await db
+        .update(subscriptionAuditOutbox)
+        .set({
+          status: 'pending',
+          retries: 0,
+          nextRetryAt: null,
+          errorMessage: null,
+        })
+        .where(eq(subscriptionAuditOutbox.id, id));
+
+      return this.sendSuccess(res, { message: 'Event queued for retry' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.retryOutboxEvent');
+    }
+  }
+
+  async deleteOutboxEvent(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { db } = await import('../db');
+      const { subscriptionAuditOutbox } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+
+      const event = await db.query.subscriptionAuditOutbox.findFirst({
+        where: eq(subscriptionAuditOutbox.id, id),
+      });
+
+      if (!event) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Outbox event not found');
+      }
+
+      await db.delete(subscriptionAuditOutbox).where(eq(subscriptionAuditOutbox.id, id));
+
+      return this.sendSuccess(res, { message: 'Event deleted successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.deleteOutboxEvent');
+    }
+  }
+
+  async createMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const validatedData = createMigrationSchema.parse(req.body);
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const migrationData = {
+        ...validatedData,
+        startDate: new Date(validatedData.startDate),
+        endDate: validatedData.endDate ? new Date(validatedData.endDate) : undefined
+      };
+
+      const migration = await planMigrationService.createMigration(migrationData, req.user!.id);
+      res.status(201);
+      return this.sendSuccess(res, migration);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.createMigration');
+    }
+  }
+
+  async getMigrations(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status } = req.query;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const migrations = await planMigrationService.getAllMigrations({ 
+        status: status as string | undefined 
+      });
+
+      return this.sendSuccess(res, migrations);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getMigrations');
+    }
+  }
+
+  async getMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const migration = await planMigrationService.getMigration(id);
+      return this.sendSuccess(res, migration);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getMigration');
+    }
+  }
+
+  async startMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      await planMigrationService.startMigration(id, req.user!.id);
+      return this.sendSuccess(res, { message: 'Migration started successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.startMigration');
+    }
+  }
+
+  async cancelMigration(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const validatedData = cancelMigrationSchema.parse(req.body);
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      await planMigrationService.cancelMigration(id, req.user!.id, validatedData.reason);
+      return this.sendSuccess(res, { message: 'Migration cancelled successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.cancelMigration');
+    }
+  }
+
+  async getMigrationStats(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const planMigrationService = getService<IPlanMigrationService>(TYPES.IPlanMigrationService);
+
+      const stats = await planMigrationService.getMigrationStats(id);
+      return this.sendSuccess(res, stats);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getMigrationStats');
+    }
+  }
+
+  async getComprehensivePlanAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const subscriptionAnalyticsService = getService<ISubscriptionAnalyticsService>(TYPES.ISubscriptionAnalyticsService);
+      const analytics = await subscriptionAnalyticsService.getComprehensiveAnalytics();
+      return this.sendSuccess(res, analytics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getComprehensivePlanAnalytics');
+    }
+  }
+
+  async getFeatureImpactPreview(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { planId } = req.params;
+      const changes = req.body;
+      const { FeatureImpactPreviewService } = await import('../services/domain/admin/feature-impact-preview.service');
+      const service = new FeatureImpactPreviewService();
+      const analysis = await service.analyzeFeatureChange(planId, changes);
+      return this.sendSuccess(res, analysis);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureImpactPreview');
+    }
+  }
+
+  async getFeatureManagementDashboard(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const dashboard = await service.getDashboardSummary();
+      return this.sendSuccess(res, dashboard);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureManagementDashboard');
+    }
+  }
+
+  async getFeatureUsageOverview(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { startDate, endDate } = req.query;
+      const dateRange = startDate && endDate ? {
+        start: new Date(startDate as string),
+        end: new Date(endDate as string)
+      } : undefined;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const overview = await service.getFeatureUsageOverview(dateRange);
+      return this.sendSuccess(res, overview);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureUsageOverview');
+    }
+  }
+
+  async getFeatureHealth(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { featureName } = req.params;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const health = await service.getFeatureHealth(featureName);
+      return this.sendSuccess(res, health);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureHealth');
+    }
+  }
+
+  async getFeatureLifecycle(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { featureName } = req.params;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const lifecycle = await service.getFeatureLifecycle(featureName);
+      return this.sendSuccess(res, lifecycle);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getFeatureLifecycle');
+    }
+  }
+
+  async executeBulkFeatureOperation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const operation = req.body;
+      const { FeatureManagementAdminService } = await import('../services/domain/admin/feature-management-admin.service');
+      const service = new FeatureManagementAdminService();
+      const result = await service.executeBulkOperation(operation, adminId);
+      return this.sendSuccess(res, result);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.executeBulkFeatureOperation');
+    }
+  }
+
+  async createDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const request = req.body;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedule = await service.createDeprecationSchedule(request, adminId);
+      return this.sendSuccess(res, schedule);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.createDeprecationSchedule');
+    }
+  }
+
+  async getDeprecationSchedules(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status } = req.query;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedules = await service.getAllDeprecationSchedules(status as any);
+      return this.sendSuccess(res, schedules);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationSchedules');
+    }
+  }
+
+  async getDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { scheduleId } = req.params;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedule = await service.getDeprecationSchedule(scheduleId);
+      if (!schedule) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Deprecation schedule not found');
+      }
+      return this.sendSuccess(res, schedule);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationSchedule');
+    }
+  }
+
+  async updateDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const request = req.body;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const schedule = await service.updateDeprecationSchedule(request, adminId);
+      return this.sendSuccess(res, schedule);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.updateDeprecationSchedule');
+    }
+  }
+
+  async cancelDeprecationSchedule(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      const { scheduleId } = req.params;
+      const { reason } = req.body;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      await service.cancelDeprecationSchedule(scheduleId, reason, adminId);
+      return this.sendSuccess(res, { message: 'Deprecation schedule cancelled successfully' });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.cancelDeprecationSchedule');
+    }
+  }
+
+  async getDeprecationImpact(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { scheduleId } = req.params;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const impact = await service.getDeprecationImpact(scheduleId);
+      return this.sendSuccess(res, impact);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationImpact');
+    }
+  }
+
+  async getDeprecationTimeline(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { scheduleId } = req.params;
+      const { FeatureDeprecationWorkflowService } = await import('../services/domain/admin/feature-deprecation-workflow.service');
+      const service = new FeatureDeprecationWorkflowService();
+      const timeline = await service.getDeprecationTimeline(scheduleId);
+      return this.sendSuccess(res, timeline);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getDeprecationTimeline');
+    }
+  }
+
+  async bulkMigrateSubscribers(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      
+      const validated = bulkMigrateSubscribersSchema.parse(req.body);
+      
+      const bulkService = getService<IBulkSubscriptionAdminService>(TYPES.IBulkSubscriptionAdminService);
+      const result = await bulkService.bulkMigrateSubscribers(
+        validated.sourcePlanId,
+        validated.targetPlanId,
+        validated.userIds,
+        adminId
+      );
+      
+      return this.sendSuccess(res, result);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.bulkMigrateSubscribers');
+    }
+  }
+
+  async bulkCancelSubscriptions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const adminId = this.getUserId(req);
+      
+      const validated = bulkCancelSubscriptionsSchema.parse(req.body);
+      
+      const bulkService = getService<IBulkSubscriptionAdminService>(TYPES.IBulkSubscriptionAdminService);
+      const result = await bulkService.bulkCancelSubscriptions(
+        validated.userIds,
+        validated.reason,
+        adminId
+      );
+      
+      return this.sendSuccess(res, result);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.bulkCancelSubscriptions');
+    }
+  }
+
+  async exportSubscribers(req: AuthenticatedRequest, res: Response) {
+    try {
+      const validated = exportSubscribersSchema.parse(req.query);
+      
+      const bulkService = getService<IBulkSubscriptionAdminService>(TYPES.IBulkSubscriptionAdminService);
+      const csv = await bulkService.exportSubscribers(
+        validated.planId,
+        validated.status,
+        validated.format
+      );
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="subscribers-export-${new Date().toISOString()}.csv"`);
+      return res.send(csv);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.exportSubscribers');
+    }
+  }
+
+  // ============================================================================
+  // SUBSCRIPTION MANAGEMENT (Phase 3)
+  // ============================================================================
+
+  async getAllAdminSubscriptions(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, planId, page = 1, limit = 20 } = req.query;
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      
+      const filters: any = {};
+      if (status) filters.status = status;
+      if (userId) filters.userId = userId;
+      if (planId) filters.planId = planId;
+      
+      const subscriptions = await userSubscriptionService.findAll(filters);
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = subscriptions.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        subscriptions: paginatedResults,
+        total: subscriptions.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(subscriptions.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAllAdminSubscriptions');
+    }
+  }
+
+  async getAdminSubscriptionDetails(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const subscription = await userSubscriptionService.getUserSubscription(id);
+      
+      if (!subscription) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Subscription not found');
+      }
+      
+      return this.sendSuccess(res, subscription);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminSubscriptionDetails');
+    }
+  }
+
+  async forceCancelSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { reason, adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!reason) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Reason is required for force cancellation');
+      }
+      
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      await userSubscriptionService.update(id, {
+        status: 'cancelled',
+        endDate: new Date(),
+        updatedAt: new Date()
+      });
+      
+      logger.info('Admin force-cancelled subscription', {
+        subscriptionId: id,
+        adminId,
+        reason,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, { 
+        message: 'Subscription cancelled successfully',
+        subscriptionId: id 
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.forceCancelSubscription');
+    }
+  }
+
+  async forceRefundSubscription(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_ADMIN_FORCE_REFUND) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Admin force refund is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { amount, reason, adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!amount || !reason) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Amount and reason are required');
+      }
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const userSubscriptionService = getService<IUserSubscriptionService>(TYPES.IUserSubscriptionService);
+      const subscription = await userSubscriptionService.getUserSubscription(id);
+      
+      if (!subscription || !subscription.paymentId) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Subscription or payment not found');
+      }
+      
+      const refund = await refundService.createRefundRequest({
+        paymentId: subscription.paymentId,
+        subscriptionId: id,
+        userId: subscription.userId,
+        amount: Number(amount),
+        reason,
+        adminNotes,
+        status: 'processing',
+        requestedAt: new Date(),
+        processedBy: adminId
+      });
+      
+      logger.info('Admin force-refund initiated', {
+        subscriptionId: id,
+        adminId,
+        refundId: refund.id,
+        amount,
+        reason
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Refund initiated successfully',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.forceRefundSubscription');
+    }
+  }
+
+  async getAdminCancellationRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, page = 1, limit = 20 } = req.query;
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      let requests;
+      if (status === 'pending') {
+        requests = await cancellationService.getPendingCancellationRequests();
+      } else {
+        requests = await cancellationService.getPendingCancellationRequests();
+      }
+      
+      if (userId) {
+        requests = requests.filter((r: any) => r.userId === userId);
+      }
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = requests.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        requests: paginatedResults,
+        total: requests.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(requests.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminCancellationRequests');
+    }
+  }
+
+  async getAdminCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      const request = await cancellationService.getCancellationRequest(id);
+      
+      if (!request) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Cancellation request not found');
+      }
+      
+      return this.sendSuccess(res, request);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminCancellationRequest');
+    }
+  }
+
+  async approveCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_USER_CANCELLATION_REQUESTS) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Cancellation request management is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      const request = await cancellationService.approveCancellationRequest(id, adminId, adminNotes);
+      
+      logger.info('Cancellation request approved', {
+        requestId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Cancellation request approved successfully',
+        request
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.approveCancellationRequest');
+    }
+  }
+
+  async rejectCancellationRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_USER_CANCELLATION_REQUESTS) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Cancellation request management is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!adminNotes) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Admin notes are required for rejection');
+      }
+      
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      
+      const request = await cancellationService.rejectCancellationRequest(id, adminId, adminNotes);
+      
+      logger.info('Cancellation request rejected', {
+        requestId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Cancellation request rejected successfully',
+        request
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.rejectCancellationRequest');
+    }
+  }
+
+  async getAdminRefundRequests(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, page = 1, limit = 20 } = req.query;
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      let refunds;
+      if (status === 'pending') {
+        refunds = await refundService.getPendingRefunds();
+      } else {
+        refunds = await refundService.getPendingRefunds();
+      }
+      
+      if (userId) {
+        refunds = refunds.filter((r: any) => r.userId === userId);
+      }
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = refunds.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        refunds: paginatedResults,
+        total: refunds.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(refunds.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminRefundRequests');
+    }
+  }
+
+  async getAdminRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.getRefund(id);
+      
+      if (!refund) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Refund request not found');
+      }
+      
+      return this.sendSuccess(res, refund);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminRefundRequest');
+    }
+  }
+
+  async approveRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_REFUND_SYSTEM) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Refund system is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.approveRefund(id, adminId, adminNotes);
+      
+      logger.info('Refund request approved', {
+        refundId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Refund request approved and processing initiated',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.approveRefundRequest');
+    }
+  }
+
+  async rejectRefundRequest(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_REFUND_SYSTEM) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Refund system is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { adminNotes } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!adminNotes) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Admin notes are required for rejection');
+      }
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.rejectRefund(id, adminId, adminNotes);
+      
+      logger.info('Refund request rejected', {
+        refundId: id,
+        adminId,
+        adminNotes
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Refund request rejected successfully',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.rejectRefundRequest');
+    }
+  }
+
+  async processRefundManually(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const adminId = this.getUserId(req);
+      
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.getRefund(id);
+      if (!refund) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Refund not found');
+      }
+      
+      logger.info('Manual refund processing triggered', {
+        refundId: id,
+        adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Manual refund processing initiated',
+        refund
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.processRefundManually');
+    }
+  }
+
+  async getRefundStatus(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { RefundService } = await import('../services/domain/refund.service');
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      
+      const refund = await refundService.getRefund(id);
+      if (!refund) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Refund not found');
+      }
+      
+      return this.sendSuccess(res, {
+        refundId: id,
+        status: refund.status,
+        razorpayRefundId: refund.razorpayRefundId,
+        razorpayStatus: refund.razorpayStatus,
+        processedAt: refund.processedAt
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getRefundStatus');
+    }
+  }
+
+  async getAdminDisputes(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { status, userId, page = 1, limit = 20 } = req.query;
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      let disputes;
+      if (status === 'open' || !status) {
+        disputes = await disputeService.getOpenDisputes();
+      } else {
+        disputes = await disputeService.getOpenDisputes();
+      }
+      
+      if (userId) {
+        disputes = disputes.filter((d: any) => d.userId === userId);
+      }
+      
+      const startIdx = (Number(page) - 1) * Number(limit);
+      const endIdx = startIdx + Number(limit);
+      const paginatedResults = disputes.slice(startIdx, endIdx);
+      
+      return this.sendSuccess(res, {
+        disputes: paginatedResults,
+        total: disputes.length,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(disputes.length / Number(limit))
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminDisputes');
+    }
+  }
+
+  async getAdminDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.getDispute(id);
+      
+      if (!dispute) {
+        return this.sendError(res, 404, 'NOT_FOUND', 'Dispute not found');
+      }
+      
+      return this.sendSuccess(res, dispute);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getAdminDispute');
+    }
+  }
+
+  async assignDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { assignedAdminId } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!assignedAdminId) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Assigned admin ID is required');
+      }
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.updateDisputeStatus(id, 'investigating', assignedAdminId);
+      
+      logger.info('Dispute assigned', {
+        disputeId: id,
+        assignedTo: assignedAdminId,
+        assignedBy: adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Dispute assigned successfully',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.assignDispute');
+    }
+  }
+
+  async investigateDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
+      const { id } = req.params;
+      const adminId = this.getUserId(req);
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.escalateToInvestigation(id, adminId);
+      
+      logger.info('Dispute escalated to investigation', {
+        disputeId: id,
+        adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Dispute escalated to investigation',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.investigateDispute');
+    }
+  }
+
+  async resolveDispute(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { resolution } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!resolution) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Resolution is required');
+      }
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.resolveDispute(id, resolution, adminId);
+      
+      logger.info('Dispute resolved', {
+        disputeId: id,
+        adminId,
+        resolution
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Dispute resolved successfully',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.resolveDispute');
+    }
+  }
+
+  async addDisputeEvidence(req: AuthenticatedRequest, res: Response) {
+    try {
+      if (!featuresConfig.ENABLE_DISPUTE_MANAGEMENT) {
+        return this.sendError(res, 403, 'FEATURE_DISABLED', 'Dispute management is currently disabled');
+      }
+
+      const { id } = req.params;
+      const { evidence } = req.body;
+      const adminId = this.getUserId(req);
+      
+      if (!evidence) {
+        return this.sendError(res, 400, 'VALIDATION_ERROR', 'Evidence data is required');
+      }
+      
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const dispute = await disputeService.addEvidence(id, evidence, adminId);
+      
+      logger.info('Evidence added to dispute', {
+        disputeId: id,
+        adminId
+      });
+      
+      return this.sendSuccess(res, {
+        message: 'Evidence added successfully',
+        dispute
+      });
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.addDisputeEvidence');
+    }
+  }
+
+  async getSubscriptionManagementAnalytics(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { CancellationService } = await import('../services/domain/cancellation.service');
+      const { RefundService } = await import('../services/domain/refund.service');
+      const { DisputeService } = await import('../services/domain/dispute.service');
+      
+      const cancellationService = getService<typeof CancellationService.prototype>(TYPES.ICancellationService);
+      const refundService = getService<typeof RefundService.prototype>(TYPES.IRefundService);
+      const disputeService = getService<typeof DisputeService.prototype>(TYPES.IDisputeService);
+      
+      const [cancellationStats, pendingRefunds, openDisputes] = await Promise.all([
+        cancellationService.getCancellationStatistics(),
+        refundService.getPendingRefunds(),
+        disputeService.getOpenDisputes()
+      ]);
+      
+      const analytics = {
+        cancellations: cancellationStats,
+        refunds: {
+          pending: pendingRefunds.length,
+          total: pendingRefunds.length
+        },
+        disputes: {
+          open: openDisputes.length,
+          total: openDisputes.length
+        }
+      };
+      
+      return this.sendSuccess(res, analytics);
+    } catch (error) {
+      return this.handleError(res, error, 'AdminController.getSubscriptionManagementAnalytics');
     }
   }
 }

@@ -75,13 +75,160 @@ export const subscriptionStatusSchema = z.enum([
   'pending'
 ]);
 
+// Support type enum for validation
+const supportTypeEnum = z.enum(['email', 'whatsapp', 'phone', 'premium']);
+
+// AI and Prep tier enums
+const aiTierEnum = z.enum(['none', 'basic', 'pro', 'ultra']);
+const prepTierEnum = z.enum(['none', 'basic', 'pro', 'ultra']);
+
 export const subscriptionPlanSchema = z.object({
   name: z.string().min(1).max(255, 'Plan name must not exceed 255 characters'),
   price: z.number().nonnegative('Price must be non-negative'),
   features: z.array(z.string()),
   maxUniversities: z.number().int().positive('Max universities must be positive').optional(),
   maxCountries: z.number().int().positive('Max countries must be positive').optional(),
-  turnaroundDays: z.number().int().positive('Turnaround days must be positive')
+  turnaroundDays: z.number().int().positive('Turnaround days must be positive'),
+  tierLevel: z.number().int().positive('Tier level must be positive'),
+  
+  // Category 1: Core Application Services
+  includeCourseCountrySelection: z.boolean().optional(),
+  includeUniversityShortlisting: z.boolean().optional(),
+  includeOneOnOneEditing: z.boolean().optional(),
+  includeProfileBuilding: z.boolean().optional(),
+  includeTop50Counselling: z.boolean().optional(),
+  
+  // Category 2: Student Support & Mentorship
+  supportTypes: z.array(supportTypeEnum)
+    .min(1, 'At least one support type is required')
+    .refine((types) => new Set(types).size === types.length, {
+      message: 'Support types must not contain duplicates'
+    })
+    .optional(),
+  
+  // Category 3: Phozos AI
+  phozosAiTier: aiTierEnum.optional(),
+  
+  // Category 4: Financial & Scholarship Services
+  includeForexServices: z.boolean().optional(),
+  
+  // Category 5: Visa & Post-Admission
+  includePreDepartureSession: z.boolean().optional(),
+  
+  // Category 6: Phozos Prep
+  phozosPrepTier: prepTierEnum.optional(),
+  phozosPrepDescription: z.string()
+    .max(1000, 'Phozos Prep description must not exceed 1000 characters')
+    .optional()
+    .nullable()
+});
+
+export const updateSubscriptionPlanBodySchema = subscriptionPlanSchema.partial().extend({
+  changeReason: z.string().optional()
+});
+
+// Plan versioning schemas
+export const createPlanVersionSchema = z.object({
+  updates: z.object({
+    name: z.string().min(1).max(255).optional(),
+    description: z.string().optional(),
+    price: z.number().nonnegative().optional(),
+    features: z.array(z.string()).optional(),
+    maxUniversities: z.number().int().positive().optional(),
+    maxCountries: z.number().int().positive().optional(),
+    turnaroundDays: z.number().int().positive().optional(),
+    tierLevel: z.number().int().positive().optional(),
+    isActive: z.boolean().optional(),
+    displayOrder: z.number().int().optional(),
+    
+    // Category 1: Core Application Services
+    includeCourseCountrySelection: z.boolean().optional(),
+    includeUniversityShortlisting: z.boolean().optional(),
+    includeOneOnOneEditing: z.boolean().optional(),
+    includeProfileBuilding: z.boolean().optional(),
+    includeTop50Counselling: z.boolean().optional(),
+    
+    // Category 2: Student Support & Mentorship
+    supportTypes: z.array(supportTypeEnum)
+      .min(1, 'At least one support type is required')
+      .refine((types) => new Set(types).size === types.length, {
+        message: 'Support types must not contain duplicates'
+      })
+      .optional(),
+    
+    // Category 3: Phozos AI
+    phozosAiTier: aiTierEnum.optional(),
+    
+    // Category 4: Financial & Scholarship Services
+    includeForexServices: z.boolean().optional(),
+    
+    // Category 5: Visa & Post-Admission
+    includePreDepartureSession: z.boolean().optional(),
+    
+    // Category 6: Phozos Prep
+    phozosPrepTier: prepTierEnum.optional(),
+    phozosPrepDescription: z.string()
+      .max(1000, 'Phozos Prep description must not exceed 1000 characters')
+      .optional()
+      .nullable()
+  }),
+  releaseNotes: z.string().min(1, 'Release notes are required').max(2000)
+});
+
+// Price update schema - for dedicated price change endpoint
+export const updatePlanPriceSchema = z.object({
+  newPrice: z.number().positive('Price must be positive'),
+  effectiveDate: z.string().datetime('Must be ISO 8601 date'),
+  notifySubscribers: z.boolean().optional().default(true)
+});
+
+// Deprecation schema - enhanced with detailed reason requirement
+export const deprecatePlanSchema = z.object({
+  successorPlanId: uuidSchema.optional().nullable(),
+  reason: z.string().min(10, 'Deprecation reason must be at least 10 characters').max(500),
+  createMigration: z.boolean().default(false),
+  notifySubscribers: z.boolean().default(true)
+});
+
+// Archive schema - enhanced with detailed reason requirement
+export const archivePlanSchema = z.object({
+  reason: z.string().min(10, 'Archive reason must be at least 10 characters').max(500)
+});
+
+// Rollback schema - for plan version rollback
+export const rollbackPlanVersionSchema = z.object({
+  targetVersion: z.number().int().positive('Target version must be a positive integer'),
+  reason: z.string().min(10, 'Rollback reason must be at least 10 characters').max(500),
+  notifySubscribers: z.boolean().optional().default(false)
+});
+
+// Plan migration schemas
+export const createMigrationSchema = z.object({
+  name: z.string().min(1).max(255, 'Migration name must not exceed 255 characters'),
+  sourcePlanId: uuidSchema,
+  targetPlanId: uuidSchema,
+  migrationType: z.enum(['voluntary', 'mandatory', 'incentivized']),
+  startDate: z.string().datetime().or(z.date()),
+  endDate: z.string().datetime().or(z.date()).optional(),
+  incentiveType: z.enum(['discount', 'free_months', 'feature_upgrade']).optional(),
+  incentiveValue: z.any().optional()
+});
+
+export const startMigrationSchema = z.object({
+  migrationId: uuidSchema
+});
+
+export const cancelMigrationSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(1000)
+});
+
+export const acceptMigrationSchema = z.object({
+  migrationId: uuidSchema
+});
+
+export const declineMigrationSchema = z.object({
+  migrationId: uuidSchema,
+  reason: z.string().optional()
 });
 
 export const userSubscriptionSchema = z.object({
@@ -163,7 +310,7 @@ export const notificationSchema = z.object({
 });
 
 // Payment-related schemas
-export const paymentGatewaySchema = z.enum(['stripe', 'paypal', 'flutterwave', 'paystack']);
+export const paymentGatewaySchema = z.enum(['razorpay', 'paypal', 'flutterwave', 'paystack']);
 
 export const paymentSchema = z.object({
   amount: z.number().positive('Payment amount must be positive'),
@@ -171,6 +318,68 @@ export const paymentSchema = z.object({
   gateway: paymentGatewaySchema,
   userId: uuidSchema.optional(),
   metadata: z.record(z.any()).optional()
+});
+
+// Bulk subscription operations schemas
+export const bulkMigrateSubscribersSchema = z.object({
+  sourcePlanId: uuidSchema,
+  targetPlanId: uuidSchema,
+  userIds: z.array(uuidSchema).min(1, 'At least one user ID is required').max(100, 'Cannot migrate more than 100 users at once')
+});
+
+export const bulkCancelSubscriptionsSchema = z.object({
+  userIds: z.array(uuidSchema).min(1, 'At least one user ID is required').max(100, 'Cannot cancel more than 100 subscriptions at once'),
+  reason: z.string().min(1, 'Cancellation reason is required').max(500, 'Reason must not exceed 500 characters')
+});
+
+export const exportSubscribersSchema = z.object({
+  planId: uuidSchema.optional(),
+  status: z.enum(['active', 'cancelled', 'expired', 'pending']).optional(),
+  format: z.enum(['csv']).optional().default('csv')
+});
+
+// Subscription Management schemas (Phase 1.2)
+export const cancellationStatusSchema = z.enum(['pending', 'approved', 'rejected', 'cancelled']);
+export const refundStatusSchema = z.enum(['pending', 'processing', 'completed', 'failed', 'rejected']);
+export const disputeStatusSchema = z.enum(['open', 'investigating', 'resolved', 'closed']);
+export const disputeTypeSchema = z.enum(['chargeback', 'dispute']);
+
+export const createCancellationRequestSchema = z.object({
+  subscriptionId: uuidSchema,
+  userId: uuidSchema,
+  reason: z.string().min(10, 'Reason must be at least 10 characters').max(1000, 'Reason must not exceed 1000 characters')
+});
+
+export const processCancellationRequestSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  adminNotes: z.string().max(2000, 'Admin notes must not exceed 2000 characters').optional()
+});
+
+export const createRefundRequestSchema = z.object({
+  subscriptionId: uuidSchema,
+  userId: uuidSchema,
+  reason: z.string().min(10, 'Reason must be at least 10 characters').max(1000, 'Reason must not exceed 1000 characters'),
+  amount: z.number().positive('Refund amount must be positive').optional()
+});
+
+export const processRefundRequestSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  adminNotes: z.string().max(2000, 'Admin notes must not exceed 2000 characters').optional(),
+  refundAmount: z.number().positive('Refund amount must be positive').optional()
+});
+
+export const createDisputeSchema = z.object({
+  subscriptionId: uuidSchema,
+  userId: uuidSchema,
+  type: disputeTypeSchema,
+  reason: z.string().min(10, 'Reason must be at least 10 characters').max(2000, 'Reason must not exceed 2000 characters'),
+  evidence: z.record(z.any()).optional()
+});
+
+export const updateDisputeStatusSchema = z.object({
+  status: disputeStatusSchema,
+  resolution: z.string().max(2000, 'Resolution must not exceed 2000 characters').optional(),
+  adminNotes: z.string().max(2000, 'Admin notes must not exceed 2000 characters').optional()
 });
 
 // Export helper type inference
@@ -183,3 +392,9 @@ export type EventInput = z.infer<typeof eventSchema>;
 export type DocumentInput = z.infer<typeof documentSchema>;
 export type NotificationInput = z.infer<typeof notificationSchema>;
 export type PaymentInput = z.infer<typeof paymentSchema>;
+export type CreateCancellationRequestInput = z.infer<typeof createCancellationRequestSchema>;
+export type ProcessCancellationRequestInput = z.infer<typeof processCancellationRequestSchema>;
+export type CreateRefundRequestInput = z.infer<typeof createRefundRequestSchema>;
+export type ProcessRefundRequestInput = z.infer<typeof processRefundRequestSchema>;
+export type CreateDisputeInput = z.infer<typeof createDisputeSchema>;
+export type UpdateDisputeStatusInput = z.infer<typeof updateDisputeStatusSchema>;

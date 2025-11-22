@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['server/tests/**/*.test.ts', 'server/repositories/**/*.test.ts', 'server/services/**/*.test.ts', 'server/middleware/**/*.test.ts', 'server/utils/**/*.test.ts', 'server/config/**/*.test.ts'],
+    include: ['server/tests/**/*.test.ts', 'server/repositories/**/*.test.ts', 'server/services/**/*.test.ts', 'server/controllers/**/*.test.ts', 'server/middleware/**/*.test.ts', 'server/utils/**/*.test.ts', 'server/config/**/*.test.ts'],
     exclude: ['node_modules/**', 'dist/**'],
     testTimeout: 30000,
     coverage: {

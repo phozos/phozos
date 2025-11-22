@@ -7,6 +7,7 @@ import { AuthenticatedRequest } from '../types/auth';
 import { z } from 'zod';
 import { cookiesConfig } from '../config/index';
 import { RefreshTokenService } from '../services/domain/refresh-token.service';
+import { getClientIp } from '../middleware/security';
 
 // Validation schemas
 const registerSchema = z.object({
@@ -24,6 +25,11 @@ const loginSchema = z.object({
 });
 
 const teamLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1)
+});
+
+const partnerLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1)
 });
@@ -74,6 +80,11 @@ export class AuthController extends BaseController {
   /**
    * Register a new student account
    * 
+   * Phase 6.3: Referral Tracking Integration
+   * - Extracts referral_code and click_id from cookies
+   * - Passes to registration service for partner attribution
+   * - Clears referral cookies after successful attribution
+   * 
    * @route POST /api/auth/student-register
    * @access Public
    * @param {Request} req - Express request object containing registration data
@@ -97,14 +108,26 @@ export class AuthController extends BaseController {
     try {
       const validatedData = registerSchema.parse(req.body);
 
+      // Phase 6.3: Extract referral tracking from cookies
+      const referralCode = req.cookies['referral_code'];
+      const clickId = req.cookies['click_id'];
+
       const registrationService = getService<IRegistrationService>(TYPES.IRegistrationService);
       const result = await registrationService.registerStudentComplete(
         validatedData.email,
         validatedData.password,
         validatedData.firstName,
         validatedData.lastName,
-        validatedData.phone
+        validatedData.phone,
+        referralCode,
+        clickId
       );
+
+      // Phase 6.3: Clear referral cookies after attribution
+      if (referralCode) {
+        res.clearCookie('referral_code');
+        res.clearCookie('click_id');
+      }
 
       res.status(201);
       return this.sendSuccess(res, result);
@@ -215,6 +238,51 @@ export class AuthController extends BaseController {
       }
       
       return this.handleError(res, error, 'AuthController.loginTeam');
+    }
+  }
+
+  /**
+   * Authenticate a partner and return session token
+   * 
+   * @route POST /api/auth/partner-login
+   * @access Public
+   * @param {Request} req - Express request object containing login credentials
+   * @param {Response} res - Express response object
+   * @returns {Promise<Response>} Returns partner data and authentication token
+   * 
+   * @example
+   * // Request body:
+   * {
+   *   "email": "partner@example.com",
+   *   "password": "SecurePass123"
+   * }
+   * 
+   * @throws {422} Validation error if input is invalid
+   * @throws {401} Unauthorized if credentials are invalid
+   */
+  async loginPartner(req: Request, res: Response) {
+    try {
+      const { email, password } = partnerLoginSchema.parse(req.body);
+      const deviceInfo = req.get('User-Agent');
+      const ipAddress = getClientIp(req);
+
+      const authService = getService<IAuthService>(TYPES.IAuthService);
+      const result = await authService.loginPartnerComplete(email, password, deviceInfo, ipAddress);
+
+      // Set refresh token in HttpOnly cookie (Phase 3: HttpOnly Cookies)
+      res.cookie('refreshToken', result.refreshToken, this.getRefreshTokenCookieOptions());
+
+      // Return access token only (refresh token is in HttpOnly cookie)
+      return this.sendSuccess(res, {
+        user: result.user,
+        token: result.token
+      });
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        return this.sendError(res, 422, 'VALIDATION_ERROR', 'Invalid input', error.errors);
+      }
+      
+      return this.handleError(res, error, 'AuthController.loginPartner');
     }
   }
 

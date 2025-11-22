@@ -8,6 +8,167 @@
       "when": 1761125941928,
       "tag": "0000_baseline_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1762168751783,
+      "tag": "0001_natural_snowbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1762169681171,
+      "tag": "0002_dazzling_daimon_hellstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1762279314379,
+      "tag": "0003_puzzling_malcolm_colcord",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1762315863055,
+      "tag": "0004_gigantic_silver_fox",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1762337040555,
+      "tag": "0005_curious_psylocke",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762337040556,
+      "tag": "0006_add_subscription_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762337040557,
+      "tag": "0007_add_failed_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1762337040558,
+      "tag": "0008_add_digest_sent_at_to_failed_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1762405235507,
+      "tag": "0009_add_subscription_audit_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1762408102811,
+      "tag": "0010_lowly_gabe_jones",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1762487739857,
+      "tag": "0011_clean_nicolaos",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1762491824441,
+      "tag": "0012_talented_jack_murdock",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1762493774308,
+      "tag": "0013_fixed_hairball",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1762503901464,
+      "tag": "0014_odd_scream",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1762506218454,
+      "tag": "0015_military_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1762532431075,
+      "tag": "0016_bumpy_rictor",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1762534761099,
+      "tag": "0017_lucky_old_lace",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1762539416766,
+      "tag": "0018_huge_silvermane",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1762575432151,
+      "tag": "0019_nifty_wonder_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1762676762721,
+      "tag": "0020_broad_mattie_franklin",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1762748050022,
+      "tag": "0021_certain_boomer",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1762762650455,
+      "tag": "0022_breezy_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1763182121515,
+      "tag": "0023_funny_champions",
+      "breakpoints": true
     }
   ]
 }

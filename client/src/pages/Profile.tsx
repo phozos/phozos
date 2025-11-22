@@ -6,6 +6,10 @@ import Footer from "@/components/Footer";
 import ProfileOverviewCard from "@/components/profile/ProfileOverviewCard";
 import PersonalInfoForm from "@/components/profile/PersonalInfoForm";
 import PasswordChangeDialog from "@/components/profile/PasswordChangeDialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
+import { CreditCard, Settings } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -87,6 +91,36 @@ export default function Profile() {
             />
           </div>
         </div>
+
+        {/* Subscription Management Section */}
+        {user.userType === "customer" && (
+          <Card className="mt-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center">
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    Subscription
+                  </CardTitle>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Manage your subscription, billing, and payment settings
+                  </p>
+                </div>
+                <Link href="/subscription-management">
+                  <Button variant="outline" size="sm">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Manage Subscription
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                View your current plan, request cancellations, refunds, or raise disputes.
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </main>
 
       {/* Password Change Dialog */}

@@ -1,10 +1,18 @@
 import { Link } from "wouter";
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 export default function Footer() {
   return (
     <footer className="bg-gradient-to-r from-primary via-purple-700 to-pink-600 border-t border-purple-600/20 py-12">
       <div className="container mx-auto px-4">
+        {/* Logo Branding Section */}
+        <div className="flex items-center gap-3 mb-8">
+          <img src={logoWhite} alt="Phozos Logo" className="h-8 w-auto" loading="lazy" />
+          <span className="text-white text-xl font-semibold">Phozos</span>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Column 1: Company */}
           <div>
@@ -40,8 +48,12 @@ export default function Footer() {
                 <div className="text-white/90 inline-flex items-start gap-2 mt-2">
                   <MapPin size={16} className="mt-1 flex-shrink-0" />
                   <div>
-                    <div>Bengaluru, Karnataka</div>
-                    <div>Bathinda, Punjab</div>
+                    <div className="text-xs font-semibold text-white/70">Corporate Office</div>
+                    <div>{CORPORATE_OFFICE.abbreviated}</div>
+                    <div className="text-xs font-semibold text-white/70 mt-1">Registered Office</div>
+                    <div>{REGISTERED_OFFICE.abbreviated}</div>
+                    <div className="text-xs font-semibold text-white/70 mt-1">US Office</div>
+                    <div>{US_OFFICE.abbreviated}</div>
                   </div>
                 </div>
               </li>

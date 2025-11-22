@@ -4,6 +4,7 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import { SEO } from "@/components/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
 import { 
   Globe, 
   Target, 
@@ -393,7 +394,7 @@ export default function About() {
             <div className="text-center mb-16">
               <h2 className="text-4xl font-bold mb-4">Our Global Presence</h2>
               <p className="text-xl text-muted-foreground">
-                Serving students worldwide from our offices in India
+                Serving students worldwide from our offices in India and the United States
               </p>
             </div>
 
@@ -403,11 +404,12 @@ export default function About() {
                   <div className="w-16 h-16 bg-gradient-to-r from-primary to-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
                     <MapPin className="w-8 h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Corporate Office</h3>
+                  <h3 className="text-xl font-bold mb-2">{CORPORATE_OFFICE.label}</h3>
                   <p className="text-muted-foreground">
-                    Koramangala<br />
-                    Bengaluru, Karnataka<br />
-                    India
+                    {CORPORATE_OFFICE.address.street}<br />
+                    {CORPORATE_OFFICE.address.area}<br />
+                    {CORPORATE_OFFICE.address.city}, {CORPORATE_OFFICE.address.state} {CORPORATE_OFFICE.address.postalCode}<br />
+                    {CORPORATE_OFFICE.address.country}
                   </p>
                 </CardContent>
               </Card>
@@ -417,11 +419,11 @@ export default function About() {
                   <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
                     <MapPin className="w-8 h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Registered Office</h3>
+                  <h3 className="text-xl font-bold mb-2">{REGISTERED_OFFICE.label}</h3>
                   <p className="text-muted-foreground">
-                    Bathinda<br />
-                    Punjab<br />
-                    India
+                    {REGISTERED_OFFICE.address.city}<br />
+                    {REGISTERED_OFFICE.address.state}<br />
+                    {REGISTERED_OFFICE.address.country}
                   </p>
                 </CardContent>
               </Card>
@@ -429,14 +431,20 @@ export default function About() {
               <Card className="border-2 hover:shadow-lg transition-shadow">
                 <CardContent className="p-8 text-center">
                   <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Globe className="w-8 h-8 text-white" />
+                    <MapPin className="w-8 h-8 text-white" />
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Global Operations</h3>
+                  <h3 className="text-xl font-bold mb-2">{US_OFFICE.label}</h3>
                   <p className="text-muted-foreground">
-                    Remote Worldwide<br />
-                    Serving students in<br />
-                    50+ countries
+                    {US_OFFICE.address.street}<br />
+                    {US_OFFICE.address.city}, {US_OFFICE.address.state} {US_OFFICE.address.postalCode}<br />
+                    {US_OFFICE.address.country}
                   </p>
+                  {US_OFFICE.phone && (
+                    <div className="mt-4 flex items-center justify-center gap-2 text-sm">
+                      <Phone className="w-4 h-4 text-primary" />
+                      <span className="font-medium">{US_OFFICE.phone}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

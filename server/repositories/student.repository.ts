@@ -1,4 +1,4 @@
-import { BaseRepository } from './base.repository';
+import { BaseRepository, DbOrTransaction } from './base.repository';
 import { 
   StudentProfile, 
   InsertStudentProfile, 
@@ -10,6 +10,7 @@ import { eq, and, desc, sql, SQL } from 'drizzle-orm';
 import { handleDatabaseError, NotFoundError } from './errors';
 import { StudentWithUserDetails, StudentAssignedToCounselor } from '../types/repository-responses';
 import { StudentProfileFilters } from '../types/repository-filters';
+import { toStudentProfileId, toAccountId } from '@shared/types/branded-ids';
 
 export interface IStudentRepository {
   findById(id: string): Promise<StudentProfile>;
@@ -18,8 +19,8 @@ export interface IStudentRepository {
   findAll(filters?: StudentProfileFilters): Promise<StudentProfile[]>;
   findAllWithUserDetails(): Promise<StudentWithUserDetails[]>;
   findAssignedToCounselor(counselorId: string): Promise<StudentAssignedToCounselor[]>;
-  create(data: InsertStudentProfile): Promise<StudentProfile>;
-  update(id: string, data: Partial<StudentProfile>): Promise<StudentProfile>;
+  create(data: InsertStudentProfile, tx?: DbOrTransaction): Promise<StudentProfile>;
+  update(id: string, data: Partial<StudentProfile>, tx?: DbOrTransaction): Promise<StudentProfile>;
   assignCounselor(studentId: string, counselorId: string): Promise<void>;
   unassign(studentId: string): Promise<void>;
   checkAssignment(counselorId: string, studentId: string): Promise<boolean>;
@@ -87,6 +88,8 @@ export class StudentRepository extends BaseRepository<StudentProfile, InsertStud
 
       return results.map(student => ({
         ...student,
+        id: toStudentProfileId(student.id),
+        userId: toAccountId(student.userId),
         gpa: student.gpa ? parseFloat(student.gpa) : null,
         accountStatus: student.accountStatus || 'pending_approval',
         assignedCounselor: student.assignedCounselorId && student.assignedCounselorEmail ? {

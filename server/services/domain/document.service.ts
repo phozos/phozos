@@ -4,6 +4,8 @@ import { Document, InsertDocument } from '@shared/schema';
 import { container, TYPES } from '../container';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
 import { ValidationServiceError } from '../errors';
+import { IFeatureEntitlementService } from '../../types/feature-types';
+import { IFeatureAnalyticsService } from './feature-analytics.service';
 
 export interface IDocumentService {
   getDocumentById(id: string): Promise<Document>;
@@ -15,7 +17,9 @@ export interface IDocumentService {
 
 export class DocumentService extends BaseService implements IDocumentService {
   constructor(
-    private documentRepository: IDocumentRepository = container.get<IDocumentRepository>(TYPES.IDocumentRepository)
+    private documentRepository: IDocumentRepository = container.get<IDocumentRepository>(TYPES.IDocumentRepository),
+    private featureEntitlementService: IFeatureEntitlementService = container.get<IFeatureEntitlementService>(TYPES.IFeatureEntitlementService),
+    private featureAnalyticsService: IFeatureAnalyticsService = container.get<IFeatureAnalyticsService>(TYPES.IFeatureAnalyticsService)
   ) {
     super();
   }
@@ -48,6 +52,29 @@ export class DocumentService extends BaseService implements IDocumentService {
   async createDocument(data: InsertDocument): Promise<Document> {
     try {
       this.validateRequired(data, ['userId', 'name', 'type', 'fileName', 'filePath']);
+
+      // FEATURE GUARD: Check if document type requires expert editing feature
+      // For essay, recommendation, and resume documents, check for expert editing
+      const documentsRequiringExpertEditing = ['essay', 'recommendation', 'resume'];
+      if (documentsRequiringExpertEditing.includes(data.type)) {
+        const canUploadForEditing = await this.featureEntitlementService.canUseFeature(
+          data.userId,
+          'includeExpertEditing'
+        );
+
+        if (!canUploadForEditing.allowed) {
+          throw new ValidationServiceError('Document', {
+            featureAccess: `Uploading ${data.type} documents for expert editing requires a plan with the Expert Editing feature. Please upgrade your plan.`
+          });
+        }
+
+        await this.featureAnalyticsService.trackFeatureUsage(
+          data.userId,
+          'includeExpertEditing',
+          'accessed',
+          { documentType: data.type, fileName: data.fileName }
+        );
+      }
 
       const errors: Record<string, string> = {};
 
@@ -91,7 +118,23 @@ export class DocumentService extends BaseService implements IDocumentService {
         throw new ValidationServiceError('Document', errors);
       }
 
-      return await this.documentRepository.create(data);
+      const document = await this.documentRepository.create(data);
+
+      if (documentsRequiringExpertEditing.includes(data.type)) {
+        await this.featureAnalyticsService.trackFeatureUsage(
+          data.userId,
+          'includeExpertEditing',
+          'completed',
+          { 
+            documentType: data.type, 
+            fileName: data.fileName,
+            fileSize: data.fileSize,
+            documentId: document.id
+          }
+        );
+      }
+
+      return document;
     } catch (error) {
       return this.handleError(error, 'DocumentService.createDocument');
     }

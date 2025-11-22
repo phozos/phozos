@@ -187,6 +187,17 @@ export const errorHandler: ErrorRequestHandler = (
     );
   }
 
+  // Handle payload too large errors (for webhook endpoint)
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return sendError(
+      res,
+      413,
+      ErrorCodes.VALIDATION_ERROR,
+      'Webhook payload too large',
+      { maxSize: '1KB' }
+    );
+  }
+
   // Handle syntax errors in JSON parsing
   if (err instanceof SyntaxError && 'body' in err) {
     return sendError(

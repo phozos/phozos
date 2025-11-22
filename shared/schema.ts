@@ -15,12 +15,12 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // Enums
-export const userTypeEnum = pgEnum("user_type", ["customer", "team_member", "company_profile"]);
+export const userTypeEnum = pgEnum("user_type", ["customer", "team_member", "company_profile", "partner"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "counselor"]);
 export const accountStatusEnum = pgEnum("account_status", ["active", "inactive", "pending_approval", "suspended", "rejected"]);
 export const applicationStatusEnum = pgEnum("application_status", ["draft", "submitted", "under_review", "accepted", "rejected", "waitlisted"]);
 export const documentTypeEnum = pgEnum("document_type", ["transcript", "test_score", "essay", "recommendation", "resume", "certificate", "other"]);
-export const notificationTypeEnum = pgEnum("notification_type", ["application_update", "document_reminder", "message", "system", "deadline"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["application_update", "document_reminder", "message", "system", "deadline", "feature_addition", "feature_deprecation", "feature_modification"]);
 export const subscriptionTierEnum = pgEnum("subscription_tier", ["free", "premium", "elite"]);
 export const studentStatusEnum = pgEnum("student_status", ["inquiry", "converted", "visa_applied", "visa_approved", "departed"]);
 export const fieldTypeEnum = pgEnum("field_type", ["text", "textarea", "number", "date", "dropdown", "checkbox", "file"]);
@@ -30,6 +30,17 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "
 export const supportTypeEnum = pgEnum("support_type", ["email", "whatsapp", "phone", "premium"]);
 export const universityTierEnum = pgEnum("university_tier", ["general", "top500", "top200", "top100", "ivy_league"]);
 export const reportReasonEnum = pgEnum("report_reason", ["spam", "inappropriate", "harassment", "misinformation", "off_topic", "other"]);
+export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "completed", "failed"]);
+export const webhookQueueStatusEnum = pgEnum("webhook_queue_status", ["pending", "processing", "success", "failed"]);
+export const deprecationPhaseEnum = pgEnum("deprecation_phase", ["announcement", "grace_period", "soft_disable", "hard_removal"]);
+export const deprecationStatusEnum = pgEnum("deprecation_status", ["scheduled", "in_progress", "completed", "cancelled"]);
+export const paymentTypeEnum = pgEnum("payment_type", ["new_subscription", "upgrade", "renewal"]);
+export const aiTierEnum = pgEnum("ai_tier", ["none", "basic", "pro", "ultra"]);
+export const prepTierEnum = pgEnum("prep_tier", ["none", "basic", "pro", "ultra"]);
+export const cancellationStatusEnum = pgEnum("cancellation_status", ["pending", "approved", "rejected", "cancelled"]);
+export const refundStatusEnum = pgEnum("refund_status", ["pending", "processing", "completed", "failed", "rejected"]);
+export const disputeStatusEnum = pgEnum("dispute_status", ["open", "investigating", "resolved", "closed"]);
+export const disputeTypeEnum = pgEnum("dispute_type", ["chargeback", "dispute"]);
 
 // Users table
 export const users = pgTable("users", {
@@ -204,6 +215,171 @@ export const studentProfiles = pgTable("student_profiles", {
   }>(),
   
   notes: text("notes"),
+  referredByPartnerId: uuid("referred_by_partner_id"),
+  referralLinkId: uuid("referral_link_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Profiles
+export const partnerProfiles = pgTable("partner_profiles", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull().unique(),
+  companyName: text("company_name").notNull(),
+  businessType: text("business_type"),
+  registrationNumber: text("registration_number"),
+  taxId: text("tax_id"),
+  contactPerson: text("contact_person").notNull(),
+  phone: text("phone").notNull(),
+  whatsappNumber: text("whatsapp_number"),
+  website: text("website"),
+  address: jsonb("address").$type<{
+    street?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+  }>(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).notNull().default("10.00"),
+  commissionType: text("commission_type").notNull().default("percentage"),
+  fixedCommissionAmount: decimal("fixed_commission_amount", { precision: 10, scale: 2 }),
+  payoutMethod: text("payout_method").notNull().default("bank_transfer"),
+  bankDetails: jsonb("bank_details").$type<{
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    bankName?: string;
+    branchName?: string;
+    swiftCode?: string;
+  }>(),
+  paypalEmail: text("paypal_email"),
+  minimumPayoutAmount: decimal("minimum_payout_amount", { precision: 10, scale: 2 }).default("1000.00"),
+  totalReferrals: integer("total_referrals").default(0),
+  totalConversions: integer("total_conversions").default(0),
+  totalCommissionEarned: decimal("total_commission_earned", { precision: 12, scale: 2 }).default("0.00"),
+  totalCommissionPaid: decimal("total_commission_paid", { precision: 12, scale: 2 }).default("0.00"),
+  isActive: boolean("is_active").default(true),
+  isVerified: boolean("is_verified").default(false),
+  verifiedAt: timestamp("verified_at"),
+  verifiedBy: uuid("verified_by").references(() => users.id),
+  logo: text("logo"),
+  bio: text("bio"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Referral Links
+export const partnerReferralLinks = pgTable("partner_referral_links", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  linkCode: varchar("link_code", { length: 16 }).notNull().unique(),
+  linkUrl: text("link_url").notNull(),
+  campaignName: varchar("campaign_name", { length: 255 }),
+  campaignSource: varchar("campaign_source", { length: 100 }),
+  campaignMedium: varchar("campaign_medium", { length: 100 }),
+  description: text("description"),
+  clickCount: integer("click_count").default(0),
+  uniqueClickCount: integer("unique_click_count").default(0),
+  conversionCount: integer("conversion_count").default(0),
+  lastClickedAt: timestamp("last_clicked_at"),
+  isActive: boolean("is_active").default(true),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Referral Clicks
+export const referralClicks = pgTable("referral_clicks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  referralLinkId: uuid("referral_link_id").references(() => partnerReferralLinks.id, { onDelete: 'cascade' }).notNull(),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'set null' }),
+  ipAddress: varchar("ip_address", { length: 45 }).notNull(),
+  userAgent: text("user_agent"),
+  referer: text("referer"),
+  country: varchar("country", { length: 2 }),
+  city: varchar("city", { length: 100 }),
+  sessionId: varchar("session_id", { length: 64 }),
+  fingerprint: varchar("fingerprint", { length: 64 }),
+  isUnique: boolean("is_unique").default(true),
+  convertedToRegistration: boolean("converted_to_registration").default(false),
+  convertedToPayment: boolean("converted_to_payment").default(false),
+  convertedAt: timestamp("converted_at"),
+  clickedAt: timestamp("clicked_at").defaultNow(),
+});
+
+// Partner Student Referrals
+export const partnerStudentReferrals = pgTable("partner_student_referrals", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  studentId: uuid("student_id").references(() => studentProfiles.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  referralLinkId: uuid("referral_link_id").references(() => partnerReferralLinks.id, { onDelete: 'set null' }),
+  clickId: uuid("click_id").references(() => referralClicks.id, { onDelete: 'set null' }),
+  attributionMethod: varchar("attribution_method", { length: 50 }).notNull(),
+  promoCode: varchar("promo_code", { length: 50 }),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  statusReason: text("status_reason"),
+  commissionEligible: boolean("commission_eligible").default(true),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }),
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }),
+  commissionStatus: varchar("commission_status", { length: 50 }).default("pending"),
+  commissionPaidAt: timestamp("commission_paid_at"),
+  registeredAt: timestamp("registered_at"),
+  convertedAt: timestamp("converted_at"),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'set null' }),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'set null' }),
+  notes: text("notes"),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Commissions
+export const partnerCommissions = pgTable("partner_commissions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  referralId: uuid("referral_id").references(() => partnerStudentReferrals.id, { onDelete: 'cascade' }).notNull(),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'cascade' }).notNull(),
+  baseAmount: decimal("base_amount", { precision: 10, scale: 2 }).notNull(),
+  commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).notNull(),
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  statusReason: text("status_reason"),
+  approvedBy: uuid("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  approvedAt: timestamp("approved_at"),
+  rejectedBy: uuid("rejected_by").references(() => users.id, { onDelete: 'set null' }),
+  rejectedAt: timestamp("rejected_at"),
+  payoutId: uuid("payout_id").references(() => partnerPayouts.id, { onDelete: 'set null' }),
+  paidAt: timestamp("paid_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Partner Payouts
+export const partnerPayouts = pgTable("partner_payouts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: uuid("partner_id").references(() => partnerProfiles.id, { onDelete: 'cascade' }).notNull(),
+  payoutAmount: decimal("payout_amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  commissionCount: integer("commission_count").notNull(),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  payoutMethod: varchar("payout_method", { length: 50 }).notNull(),
+  bankTransferReference: varchar("bank_transfer_reference", { length: 255 }),
+  bankTransferDate: timestamp("bank_transfer_date"),
+  paypalTransactionId: varchar("paypal_transaction_id", { length: 255 }),
+  paypalEmail: varchar("paypal_email", { length: 255 }),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  statusReason: text("status_reason"),
+  processedBy: uuid("processed_by").references(() => users.id, { onDelete: 'set null' }),
+  processedAt: timestamp("processed_at"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  attachments: text("attachments").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -351,7 +527,23 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-
+// Audit Logs - Comprehensive audit trail for compliance and debugging
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id),
+  adminId: uuid("admin_id").references(() => users.id),
+  action: text("action").notNull(), // 'create', 'update', 'delete', 'read'
+  resourceType: text("resource_type").notNull(), // 'subscription_plan', 'user_subscription', etc.
+  resourceId: uuid("resource_id"),
+  changes: jsonb("changes"), // Before/after data
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  requestMethod: text("request_method"),
+  requestPath: text("request_path"),
+  success: boolean("success").default(true),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow()
+});
 
 // Forum comments
 export const forumComments = pgTable("forum_comments", {
@@ -817,10 +1009,14 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  currency: text("currency").notNull().default("USD"),
+  currency: text("currency").notNull().default("INR"),
   description: text("description"),
-  logo: text("logo").default("graduation-cap"), // Plan logo identifier
-  features: jsonb("features").$type<string[]>().notNull(),
+  // @deprecated (2025-11-11) Logo field is deprecated and will be removed in a future version. UI no longer displays plan logos.
+  logo: text("logo").default("graduation-cap"),
+  // @deprecated (2025-11-11) Features field is deprecated and will be removed in a future version. Plan features are now represented through granular boolean fields.
+  features: jsonb("features").$type<string[]>(),
+  tierLevel: integer("tier_level").notNull(),
+  isLifetime: boolean("is_lifetime").default(true),
   maxUniversities: integer("max_universities").notNull(),
   maxCountries: integer("max_countries").notNull(),
   universityTier: universityTierEnum("university_tier").notNull().default("general"),
@@ -837,8 +1033,34 @@ export const subscriptionPlans = pgTable("subscription_plans", {
   includeNetworkingEvents: boolean("include_networking_events").default(false),
   includeFlightAccommodation: boolean("include_flight_accommodation").default(false),
   isBusinessFocused: boolean("is_business_focused").default(false),
+  
+  includeCourseCountrySelection: boolean("include_course_country_selection").default(false),
+  includeUniversityShortlisting: boolean("include_university_shortlisting").default(false),
+  includeOneOnOneEditing: boolean("include_one_on_one_editing").default(false),
+  includeProfileBuilding: boolean("include_profile_building").default(false),
+  includeTop50Counselling: boolean("include_top50_counselling").default(false),
+  
+  supportTypes: text("support_types").array().default(sql`ARRAY['email']::text[]`),
+  
+  phozosAiTier: aiTierEnum("phozos_ai_tier").default("none"),
+  
+  includeForexServices: boolean("include_forex_services").default(false),
+  
+  includePreDepartureSession: boolean("include_pre_departure_session").default(false),
+  
+  phozosPrepTier: prepTierEnum("phozos_prep_tier").default("none"),
+  phozosPrepDescription: text("phozos_prep_description"),
+  
   displayOrder: integer("display_order").default(0),
   isActive: boolean("is_active").default(true),
+  basePlanId: uuid("base_plan_id").references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
+  version: integer("version").notNull().default(1),
+  versionName: varchar("version_name", { length: 50 }),
+  isLatestVersion: boolean("is_latest_version").default(true),
+  deprecatedAt: timestamp("deprecated_at"),
+  archivedAt: timestamp("archived_at"),
+  successorPlanId: uuid("successor_plan_id").references((): any => subscriptionPlans.id, { onDelete: 'set null' }),
+  feature_version_metadata: jsonb("feature_version_metadata"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -849,13 +1071,28 @@ export const userSubscriptions = pgTable("user_subscriptions", {
   userId: uuid("user_id").references(() => users.id).notNull(),
   planId: uuid("plan_id").references(() => subscriptionPlans.id).notNull(),
   status: subscriptionStatusEnum("status").notNull().default("pending"),
+  isLifetime: boolean("is_lifetime").default(true),
+  tierLevel: integer("tier_level"),
+  lifetimeActivatedAt: timestamp("lifetime_activated_at"),
+  highestTierReached: integer("highest_tier_reached"),
   startedAt: timestamp("started_at"),
   expiresAt: timestamp("expires_at"),
+  orderId: text("order_id"), // Razorpay order ID for idempotency
   paymentReference: text("payment_reference"),
   paymentGateway: text("payment_gateway"), // stripe, razorpay, etc.
-  autoRenew: boolean("auto_renew").default(true),
+  autoRenew: boolean("auto_renew"),
   universitiesUsed: integer("universities_used").default(0),
   countriesUsed: integer("countries_used").default(0),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("INR"),
+  paidAt: timestamp("paid_at"),
+  
+  // Grandfathering support (Phase 2)
+  subscribedPlanSnapshot: jsonb("subscribed_plan_snapshot"), // Immutable snapshot of plan at subscription time
+  grandfatheredPrice: decimal("grandfathered_price", { precision: 10, scale: 2 }), // Locked price immune to plan changes
+  grandfatheredUntil: timestamp("grandfathered_until"), // Optional expiration (null = forever)
+  isGrandfathered: boolean("is_grandfathered").default(false), // Whether pricing is grandfathered
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -877,10 +1114,377 @@ export const paymentSettings = pgTable("payment_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Webhook Events table (for deduplication)
+export const webhookEvents = pgTable("webhook_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: text("event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload"),
+  status: text("status").notNull().default("processing"),
+  errorMessage: text("error_message"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Webhook Queue table (for async webhook processing)
+export const webhookQueue = pgTable("webhook_queue", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: text("event_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload").notNull(),
+  status: webhookQueueStatusEnum("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  nextRetryAt: timestamp("next_retry_at").defaultNow(),
+});
+
+// Subscription Events table (for audit trail)
+export const subscriptionEvents = pgTable("subscription_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  eventType: text("event_type").notNull(),
+  oldStatus: text("old_status"),
+  newStatus: text("new_status"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Payments table (for complete payment ledger tracking)
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'set null' }),
+  paymentType: paymentTypeEnum("payment_type").notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  orderId: text("order_id").notNull(),
+  paymentReference: text("payment_reference").notNull(),
+  paymentGateway: text("payment_gateway").notNull(),
+  paidAt: timestamp("paid_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Subscription Audit Outbox table (for event outbox pattern)
+export const subscriptionAuditOutbox = pgTable("subscription_audit_outbox", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: uuid("subscription_id").notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  oldStatus: varchar("old_status", { length: 50 }),
+  newStatus: varchar("new_status", { length: 50 }),
+  metadata: jsonb("metadata"),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  retries: integer("retries").default(0).notNull(),
+  nextRetryAt: timestamp("next_retry_at"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
+// Failed Payments table (for tracking payment failures)
+export const failedPayments = pgTable("failed_payments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'set null' }),
+  orderId: text("order_id"),
+  paymentId: text("payment_id"),
+  amount: decimal("amount", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("INR"),
+  failureReason: text("failure_reason"),
+  razorpayErrorCode: text("razorpay_error_code"),
+  razorpayErrorDescription: text("razorpay_error_description"),
+  failedAt: timestamp("failed_at").notNull().defaultNow(),
+  notifiedAt: timestamp("notified_at"),
+  digestSentAt: timestamp("digest_sent_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Cancellation Requests table (for user-initiated subscription cancellations)
+export const cancellationRequests = pgTable("cancellation_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  reason: text("reason").notNull(),
+  status: cancellationStatusEnum("status").notNull().default("pending"),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  processedBy: uuid("processed_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Refunds table (for tracking refund requests and processing)
+export const refunds = pgTable("refunds", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  cancellationRequestId: uuid("cancellation_request_id").references(() => cancellationRequests.id, { onDelete: 'set null' }),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  reason: text("reason").notNull(),
+  status: refundStatusEnum("status").notNull().default("pending"),
+  razorpayRefundId: text("razorpay_refund_id"),
+  razorpayStatus: text("razorpay_status"),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  processedBy: uuid("processed_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  razorpayResponse: jsonb("razorpay_response"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Chargebacks and Disputes table (for tracking payment disputes)
+export const chargebacksDisputes = pgTable("chargebacks_disputes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  type: disputeTypeEnum("type").notNull(),
+  reason: text("reason").notNull(),
+  status: disputeStatusEnum("status").notNull().default("open"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("INR").notNull(),
+  evidence: jsonb("evidence"),
+  razorpayDisputeId: text("razorpay_dispute_id"),
+  resolution: text("resolution"),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Subscription Plan Changes table (for audit trail)
+export const subscriptionPlanChanges = pgTable("subscription_plan_changes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  changedBy: uuid("changed_by").references(() => users.id).notNull(),
+  changeType: varchar("change_type", { length: 50 }).notNull(),
+  fieldChanges: jsonb("field_changes").$type<Record<string, { old: any; new: any }>>().notNull(),
+  changeReason: text("change_reason"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Subscription Plan Notifications table (for plan change notifications)
+export const subscriptionPlanNotifications = pgTable("subscription_plan_notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  notificationType: varchar("notification_type", { length: 50 }).notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  effectiveDate: timestamp("effective_date").notNull(),
+  notificationDate: timestamp("notification_date").notNull(),
+  sentAt: timestamp("sent_at"),
+  recipientCount: integer("recipient_count").default(0),
+  metadata: jsonb("metadata").$type<{
+    oldPrice?: number;
+    newPrice?: number;
+    percentChange?: string;
+    priceIncrease?: boolean;
+    successorPlanId?: string;
+    migrationDeadline?: string;
+    [key: string]: any;
+  }>(),
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// User Plan Notifications table (for tracking individual user notification delivery)
+export const userPlanNotifications = pgTable("user_plan_notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planNotificationId: uuid("plan_notification_id").references(() => subscriptionPlanNotifications.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  sentAt: timestamp("sent_at").notNull().defaultNow(),
+  readAt: timestamp("read_at"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  emailStatus: varchar("email_status", { length: 50 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Plan Migrations table (for managing plan migration campaigns)
+export const planMigrations = pgTable("plan_migrations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 255 }).notNull(),
+  sourcePlanId: uuid("source_plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  targetPlanId: uuid("target_plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  migrationType: varchar("migration_type", { length: 50 }).notNull(),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  incentiveType: varchar("incentive_type", { length: 50 }),
+  incentiveValue: jsonb("incentive_value").$type<{
+    percentage?: number;
+    months?: number;
+    features?: string[];
+    [key: string]: any;
+  }>(),
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  totalEligibleUsers: integer("total_eligible_users").default(0),
+  migratedUsers: integer("migrated_users").default(0),
+  declinedUsers: integer("declined_users").default(0),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Plan Migration Users table (for tracking individual user migration status)
+export const planMigrationUsers = pgTable("plan_migration_users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  migrationId: uuid("migration_id").references(() => planMigrations.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  notifiedAt: timestamp("notified_at"),
+  respondedAt: timestamp("responded_at"),
+  migratedAt: timestamp("migrated_at"),
+  incentiveApplied: boolean("incentive_applied").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Quota Usage table (Phase 3.2: Quota Management System)
+export const quotaUsage = pgTable("quota_usage", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  quotaType: varchar("quota_type", { length: 50 }).notNull(),
+  usedCount: integer("used_count").default(0).notNull(),
+  allocatedCount: integer("allocated_count").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  resetAt: timestamp("reset_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Feature Usage Events table (Phase 3.3: Feature Usage Analytics)
+export const featureUsageEvents = pgTable("feature_usage_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  subscriptionId: uuid("subscription_id").references(() => userSubscriptions.id, { onDelete: 'cascade' }).notNull(),
+  featureName: varchar("feature_name", { length: 100 }).notNull(),
+  usageType: varchar("usage_type", { length: 50 }).notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// Feature Usage Summary table (Phase 3.3: Feature Usage Analytics - Aggregated data)
+export const featureUsageSummary = pgTable("feature_usage_summary", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  planId: uuid("plan_id").references(() => subscriptionPlans.id, { onDelete: 'cascade' }).notNull(),
+  featureName: varchar("feature_name", { length: 100 }).notNull(),
+  totalUsers: integer("total_users").default(0),
+  activeUsers: integer("active_users").default(0),
+  usageCount: integer("usage_count").default(0),
+  adoptionRate: decimal("adoption_rate", { precision: 5, scale: 2 }),
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Feature Deprecation Schedules table (Phase 4.3: Feature Deprecation Workflow)
+export const featureDeprecationSchedules = pgTable("feature_deprecation_schedules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureName: varchar("feature_name", { length: 100 }).notNull(),
+  planIds: text("plan_ids").array().notNull(),
+  currentPhase: deprecationPhaseEnum("current_phase").notNull().default("announcement"),
+  status: deprecationStatusEnum("status").notNull().default("scheduled"),
+  
+  // Phase dates
+  announcementDate: timestamp("announcement_date").notNull(),
+  gracePeriodStartDate: timestamp("grace_period_start_date").notNull(),
+  softDisableDate: timestamp("soft_disable_date").notNull(),
+  hardRemovalDate: timestamp("hard_removal_date").notNull(),
+  
+  // Metadata
+  reason: text("reason").notNull(),
+  replacementFeature: varchar("replacement_feature", { length: 100 }),
+  migrationGuideUrl: text("migration_guide_url"),
+  affectedUserCount: integer("affected_user_count").default(0),
+  
+  // Tracking
+  notificationsSent: integer("notifications_sent").default(0),
+  usersAcknowledged: integer("users_acknowledged").default(0),
+  usersMigrated: integer("users_migrated").default(0),
+  
+  // Admin details
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancellationReason: text("cancellation_reason"),
+});
+
 // Create insert schemas
 export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertUserSubscriptionSchema = createInsertSchema(userSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPaymentSettingsSchema = createInsertSchema(paymentSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWebhookEventSchema = createInsertSchema(webhookEvents).omit({ id: true, createdAt: true });
+export const insertSubscriptionEventSchema = createInsertSchema(subscriptionEvents).omit({ id: true, createdAt: true });
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export const insertSubscriptionAuditOutboxSchema = createInsertSchema(subscriptionAuditOutbox).omit({ id: true, createdAt: true });
+export const insertFailedPaymentSchema = createInsertSchema(failedPayments).omit({ id: true, createdAt: true });
+export const insertCancellationRequestSchema = createInsertSchema(cancellationRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRefundSchema = createInsertSchema(refunds).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertChargebackDisputeSchema = createInsertSchema(chargebacksDisputes).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertSubscriptionPlanChangeSchema = createInsertSchema(subscriptionPlanChanges).omit({ id: true, createdAt: true });
+export const insertSubscriptionPlanNotificationSchema = createInsertSchema(subscriptionPlanNotifications).omit({ id: true, createdAt: true });
+export const insertUserPlanNotificationSchema = createInsertSchema(userPlanNotifications).omit({ id: true, createdAt: true });
+export const insertPlanMigrationSchema = createInsertSchema(planMigrations).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPlanMigrationUserSchema = createInsertSchema(planMigrationUsers).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertQuotaUsageSchema = createInsertSchema(quotaUsage).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFeatureUsageEventSchema = createInsertSchema(featureUsageEvents).omit({ id: true, createdAt: true });
+export const insertFeatureUsageSummarySchema = createInsertSchema(featureUsageSummary).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFeatureDeprecationScheduleSchema = createInsertSchema(featureDeprecationSchedules).omit({ id: true, createdAt: true, updatedAt: true });
+
+// Partner insert schemas
+export const insertPartnerProfileSchema = createInsertSchema(partnerProfiles).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  totalReferrals: true,
+  totalConversions: true,
+  totalCommissionEarned: true,
+  totalCommissionPaid: true,
+});
+export const insertPartnerReferralLinkSchema = createInsertSchema(partnerReferralLinks).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  clickCount: true,
+  uniqueClickCount: true,
+  conversionCount: true,
+});
+export const insertReferralClickSchema = createInsertSchema(referralClicks).omit({ 
+  id: true, 
+  clickedAt: true 
+});
+export const insertPartnerStudentReferralSchema = createInsertSchema(partnerStudentReferrals).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export const insertPartnerCommissionSchema = createInsertSchema(partnerCommissions).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
+export const insertPartnerPayoutSchema = createInsertSchema(partnerPayouts).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true 
+});
 
 // Insert schemas will be added based on what's actually missing after checking existing ones
 
@@ -899,4 +1503,54 @@ export type UserSubscription = typeof userSubscriptions.$inferSelect;
 export type InsertUserSubscription = z.infer<typeof insertUserSubscriptionSchema>;
 export type PaymentSettings = typeof paymentSettings.$inferSelect;
 export type InsertPaymentSettings = z.infer<typeof insertPaymentSettingsSchema>;
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
+export type WebhookQueueItem = typeof webhookQueue.$inferSelect;
+export type InsertWebhookQueueItem = typeof webhookQueue.$inferInsert;
+export type SubscriptionEvent = typeof subscriptionEvents.$inferSelect;
+export type InsertSubscriptionEvent = z.infer<typeof insertSubscriptionEventSchema>;
+export type Payment = typeof payments.$inferSelect;
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type SubscriptionAuditOutbox = typeof subscriptionAuditOutbox.$inferSelect;
+export type InsertSubscriptionAuditOutbox = z.infer<typeof insertSubscriptionAuditOutboxSchema>;
+export type FailedPayment = typeof failedPayments.$inferSelect;
+export type InsertFailedPayment = z.infer<typeof insertFailedPaymentSchema>;
+export type CancellationRequest = typeof cancellationRequests.$inferSelect;
+export type InsertCancellationRequest = z.infer<typeof insertCancellationRequestSchema>;
+export type Refund = typeof refunds.$inferSelect;
+export type InsertRefund = z.infer<typeof insertRefundSchema>;
+export type ChargebackDispute = typeof chargebacksDisputes.$inferSelect;
+export type InsertChargebackDispute = z.infer<typeof insertChargebackDisputeSchema>;
+export type SubscriptionPlanChange = typeof subscriptionPlanChanges.$inferSelect;
+export type InsertSubscriptionPlanChange = z.infer<typeof insertSubscriptionPlanChangeSchema>;
+export type SubscriptionPlanNotification = typeof subscriptionPlanNotifications.$inferSelect;
+export type InsertSubscriptionPlanNotification = z.infer<typeof insertSubscriptionPlanNotificationSchema>;
+export type UserPlanNotification = typeof userPlanNotifications.$inferSelect;
+export type InsertUserPlanNotification = z.infer<typeof insertUserPlanNotificationSchema>;
+export type PlanMigration = typeof planMigrations.$inferSelect;
+export type InsertPlanMigration = z.infer<typeof insertPlanMigrationSchema>;
+export type PlanMigrationUser = typeof planMigrationUsers.$inferSelect;
+export type InsertPlanMigrationUser = z.infer<typeof insertPlanMigrationUserSchema>;
+export type QuotaUsage = typeof quotaUsage.$inferSelect;
+export type InsertQuotaUsage = z.infer<typeof insertQuotaUsageSchema>;
+export type FeatureUsageEvent = typeof featureUsageEvents.$inferSelect;
+export type InsertFeatureUsageEvent = z.infer<typeof insertFeatureUsageEventSchema>;
+export type FeatureUsageSummary = typeof featureUsageSummary.$inferSelect;
+export type InsertFeatureUsageSummary = z.infer<typeof insertFeatureUsageSummarySchema>;
+export type FeatureDeprecationSchedule = typeof featureDeprecationSchedules.$inferSelect;
+export type InsertFeatureDeprecationSchedule = z.infer<typeof insertFeatureDeprecationScheduleSchema>;
+
+// Partner type exports
+export type PartnerProfile = typeof partnerProfiles.$inferSelect;
+export type InsertPartnerProfile = z.infer<typeof insertPartnerProfileSchema>;
+export type PartnerReferralLink = typeof partnerReferralLinks.$inferSelect;
+export type InsertPartnerReferralLink = z.infer<typeof insertPartnerReferralLinkSchema>;
+export type ReferralClick = typeof referralClicks.$inferSelect;
+export type InsertReferralClick = z.infer<typeof insertReferralClickSchema>;
+export type PartnerStudentReferral = typeof partnerStudentReferrals.$inferSelect;
+export type InsertPartnerStudentReferral = z.infer<typeof insertPartnerStudentReferralSchema>;
+export type PartnerCommission = typeof partnerCommissions.$inferSelect;
+export type InsertPartnerCommission = z.infer<typeof insertPartnerCommissionSchema>;
+export type PartnerPayout = typeof partnerPayouts.$inferSelect;
+export type InsertPartnerPayout = z.infer<typeof insertPartnerPayoutSchema>;
 

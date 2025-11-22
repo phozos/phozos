@@ -1,9 +1,53 @@
 import { Router, Response } from 'express';
 import { adminController } from '../controllers/admin.controller';
+import { adminPartnerController } from '../controllers/admin-partner.controller';
 import { requireAdmin } from '../middleware/authentication';
 import { csrfProtection } from '../middleware/csrf';
 import { asyncHandler } from '../middleware/error-handler';
 import { AuthenticatedRequest } from '../types/auth';
+import rateLimit from 'express-rate-limit';
+
+// P0.6: Rate limiters for expensive operations to prevent DoS attacks
+// Admin routes always have authenticated user, so we can use user ID directly
+const versionCreationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 version creations per 15 minutes per admin
+  message: 'Too many version creation requests. Please try again in 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user // Skip if somehow no user (requireAdmin should prevent this)
+});
+
+const migrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 migrations per hour per admin
+  message: 'Too many migration requests. Please try again in 1 hour.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user
+});
+
+const bulkNotificationLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 1, // 1 bulk notification per 30 minutes per admin
+  message: 'Too many bulk notification requests. Please try again in 30 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user
+});
+
+const bulkOperationsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 bulk operations per 15 minutes per admin
+  message: 'Too many bulk operation requests. Please try again in 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.id || 'unauthenticated',
+  skip: (req: any) => !req.user
+});
 
 const router = Router();
 
@@ -69,16 +113,62 @@ router.get('/payment-settings', asyncHandler((req: AuthenticatedRequest, res: Re
 router.put('/payment-settings/:gateway', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updatePaymentSettings(req, res)));
 router.patch('/payment-settings/:gateway/toggle', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.togglePaymentGateway(req, res)));
 
+// Webhook Metrics (Phase 4 - Monitoring & Testing)
+router.get('/webhook-metrics', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { webhookMetricsService } = await import('../services/infrastructure/webhook-metrics.service');
+  const { webhookQueueService } = await import('../services/infrastructure/webhook-queue.service');
+  
+  const metrics = webhookMetricsService.getDetailedMetrics();
+  const queueStats = await webhookQueueService.getQueueStats();
+  
+  res.json({
+    success: true,
+    data: {
+      metrics,
+      queue: queueStats,
+      summary: webhookMetricsService.getSummary(),
+    }
+  });
+}));
+
 // Subscription Plans
 router.get('/subscription-plans', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionPlans(req, res)));
 router.post('/subscription-plans', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createSubscriptionPlan(req, res)));
 router.put('/subscription-plans/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateSubscriptionPlan(req, res)));
 router.delete('/subscription-plans/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deleteSubscriptionPlan(req, res)));
 
+// Subscription Plan Change History
+router.get('/subscription-plans/recent-changes', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRecentPlanChanges(req, res)));
+router.get('/subscription-plans/:id/change-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanChangeHistory(req, res)));
+
+// Plan Versioning
+router.post('/subscription-plans/:basePlanId/versions', versionCreationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createPlanVersion(req, res)));
+router.get('/subscription-plans/:basePlanId/versions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersions(req, res)));
+router.get('/subscription-plans/:basePlanId/versions/:version', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersion(req, res)));
+
+// Phase 4: New API endpoints for versioning and grandfathering
+router.post('/subscription-plans/:basePlanId/price', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updatePlanPrice(req, res)));
+router.get('/subscription-plans/:basePlanId/versions/history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanVersionHistory(req, res)));
+router.post('/subscription-plans/:id/deprecate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deprecatePlan(req, res)));
+router.post('/subscription-plans/:id/archive', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.archivePlan(req, res)));
+router.post('/subscription-plans/:planId/rollback', versionCreationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.rollbackPlanVersion(req, res)));
+router.get('/subscription-plans/:id/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getPlanAnalytics(req, res)));
+
 // User Subscriptions
 router.get('/user-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptions(req, res)));
 router.post('/student-subscription/:studentId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateStudentSubscription(req, res)));
 router.get('/students-subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getStudentsWithSubscriptions(req, res)));
+router.delete('/user-subscriptions/:subscriptionId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelUserSubscription(req, res)));
+router.get('/user-subscriptions/:userId/payment-history', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserPaymentHistory(req, res)));
+router.get('/user-subscriptions/:userId/events', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getUserSubscriptionEvents(req, res)));
+
+// Bulk Subscription Operations (P3.1)
+router.post('/subscriptions/bulk-migrate', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.bulkMigrateSubscribers(req, res)));
+router.post('/subscriptions/bulk-cancel', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.bulkCancelSubscriptions(req, res)));
+router.get('/subscriptions/export', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.exportSubscribers(req, res)));
+
+// Failed Payments
+router.get('/failed-payments', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFailedPayments(req, res)));
 
 // Forum Moderation
 router.get('/forum/reported-posts', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getReportedPosts(req, res)));
@@ -87,11 +177,123 @@ router.post('/forum/posts/:id/restore', csrfProtection, asyncHandler((req: Authe
 router.delete('/forum/posts/:id/permanent', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.permanentlyDeletePost(req, res)));
 
 // Force Logout
-router.post('/force-logout-all', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceLogoutAll(req, res)));
+// TODO: Implement forceLogoutAll method in AdminController
+// router.post('/force-logout-all', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceLogoutAll(req, res)));
 
 // Staff Invitation Links
 router.post('/staff-invitation-links', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createStaffInvitationLink(req, res)));
 router.get('/staff-invitation-links', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getStaffInvitationLinks(req, res)));
 router.put('/staff-invitation-links/:id/refresh', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.refreshStaffInvitationLink(req, res)));
+
+// Subscription Analytics
+router.get('/analytics/subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionAnalytics(req, res)));
+router.get('/analytics/revenue', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRevenueAnalytics(req, res)));
+router.get('/analytics/growth', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionGrowth(req, res)));
+router.get('/analytics/lifetime-metrics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getLifetimeMetrics(req, res)));
+
+// Outbox Monitoring
+router.get('/outbox/metrics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getOutboxMetrics(req, res)));
+router.get('/outbox/events', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getOutboxEvents(req, res)));
+router.post('/outbox/events/:id/retry', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.retryOutboxEvent(req, res)));
+router.delete('/outbox/events/:id', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.deleteOutboxEvent(req, res)));
+
+// Plan Migrations
+router.get('/migrations', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrations(req, res)));
+router.post('/migrations', migrationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createMigration(req, res)));
+router.get('/migrations/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigration(req, res)));
+router.post('/migrations/:id/start', migrationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.startMigration(req, res)));
+router.post('/migrations/:id/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelMigration(req, res)));
+router.get('/migrations/:id/stats', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getMigrationStats(req, res)));
+
+// Comprehensive Plan Analytics
+router.get('/subscription-plans/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getComprehensivePlanAnalytics(req, res)));
+
+// Feature Management (Phase 4)
+// Feature Impact Preview
+router.post('/features/preview/:planId', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureImpactPreview(req, res)));
+
+// Feature Management Dashboard
+router.get('/features/dashboard', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureManagementDashboard(req, res)));
+router.get('/features/usage', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureUsageOverview(req, res)));
+router.get('/features/health', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureHealth(req, res)));
+router.get('/features/:featureName/health', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureHealth(req, res)));
+router.get('/features/:featureName/lifecycle', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getFeatureLifecycle(req, res)));
+
+// Bulk Operations
+router.post('/features/bulk', bulkNotificationLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.executeBulkFeatureOperation(req, res)));
+
+// Feature Deprecation Workflow
+router.post('/features/deprecations', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.createDeprecationSchedule(req, res)));
+router.get('/features/deprecations', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationSchedules(req, res)));
+router.get('/features/deprecations/:scheduleId', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationSchedule(req, res)));
+router.put('/features/deprecations/update', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.updateDeprecationSchedule(req, res)));
+router.post('/features/deprecations/:scheduleId/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.cancelDeprecationSchedule(req, res)));
+router.get('/features/deprecations/:scheduleId/impact', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationImpact(req, res)));
+router.get('/features/deprecations/:scheduleId/timeline', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getDeprecationTimeline(req, res)));
+
+// ============================================================================
+// PARTNER MANAGEMENT (Phase 5)
+// ============================================================================
+
+// Partner Management
+router.get('/partners', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllPartners(req, res)));
+router.get('/partners/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPartnerAnalytics(req, res)));
+router.get('/partners/:partnerId', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPartnerDetails(req, res)));
+router.post('/partners/:partnerId/verify', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.verifyPartner(req, res)));
+router.post('/partners/:partnerId/deactivate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.deactivatePartner(req, res)));
+
+// Partner Referral Management
+router.get('/partners/referrals', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllReferrals(req, res)));
+router.post('/partners/referrals/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.approveReferral(req, res)));
+router.post('/partners/referrals/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectReferral(req, res)));
+
+// Partner Commission Management
+router.get('/commissions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllCommissions(req, res)));
+router.get('/partners/commissions/pending', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPendingCommissions(req, res)));
+router.post('/commissions/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.approveCommissions(req, res)));
+router.post('/commissions/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.rejectCommissions(req, res)));
+
+// Partner Payout Management
+router.get('/payouts', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getAllPayouts(req, res)));
+router.get('/partners/payouts/pending', asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.getPendingPayouts(req, res)));
+router.post('/payouts/:payoutId/process-bank', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutBankTransfer(req, res)));
+router.post('/payouts/:payoutId/process-paypal', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.processPayoutPayPal(req, res)));
+router.post('/payouts/:payoutId/complete', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.completePayout(req, res)));
+router.post('/payouts/:payoutId/cancel', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminPartnerController.cancelPayout(req, res)));
+
+// ============================================================================
+// SUBSCRIPTION MANAGEMENT (Phase 3)
+// ============================================================================
+
+// Admin Subscription Management
+router.get('/subscription-management/subscriptions', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAllAdminSubscriptions(req, res)));
+router.get('/subscription-management/subscriptions/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminSubscriptionDetails(req, res)));
+router.patch('/subscription-management/subscriptions/:id/force-cancel', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceCancelSubscription(req, res)));
+router.patch('/subscription-management/subscriptions/:id/force-refund', bulkOperationsLimiter, csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.forceRefundSubscription(req, res)));
+
+// Cancellation Requests Management
+router.get('/subscription-management/cancellation-requests', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminCancellationRequests(req, res)));
+router.get('/subscription-management/cancellation-requests/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminCancellationRequest(req, res)));
+router.patch('/subscription-management/cancellation-requests/:id/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.approveCancellationRequest(req, res)));
+router.patch('/subscription-management/cancellation-requests/:id/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.rejectCancellationRequest(req, res)));
+
+// Refund Requests Management
+router.get('/subscription-management/refund-requests', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminRefundRequests(req, res)));
+router.get('/subscription-management/refund-requests/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminRefundRequest(req, res)));
+router.patch('/subscription-management/refund-requests/:id/approve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.approveRefundRequest(req, res)));
+router.patch('/subscription-management/refund-requests/:id/reject', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.rejectRefundRequest(req, res)));
+router.post('/subscription-management/refund-requests/:id/process', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.processRefundManually(req, res)));
+router.get('/subscription-management/refund-requests/:id/status', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getRefundStatus(req, res)));
+
+// Dispute Management
+router.get('/subscription-management/disputes', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminDisputes(req, res)));
+router.get('/subscription-management/disputes/:id', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getAdminDispute(req, res)));
+router.patch('/subscription-management/disputes/:id/assign', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.assignDispute(req, res)));
+router.patch('/subscription-management/disputes/:id/investigate', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.investigateDispute(req, res)));
+router.patch('/subscription-management/disputes/:id/resolve', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.resolveDispute(req, res)));
+router.post('/subscription-management/disputes/:id/evidence', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.addDisputeEvidence(req, res)));
+
+// Subscription Management Analytics
+router.get('/subscription-management/analytics', asyncHandler((req: AuthenticatedRequest, res: Response) => adminController.getSubscriptionManagementAnalytics(req, res)));
 
 export default router;

@@ -4,6 +4,7 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import { SEO } from "@/components/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
 import { 
   Mail, 
   Phone, 
@@ -93,11 +94,12 @@ export default function Contact() {
                   <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full flex items-center justify-center mx-auto mb-4">
                     <MapPin className="w-8 h-8 text-white" />
                   </div>
-                  <h3 className="text-lg font-bold mb-2">Corporate Office</h3>
+                  <h3 className="text-lg font-bold mb-2">{CORPORATE_OFFICE.label}</h3>
                   <p className="text-muted-foreground text-sm">
-                    Koramangala<br />
-                    Bengaluru, Karnataka<br />
-                    India
+                    {CORPORATE_OFFICE.address.street}<br />
+                    {CORPORATE_OFFICE.address.area}<br />
+                    {CORPORATE_OFFICE.address.city}, {CORPORATE_OFFICE.address.state} {CORPORATE_OFFICE.address.postalCode}<br />
+                    {CORPORATE_OFFICE.address.country}
                   </p>
                 </CardContent>
               </Card>
@@ -125,11 +127,11 @@ export default function Contact() {
             <div className="text-center mb-12">
               <h2 className="text-4xl font-bold mb-4">Our Offices</h2>
               <p className="text-xl text-muted-foreground">
-                Visit us at our locations in India
+                Visit us at our locations worldwide
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+            <div className="grid md:grid-cols-3 gap-8">
               <Card className="border-2 hover:shadow-lg transition-shadow">
                 <CardContent className="p-8">
                   <div className="flex items-start gap-4">
@@ -137,11 +139,12 @@ export default function Contact() {
                       <MapPin className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold mb-2">Corporate Office</h3>
+                      <h3 className="text-2xl font-bold mb-2">{CORPORATE_OFFICE.label}</h3>
                       <p className="text-muted-foreground mb-4">
-                        Koramangala<br />
-                        Bengaluru, Karnataka<br />
-                        India
+                        {CORPORATE_OFFICE.address.street}<br />
+                        {CORPORATE_OFFICE.address.area}<br />
+                        {CORPORATE_OFFICE.address.city}, {CORPORATE_OFFICE.address.state} {CORPORATE_OFFICE.address.postalCode}<br />
+                        {CORPORATE_OFFICE.address.country}
                       </p>
                       <Badge variant="secondary">Main Hub</Badge>
                     </div>
@@ -156,13 +159,43 @@ export default function Contact() {
                       <MapPin className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h3 className="text-2xl font-bold mb-2">Registered Office</h3>
+                      <h3 className="text-2xl font-bold mb-2">{REGISTERED_OFFICE.label}</h3>
                       <p className="text-muted-foreground mb-4">
-                        Bathinda<br />
-                        Punjab<br />
-                        India
+                        {REGISTERED_OFFICE.address.city}<br />
+                        {REGISTERED_OFFICE.address.state}<br />
+                        {REGISTERED_OFFICE.address.country}
                       </p>
                       <Badge variant="secondary">Legal Address</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-2 hover:shadow-lg transition-shadow">
+                <CardContent className="p-8">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold mb-2">{US_OFFICE.label}</h3>
+                      <p className="text-muted-foreground mb-4">
+                        {US_OFFICE.address.street}<br />
+                        {US_OFFICE.address.city}, {US_OFFICE.address.state} {US_OFFICE.address.postalCode}<br />
+                        {US_OFFICE.address.country}
+                      </p>
+                      {US_OFFICE.phone && (
+                        <div className="flex items-center gap-2 text-sm mb-4">
+                          <Phone className="w-4 h-4 text-primary" />
+                          <a 
+                            href={`tel:${US_OFFICE.phone.replace(/[^\d+]/g, '')}`}
+                            className="font-medium hover:text-primary transition-colors"
+                          >
+                            {US_OFFICE.phone}
+                          </a>
+                        </div>
+                      )}
+                      <Badge variant="secondary">US Operations</Badge>
                     </div>
                   </div>
                 </CardContent>

@@ -10,6 +10,7 @@ import {
   DuplicateResourceError,
   InvalidOperationError
 } from '../errors';
+import logger from '../../utils/logger';
 
 export interface RegisterStudentDTO {
   message: string;
@@ -20,7 +21,7 @@ export interface RegisterStudentDTO {
 
 export interface IRegistrationService {
   registerStudent(data: InsertUser & { profile: InsertStudentProfile }): Promise<{ user: User }>;
-  registerStudentComplete(email: string, password: string, firstName: string, lastName: string, phone: string): Promise<RegisterStudentDTO>;
+  registerStudentComplete(email: string, password: string, firstName: string, lastName: string, phone: string, referralCode?: string, clickId?: string): Promise<RegisterStudentDTO>;
   createCompanyProfile(data: InsertUser & { companyName?: string; description?: string }): Promise<{ user: User; temporaryPassword?: string }>;
   registerStaffWithInvite(data: { email: string; password: string; firstName: string; lastName: string; teamRole: string; invitationToken: string }): Promise<{ user: User }>;
   validateRegistrationData(email: string, password: string): void;
@@ -121,13 +122,19 @@ export class RegistrationService extends BaseService implements IRegistrationSer
   /**
    * Complete student registration with cooling period info
    * Handles all business logic including email normalization, profile creation, and cooling period calculation
+   * 
+   * Phase 6.2: Referral Tracking Integration
+   * @param referralCode - Optional referral link code from cookie
+   * @param clickId - Optional click ID from cookie for attribution
    */
   async registerStudentComplete(
     email: string,
     password: string,
     firstName: string,
     lastName: string,
-    phone: string
+    phone: string,
+    referralCode?: string,
+    clickId?: string
   ): Promise<RegisterStudentDTO> {
     try {
       const emailLower = email.toLowerCase();
@@ -142,6 +149,42 @@ export class RegistrationService extends BaseService implements IRegistrationSer
         accountStatus: 'active',
         profile
       });
+
+      // Phase 6.2: Attribute to partner if referral code exists
+      if (referralCode) {
+        try {
+          const { container, TYPES } = await import('../container');
+          const { referralTrackingService } = await import('./referral-tracking.service');
+          const logger = (await import('../../utils/logger')).default;
+          const studentProfile = await this.studentRepo.findByUserId(result.user.id);
+          
+          if (studentProfile) {
+            // Get referral link to find partner
+            const { partnerReferralLinkRepository } = await import('../../repositories');
+            const referralLink = await partnerReferralLinkRepository.findByLinkCode(referralCode);
+            
+            if (referralLink) {
+              await referralTrackingService.attributeStudentToPartner(
+                studentProfile.id,
+                studentProfile.userId,
+                referralLink.partnerId,
+                'link_click',
+                clickId,
+                undefined
+              );
+            }
+          }
+        } catch (referralError) {
+          // Log but don't fail registration if referral attribution fails
+          const logger = (await import('../../utils/logger')).default;
+          logger.error('Failed to attribute referral - CRITICAL', {
+            userId: result.user.id,
+            referralCode,
+            clickId,
+            error: referralError
+          });
+        }
+      }
 
       // Import authService to check cooling period
       const { authService } = await import('./auth.service');
@@ -236,7 +279,11 @@ export class RegistrationService extends BaseService implements IRegistrationSer
         accountStatus: 'active'
       });
       
-      console.log(`👤 New staff member registered: ${email} (${teamRole}) via invite token`);
+      logger.info('New staff member registered via invite token', {
+        email,
+        teamRole,
+        userId: user.id
+      });
       
       return { user: this.sanitizeUser(user) };
     } catch (error) {

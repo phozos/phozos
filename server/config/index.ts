@@ -110,6 +110,7 @@ const securityConfigSchema = z.object({
  */
 const emailConfigSchema = z.object({
   SENDGRID_API_KEY: z.string().optional(),
+  SENDGRID_FROM_EMAIL: z.string().email().optional(),
 });
 
 /**
@@ -118,6 +119,7 @@ const emailConfigSchema = z.object({
 const adminConfigSchema = z.object({
   ADMIN_PASSWORD: z.string().optional(),
   ADMIN_IPS: commaSeparatedSchema,
+  ADMIN_ALERT_EMAIL: z.string().email().optional(),
 });
 
 /**
@@ -130,6 +132,10 @@ const featuresConfigSchema = z.object({
   MONITORING_ENABLED: booleanSchema,
   COMPLIANCE_REPORT_ENABLED: booleanSchema,
   ERROR_DETAILS_ENABLED: booleanSchema,
+  ENABLE_USER_CANCELLATION_REQUESTS: booleanSchema,
+  ENABLE_REFUND_SYSTEM: booleanSchema,
+  ENABLE_DISPUTE_MANAGEMENT: booleanSchema,
+  ENABLE_ADMIN_FORCE_REFUND: booleanSchema,
 });
 
 /**
@@ -190,6 +196,38 @@ const buildConfigSchema = z.object({
 });
 
 /**
+ * Razorpay configuration schema
+ */
+const razorpayConfigSchema = z.object({
+  keyId: z.string().min(1, 'RAZORPAY_KEY_ID is required'),
+  keySecret: z.string().min(1, 'RAZORPAY_KEY_SECRET is required'),
+  webhookSecret: z.string().min(1, 'RAZORPAY_WEBHOOK_SECRET is required'),
+  /**
+   * @deprecated As of November 2025
+   * @reason IP whitelisting removed in favor of signature-only verification
+   * @see WEBHOOK_IP_WHITELIST_REMOVAL_IMPLEMENTATION_PLAN.md
+   * 
+   * Kept for backward compatibility and rollback capability.
+   * Not used in production webhook validation.
+   */
+  webhookIps: commaSeparatedSchema.transform((ips) => {
+    // Default to Razorpay's official webhook IP addresses if not configured
+    if (ips.length === 0) {
+      return ['3.7.71.51', '3.7.71.52', '3.7.71.53'];
+    }
+    return ips;
+  }),
+});
+
+/**
+ * Alerting configuration schema
+ */
+const alertingConfigSchema = z.object({
+  ENABLE_FAILED_PAYMENT_ALERTS: booleanSchema,
+  SLACK_WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
+});
+
+/**
  * Complete configuration schema combining all sections
  */
 const configSchema = z.object({
@@ -203,6 +241,8 @@ const configSchema = z.object({
   cors: corsConfigSchema,
   cookies: cookiesConfigSchema,
   build: buildConfigSchema,
+  razorpay: razorpayConfigSchema,
+  alerting: alertingConfigSchema,
 });
 
 /**
@@ -226,10 +266,12 @@ function validateConfiguration() {
       },
       email: {
         SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+        SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL,
       },
       admin: {
         ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
         ADMIN_IPS: process.env.ADMIN_IPS,
+        ADMIN_ALERT_EMAIL: process.env.ADMIN_ALERT_EMAIL,
       },
       features: {
         SEO_META_ENABLED: process.env.SEO_META_ENABLED,
@@ -238,6 +280,10 @@ function validateConfiguration() {
         MONITORING_ENABLED: process.env.MONITORING_ENABLED,
         COMPLIANCE_REPORT_ENABLED: process.env.COMPLIANCE_REPORT_ENABLED,
         ERROR_DETAILS_ENABLED: process.env.ERROR_DETAILS_ENABLED,
+        ENABLE_USER_CANCELLATION_REQUESTS: process.env.ENABLE_USER_CANCELLATION_REQUESTS,
+        ENABLE_REFUND_SYSTEM: process.env.ENABLE_REFUND_SYSTEM,
+        ENABLE_DISPUTE_MANAGEMENT: process.env.ENABLE_DISPUTE_MANAGEMENT,
+        ENABLE_ADMIN_FORCE_REFUND: process.env.ENABLE_ADMIN_FORCE_REFUND,
       },
       logging: {
         LOG_LEVEL: process.env.LOG_LEVEL,
@@ -259,6 +305,16 @@ function validateConfiguration() {
         HMR_ENABLED: process.env.HMR_ENABLED,
         IMAGE_OPTIMIZATION_ENABLED: process.env.IMAGE_OPTIMIZATION_ENABLED,
         CARTOGRAPHER_ENABLED: process.env.CARTOGRAPHER_ENABLED,
+      },
+      razorpay: {
+        keyId: process.env.RAZORPAY_KEY_ID,
+        keySecret: process.env.RAZORPAY_KEY_SECRET,
+        webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+        webhookIps: process.env.RAZORPAY_WEBHOOK_IPS,
+      },
+      alerting: {
+        ENABLE_FAILED_PAYMENT_ALERTS: process.env.ENABLE_FAILED_PAYMENT_ALERTS,
+        SLACK_WEBHOOK_URL: process.env.SLACK_WEBHOOK_URL,
       },
     };
 
@@ -317,6 +373,8 @@ export type LoggingConfig = z.infer<typeof loggingConfigSchema>;
 export type CorsConfig = z.infer<typeof corsConfigSchema>;
 export type CookiesConfig = z.infer<typeof cookiesConfigSchema>;
 export type BuildConfig = z.infer<typeof buildConfigSchema>;
+export type RazorpayConfig = z.infer<typeof razorpayConfigSchema>;
+export type AlertingConfig = z.infer<typeof alertingConfigSchema>;
 
 /**
  * Main configuration object with all sections
@@ -336,6 +394,8 @@ export const loggingConfig: LoggingConfig = config.logging;
 export const corsConfig: CorsConfig = config.cors;
 export const cookiesConfig: CookiesConfig = config.cookies;
 export const buildConfig: BuildConfig = config.build;
+export const razorpayConfig: RazorpayConfig = config.razorpay;
+export const alertingConfig: AlertingConfig = config.alerting;
 
 /**
  * Helper function to check if running in development mode
