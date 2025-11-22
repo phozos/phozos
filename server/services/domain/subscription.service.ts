@@ -1,20 +1,46 @@
 import { BaseService } from '../base.service';
-import { ISubscriptionPlanRepository, IStudentRepository } from '../../repositories';
-import { container, TYPES } from '../container';
+import { ISubscriptionPlanRepository, IStudentRepository, ISubscriptionPlanAuditRepository, IUserSubscriptionRepository } from '../../repositories';
+import { container, TYPES, getService } from '../container';
 import { 
-  SubscriptionPlan, InsertSubscriptionPlan
+  SubscriptionPlan, InsertSubscriptionPlan, subscriptionPlans
 } from '@shared/schema';
-import { ValidationServiceError } from '../errors';
+import { ValidationServiceError, InvalidOperationError } from '../errors';
 import { CommonValidators, BusinessRuleValidators } from '../validation';
+import { IPlanNotificationService } from './plan-notification.service';
+import { db } from '../../db';
+import { eq } from 'drizzle-orm';
+import { logger } from '../../utils/logger';
+import { InputSanitizer } from '../../utils/input-sanitizer';
+
+export interface PlanAnalytics {
+  planId: string;
+  planName: string;
+  version: number;
+  activeSubscribers: number;
+  totalRevenue: number;
+  isDeprecated: boolean;
+  deprecatedAt: Date | null;
+  successorPlan: SubscriptionPlan | null;
+}
 
 export interface ISubscriptionService {
   // Subscription Plans
   getSubscriptionPlans(): Promise<SubscriptionPlan[]>;
   getAllSubscriptionPlans(): Promise<SubscriptionPlan[]>;
+  getAllSubscriptionPlansWithVersions(): Promise<SubscriptionPlan[]>;
   getSubscriptionPlan(id: string): Promise<SubscriptionPlan | undefined>;
-  createSubscriptionPlan(plan: InsertSubscriptionPlan): Promise<SubscriptionPlan>;
-  updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>): Promise<SubscriptionPlan | undefined>;
-  deleteSubscriptionPlan(id: string): Promise<boolean>;
+  createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan>;
+  updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined>;
+  updatePlanPrice(planId: string, newPrice: number, adminId: string, releaseNotes?: string, notifySubscribers?: boolean, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan>;
+  deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean>;
+  // Versioning Methods
+  createPlanVersion(basePlanId: string, updates: Partial<SubscriptionPlan>, adminId: string, releaseNotes?: string, notifySubscribers?: boolean): Promise<SubscriptionPlan>;
+  getPlanVersions(basePlanId: string): Promise<SubscriptionPlan[]>;
+  getPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined>;
+  rollbackPlanVersion(planId: string, targetVersion: number, adminId: string, reason: string, notifySubscribers?: boolean): Promise<SubscriptionPlan>;
+  deprecatePlan(planId: string, successorPlanId: string | undefined, adminId: string, reason: string): Promise<void>;
+  archivePlan(planId: string, adminId: string, reason: string): Promise<void>;
+  getPlanAnalytics(planId: string): Promise<PlanAnalytics>;
   // Helper Methods (temporary - should be moved to appropriate service)
   getCounselorStudentAssignment(counselorId: string, studentId: string): Promise<boolean>;
 }
@@ -22,15 +48,38 @@ export interface ISubscriptionService {
 export class SubscriptionService extends BaseService implements ISubscriptionService {
   constructor(
     private subscriptionPlanRepository: ISubscriptionPlanRepository = container.get<ISubscriptionPlanRepository>(TYPES.ISubscriptionPlanRepository),
-    private studentRepository: IStudentRepository = container.get<IStudentRepository>(TYPES.IStudentRepository)
+    private studentRepository: IStudentRepository = container.get<IStudentRepository>(TYPES.IStudentRepository),
+    private planAuditRepository: ISubscriptionPlanAuditRepository = container.get<ISubscriptionPlanAuditRepository>(TYPES.ISubscriptionPlanAuditRepository),
+    private userSubscriptionRepo: IUserSubscriptionRepository = container.get<IUserSubscriptionRepository>(TYPES.IUserSubscriptionRepository)
   ) {
     super();
   }
 
+  private calculateFieldChanges(oldPlan: SubscriptionPlan, newPlan: Partial<SubscriptionPlan>): Record<string, { old: any; new: any }> {
+    const changes: Record<string, { old: any; new: any }> = {};
+    
+    for (const key in newPlan) {
+      if (newPlan.hasOwnProperty(key) && key !== 'updatedAt') {
+        const oldValue = (oldPlan as any)[key];
+        const newValue = (newPlan as any)[key];
+        
+        if (JSON.stringify(oldValue) !== JSON.stringify(newValue)) {
+          changes[key] = { old: oldValue, new: newValue };
+        }
+      }
+    }
+    
+    return changes;
+  }
+
   // Subscription Plans
+  /**
+   * Get customer-facing subscription plans (latest versions only, active plans)
+   * This is the primary method for displaying plans to customers
+   */
   async getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     try {
-      return await this.subscriptionPlanRepository.findActive();
+      return await this.subscriptionPlanRepository.findLatestVersions({ isActive: true });
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.getSubscriptionPlans');
     }
@@ -44,6 +93,18 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
     }
   }
 
+  /**
+   * Get all subscription plans including all versions (for admin dashboard)
+   * Shows complete version history for each plan family
+   */
+  async getAllSubscriptionPlansWithVersions(): Promise<SubscriptionPlan[]> {
+    try {
+      return await this.subscriptionPlanRepository.findAll({ includeAllVersions: true });
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getAllSubscriptionPlansWithVersions');
+    }
+  }
+
   async getSubscriptionPlan(id: string): Promise<SubscriptionPlan | undefined> {
     try {
       return await this.subscriptionPlanRepository.findById(id);
@@ -52,25 +113,98 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
     }
   }
 
-  async createSubscriptionPlan(plan: InsertSubscriptionPlan): Promise<SubscriptionPlan> {
+  async createSubscriptionPlan(plan: InsertSubscriptionPlan, adminId: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan> {
     try {
-      this.validateRequired(plan, ['name', 'price', 'features', 'maxUniversities', 'maxCountries', 'turnaroundDays']);
+      this.validateRequired(plan, ['name', 'price', 'maxUniversities', 'maxCountries', 'turnaroundDays']);
+
+      // P0.5: Sanitize user inputs to prevent XSS attacks
+      const sanitizedPlan: InsertSubscriptionPlan = {
+        ...plan,
+        name: InputSanitizer.sanitizePlainText(plan.name),
+        description: InputSanitizer.sanitizePlainText(plan.description),
+        // Sanitize features array only if provided, keep undefined if not provided (migration-safe)
+        features: plan.features !== undefined && plan.features !== null 
+          ? InputSanitizer.sanitizeArray(plan.features) 
+          : undefined,
+        // Sanitize logo only if provided, keep undefined if not provided (migration-safe)
+        logo: plan.logo !== undefined && plan.logo !== null
+          ? InputSanitizer.sanitizePlainText(plan.logo)
+          : undefined,
+        universityTier: plan.universityTier ? InputSanitizer.sanitizePlainText(plan.universityTier) as any : plan.universityTier,
+        supportType: plan.supportType ? InputSanitizer.sanitizePlainText(plan.supportType) as any : plan.supportType,
+        
+        // Category 2: Sanitize supportTypes array
+        supportTypes: plan.supportTypes ? InputSanitizer.sanitizeArray(plan.supportTypes) : plan.supportTypes,
+        
+        // Category 3: Sanitize Phozos AI tier
+        phozosAiTier: plan.phozosAiTier ? InputSanitizer.sanitizePlainText(plan.phozosAiTier) as any : plan.phozosAiTier,
+        
+        // Category 6: Sanitize Phozos Prep fields
+        phozosPrepTier: plan.phozosPrepTier ? InputSanitizer.sanitizePlainText(plan.phozosPrepTier) as any : plan.phozosPrepTier,
+        phozosPrepDescription: plan.phozosPrepDescription ? InputSanitizer.sanitizePlainText(plan.phozosPrepDescription) : plan.phozosPrepDescription
+      };
 
       const errors: Record<string, string> = {};
 
-      const nameValidation = CommonValidators.validateStringLength(plan.name, 1, 255, 'Plan name');
+      const nameValidation = CommonValidators.validateStringLength(sanitizedPlan.name, 1, 255, 'Plan name');
       if (!nameValidation.valid) {
         errors.name = nameValidation.error!;
       }
 
-      if (plan.price !== undefined && plan.price !== null) {
-        BusinessRuleValidators.validatePaymentAmount(Number(plan.price), 0);
+      if (sanitizedPlan.price !== undefined && sanitizedPlan.price !== null) {
+        BusinessRuleValidators.validatePaymentAmount(Number(sanitizedPlan.price), 0);
       }
 
-      if (plan.maxUniversities !== undefined && plan.maxUniversities !== null) {
-        const maxUnivValidation = CommonValidators.validatePositiveNumber(plan.maxUniversities, 'Max universities');
+      if (sanitizedPlan.maxUniversities !== undefined && sanitizedPlan.maxUniversities !== null) {
+        const maxUnivValidation = CommonValidators.validatePositiveNumber(sanitizedPlan.maxUniversities, 'Max universities');
         if (!maxUnivValidation.valid) {
           errors.maxUniversities = maxUnivValidation.error!;
+        }
+      }
+
+      // Validate supportTypes array (no duplicates, at least 1 item if provided)
+      if (sanitizedPlan.supportTypes !== undefined && sanitizedPlan.supportTypes !== null) {
+        if (!Array.isArray(sanitizedPlan.supportTypes)) {
+          errors.supportTypes = 'Support types must be an array';
+        } else if (sanitizedPlan.supportTypes.length === 0) {
+          errors.supportTypes = 'At least one support type is required';
+        } else {
+          // Check for duplicates
+          const uniqueTypes = new Set(sanitizedPlan.supportTypes);
+          if (uniqueTypes.size !== sanitizedPlan.supportTypes.length) {
+            errors.supportTypes = 'Support types must not contain duplicates';
+          }
+          
+          // Validate enum values
+          const validSupportTypes = ['email', 'whatsapp', 'phone', 'premium'];
+          const invalidTypes = sanitizedPlan.supportTypes.filter(type => !validSupportTypes.includes(type));
+          if (invalidTypes.length > 0) {
+            errors.supportTypes = `Invalid support types: ${invalidTypes.join(', ')}. Valid values are: ${validSupportTypes.join(', ')}`;
+          }
+        }
+      }
+
+      // Validate phozosAiTier enum
+      if (sanitizedPlan.phozosAiTier !== undefined && sanitizedPlan.phozosAiTier !== null) {
+        const validAiTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validAiTiers.includes(sanitizedPlan.phozosAiTier)) {
+          errors.phozosAiTier = `Invalid Phozos AI tier. Valid values are: ${validAiTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepTier enum
+      if (sanitizedPlan.phozosPrepTier !== undefined && sanitizedPlan.phozosPrepTier !== null) {
+        const validPrepTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validPrepTiers.includes(sanitizedPlan.phozosPrepTier)) {
+          errors.phozosPrepTier = `Invalid Phozos Prep tier. Valid values are: ${validPrepTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepDescription length
+      if (sanitizedPlan.phozosPrepDescription !== undefined && sanitizedPlan.phozosPrepDescription !== null) {
+        const descValidation = CommonValidators.validateStringLength(sanitizedPlan.phozosPrepDescription, 0, 1000, 'Phozos Prep description');
+        if (!descValidation.valid) {
+          errors.phozosPrepDescription = descValidation.error!;
         }
       }
 
@@ -78,31 +212,165 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         throw new ValidationServiceError('Subscription Plan', errors);
       }
 
-      return await this.subscriptionPlanRepository.create(plan);
+      // PHASE 0 HOTFIX: Two-step creation for self-referencing FK
+      const finalPlan = await db.transaction(async (tx) => {
+        // Step 1: Insert with NULL basePlanId
+        const tempPlan = {
+          ...sanitizedPlan,
+          basePlanId: null as any,
+          version: 1,
+          versionName: 'v1',
+          isLatestVersion: true,
+        };
+        
+        const [createdPlan] = await tx
+          .insert(subscriptionPlans)
+          .values(tempPlan)
+          .returning();
+        
+        // Step 2: Update basePlanId to self-reference
+        const [finalPlan] = await tx
+          .update(subscriptionPlans)
+          .set({ basePlanId: createdPlan.id })
+          .where(eq(subscriptionPlans.id, createdPlan.id))
+          .returning();
+
+        return finalPlan as SubscriptionPlan;
+      });
+
+      // Step 3: Audit log (AFTER transaction commits)
+      await this.planAuditRepository.logChange({
+        planId: finalPlan.id,
+        changedBy: adminId,
+        changeType: 'created',
+        fieldChanges: { created: { old: null, new: finalPlan } },
+        ipAddress,
+        userAgent
+      });
+
+      return finalPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.createSubscriptionPlan');
     }
   }
 
-  async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>): Promise<SubscriptionPlan | undefined> {
+  /**
+   * Update subscription plan (NON-PRICE updates only)
+   * Price changes are blocked if plan has active subscribers - use updatePlanPrice() instead
+   * Logs deprecation warning if updating a plan with active subscribers
+   */
+  async updateSubscriptionPlan(id: string, updates: Partial<SubscriptionPlan>, adminId: string, changeReason?: string, ipAddress?: string, userAgent?: string): Promise<SubscriptionPlan | undefined> {
     try {
+      // P0.5: Sanitize user inputs to prevent XSS attacks
+      const sanitizedUpdates: Partial<SubscriptionPlan> = { ...updates };
+      if (updates.name !== undefined) {
+        sanitizedUpdates.name = InputSanitizer.sanitizePlainText(updates.name);
+      }
+      if (updates.description !== undefined) {
+        sanitizedUpdates.description = InputSanitizer.sanitizePlainText(updates.description);
+      }
+      // Sanitize features array only if provided and not null (migration-safe)
+      if (updates.features !== undefined) {
+        sanitizedUpdates.features = updates.features !== null 
+          ? InputSanitizer.sanitizeArray(updates.features)
+          : undefined;
+      }
+      // Sanitize logo only if provided and not null (migration-safe)
+      if (updates.logo !== undefined) {
+        sanitizedUpdates.logo = updates.logo !== null
+          ? InputSanitizer.sanitizePlainText(updates.logo)
+          : undefined;
+      }
+      if (updates.universityTier !== undefined) {
+        sanitizedUpdates.universityTier = InputSanitizer.sanitizePlainText(updates.universityTier) as any;
+      }
+      if (updates.supportType !== undefined) {
+        sanitizedUpdates.supportType = InputSanitizer.sanitizePlainText(updates.supportType) as any;
+      }
+      
+      // Category 2: Sanitize supportTypes array
+      if (updates.supportTypes !== undefined) {
+        sanitizedUpdates.supportTypes = updates.supportTypes ? InputSanitizer.sanitizeArray(updates.supportTypes) : updates.supportTypes;
+      }
+      
+      // Category 3: Sanitize Phozos AI tier
+      if (updates.phozosAiTier !== undefined) {
+        sanitizedUpdates.phozosAiTier = updates.phozosAiTier ? InputSanitizer.sanitizePlainText(updates.phozosAiTier) as any : updates.phozosAiTier;
+      }
+      
+      // Category 6: Sanitize Phozos Prep fields
+      if (updates.phozosPrepTier !== undefined) {
+        sanitizedUpdates.phozosPrepTier = updates.phozosPrepTier ? InputSanitizer.sanitizePlainText(updates.phozosPrepTier) as any : updates.phozosPrepTier;
+      }
+      if (updates.phozosPrepDescription !== undefined) {
+        sanitizedUpdates.phozosPrepDescription = updates.phozosPrepDescription ? InputSanitizer.sanitizePlainText(updates.phozosPrepDescription) : updates.phozosPrepDescription;
+      }
+      
+      const sanitizedChangeReason = changeReason ? InputSanitizer.sanitizePlainText(changeReason) : undefined;
+
       const errors: Record<string, string> = {};
 
-      if (updates.name !== undefined) {
-        const nameValidation = CommonValidators.validateStringLength(updates.name, 1, 255, 'Plan name');
+      if (sanitizedUpdates.name !== undefined) {
+        const nameValidation = CommonValidators.validateStringLength(sanitizedUpdates.name, 1, 255, 'Plan name');
         if (!nameValidation.valid) {
           errors.name = nameValidation.error!;
         }
       }
 
-      if (updates.price !== undefined && updates.price !== null) {
-        BusinessRuleValidators.validatePaymentAmount(Number(updates.price), 0);
+      if (sanitizedUpdates.price !== undefined && sanitizedUpdates.price !== null) {
+        BusinessRuleValidators.validatePaymentAmount(Number(sanitizedUpdates.price), 0);
       }
 
-      if (updates.maxUniversities !== undefined && updates.maxUniversities !== null) {
-        const maxUnivValidation = CommonValidators.validatePositiveNumber(updates.maxUniversities, 'Max universities');
+      if (sanitizedUpdates.maxUniversities !== undefined && sanitizedUpdates.maxUniversities !== null) {
+        const maxUnivValidation = CommonValidators.validatePositiveNumber(sanitizedUpdates.maxUniversities, 'Max universities');
         if (!maxUnivValidation.valid) {
           errors.maxUniversities = maxUnivValidation.error!;
+        }
+      }
+
+      // Validate supportTypes array (no duplicates, at least 1 item if provided)
+      if (sanitizedUpdates.supportTypes !== undefined && sanitizedUpdates.supportTypes !== null) {
+        if (!Array.isArray(sanitizedUpdates.supportTypes)) {
+          errors.supportTypes = 'Support types must be an array';
+        } else if (sanitizedUpdates.supportTypes.length === 0) {
+          errors.supportTypes = 'At least one support type is required';
+        } else {
+          // Check for duplicates
+          const uniqueTypes = new Set(sanitizedUpdates.supportTypes);
+          if (uniqueTypes.size !== sanitizedUpdates.supportTypes.length) {
+            errors.supportTypes = 'Support types must not contain duplicates';
+          }
+          
+          // Validate enum values
+          const validSupportTypes = ['email', 'whatsapp', 'phone', 'premium'];
+          const invalidTypes = sanitizedUpdates.supportTypes.filter(type => !validSupportTypes.includes(type));
+          if (invalidTypes.length > 0) {
+            errors.supportTypes = `Invalid support types: ${invalidTypes.join(', ')}. Valid values are: ${validSupportTypes.join(', ')}`;
+          }
+        }
+      }
+
+      // Validate phozosAiTier enum
+      if (sanitizedUpdates.phozosAiTier !== undefined && sanitizedUpdates.phozosAiTier !== null) {
+        const validAiTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validAiTiers.includes(sanitizedUpdates.phozosAiTier)) {
+          errors.phozosAiTier = `Invalid Phozos AI tier. Valid values are: ${validAiTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepTier enum
+      if (sanitizedUpdates.phozosPrepTier !== undefined && sanitizedUpdates.phozosPrepTier !== null) {
+        const validPrepTiers = ['none', 'basic', 'pro', 'ultra'];
+        if (!validPrepTiers.includes(sanitizedUpdates.phozosPrepTier)) {
+          errors.phozosPrepTier = `Invalid Phozos Prep tier. Valid values are: ${validPrepTiers.join(', ')}`;
+        }
+      }
+
+      // Validate phozosPrepDescription length
+      if (sanitizedUpdates.phozosPrepDescription !== undefined && sanitizedUpdates.phozosPrepDescription !== null) {
+        const descValidation = CommonValidators.validateStringLength(sanitizedUpdates.phozosPrepDescription, 0, 1000, 'Phozos Prep description');
+        if (!descValidation.valid) {
+          errors.phozosPrepDescription = descValidation.error!;
         }
       }
 
@@ -110,17 +378,538 @@ export class SubscriptionService extends BaseService implements ISubscriptionSer
         throw new ValidationServiceError('Subscription Plan', errors);
       }
 
-      return await this.subscriptionPlanRepository.update(id, updates);
+      const oldPlan = await this.subscriptionPlanRepository.findById(id);
+      if (!oldPlan) {
+        return undefined;
+      }
+
+      // Check if price is being changed
+      if (sanitizedUpdates.price !== undefined && Number(sanitizedUpdates.price) !== Number(oldPlan.price)) {
+        const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(id);
+        
+        if (subscriberCount > 0) {
+          throw new InvalidOperationError(
+            'update plan price',
+            `Cannot change price for plan with ${subscriberCount} active subscribers. Use updatePlanPrice() to create a new version instead.`
+          );
+        }
+      }
+
+      // Log warning if updating plan with subscribers (non-price changes)
+      const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(id);
+      if (subscriberCount > 0 && !sanitizedChangeReason) {
+        logger.warn('Updating plan with active subscribers without changeReason', {
+          planId: id,
+          planName: oldPlan.name,
+          subscriberCount,
+          adminId,
+          updates: Object.keys(sanitizedUpdates)
+        });
+      }
+
+      const fieldChanges = this.calculateFieldChanges(oldPlan, sanitizedUpdates);
+
+      const updatedPlan = await this.subscriptionPlanRepository.update(id, sanitizedUpdates);
+
+      if (Object.keys(fieldChanges).length > 0) {
+        await this.planAuditRepository.logChange({
+          planId: id,
+          changedBy: adminId,
+          changeType: 'updated',
+          fieldChanges,
+          changeReason: sanitizedChangeReason,
+          ipAddress,
+          userAgent
+        });
+      }
+
+      return updatedPlan;
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.updateSubscriptionPlan');
     }
   }
 
-  async deleteSubscriptionPlan(id: string): Promise<boolean> {
+  /**
+   * Dedicated method for price changes with proper versioning
+   * Creates a new version of the plan with the new price
+   * Existing subscribers remain on their current version (grandfathering)
+   * Optionally notifies subscribers about the upcoming price change
+   */
+  async updatePlanPrice(
+    planId: string,
+    newPrice: number,
+    adminId: string,
+    releaseNotes?: string,
+    notifySubscribers: boolean = true,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<SubscriptionPlan> {
     try {
+      // P0.5: Sanitize release notes
+      const sanitizedReleaseNotes = releaseNotes ? InputSanitizer.sanitizePlainText(releaseNotes) : undefined;
+      
+      // Validate price
+      BusinessRuleValidators.validatePaymentAmount(newPrice, 0);
+
+      const oldPlan = await this.subscriptionPlanRepository.findById(planId);
+      if (!oldPlan) {
+        throw new InvalidOperationError(
+          'update plan price',
+          'Plan not found'
+        );
+      }
+
+      // Check if price is actually changing
+      if (Number(newPrice) === Number(oldPlan.price)) {
+        logger.warn('Attempted to update price to same value', {
+          planId,
+          currentPrice: oldPlan.price,
+          newPrice,
+          adminId
+        });
+        throw new InvalidOperationError(
+          'update plan price',
+          `New price (${newPrice}) must be different from current price (${oldPlan.price}). Price update cancelled.`
+        );
+      }
+
+      // Use the basePlanId for versioning
+      const basePlanId = oldPlan.basePlanId || oldPlan.id;
+
+      // Create new version with price change
+      const newVersion = await this.createPlanVersion(
+        basePlanId,
+        { price: newPrice.toString() as any },
+        adminId,
+        sanitizedReleaseNotes || `Price updated from ${oldPlan.price} to ${newPrice}`,
+        notifySubscribers
+      );
+
+      logger.info('Plan price updated via versioning', {
+        planId,
+        basePlanId,
+        oldVersion: oldPlan.version,
+        newVersion: newVersion.version,
+        oldPrice: oldPlan.price,
+        newPrice,
+        adminId
+      });
+
+      return newVersion;
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.updatePlanPrice');
+    }
+  }
+
+  async deleteSubscriptionPlan(id: string, adminId: string, ipAddress?: string, userAgent?: string): Promise<boolean> {
+    try {
+      const plan = await this.subscriptionPlanRepository.findById(id);
+      if (plan) {
+        await this.planAuditRepository.logChange({
+          planId: id,
+          changedBy: adminId,
+          changeType: 'archived',
+          fieldChanges: { archived: { old: plan, new: null } },
+          ipAddress,
+          userAgent
+        });
+      }
+
       return await this.subscriptionPlanRepository.delete(id);
     } catch (error) {
       return this.handleError(error, 'SubscriptionService.deleteSubscriptionPlan');
+    }
+  }
+
+  // Versioning Methods
+  async createPlanVersion(
+    basePlanId: string,
+    updates: Partial<SubscriptionPlan>,
+    adminId: string,
+    releaseNotes?: string,
+    notifySubscribers: boolean = true
+  ): Promise<SubscriptionPlan> {
+    try {
+      const oldPlan = await this.subscriptionPlanRepository.findLatestVersion(basePlanId);
+      
+      const newVersion = await this.subscriptionPlanRepository.createNewVersion(
+        basePlanId,
+        updates,
+        adminId
+      );
+
+      await this.planAuditRepository.logChange({
+        planId: newVersion.id,
+        changedBy: adminId,
+        changeType: 'created',
+        fieldChanges: {
+          type: { old: null, new: 'new_version' },
+          basePlanId: { old: null, new: basePlanId },
+          version: { old: oldPlan?.version || 0, new: newVersion.version },
+          changes: { old: oldPlan, new: updates },
+          releaseNotes: { old: null, new: releaseNotes || '' }
+        },
+        changeReason: `Created version ${newVersion.version}${releaseNotes ? ': ' + releaseNotes : ''}`
+      });
+
+      // Auto-grandfather existing subscribers on price increases (P0.4)
+      if (oldPlan && updates.price && Number(updates.price) > Number(oldPlan.price)) {
+        try {
+          const grandfatheredCount = await this.grandfatherExistingSubscribers(
+            oldPlan.id,
+            Number(oldPlan.price),
+            adminId
+          );
+          
+          logger.info('Auto-grandfathered existing subscribers on price increase', {
+            oldPlanId: oldPlan.id,
+            newPlanId: newVersion.id,
+            oldPrice: oldPlan.price,
+            newPrice: updates.price,
+            subscribersGrandfathered: grandfatheredCount,
+            adminId
+          });
+        } catch (grandfatherError) {
+          logger.error('Failed to auto-grandfather existing subscribers', {
+            error: grandfatherError,
+            oldPlanId: oldPlan.id,
+            newPlanId: newVersion.id
+          });
+          // Don't fail the entire operation, but log the error
+        }
+      }
+
+      // Send notifications if price changed and notification service is available
+      if (notifySubscribers && oldPlan && updates.price && Number(updates.price) !== Number(oldPlan.price)) {
+        try {
+          const effectiveDate = new Date();
+          effectiveDate.setDate(effectiveDate.getDate() + 30);
+
+          const planNotificationService = getService<IPlanNotificationService>(TYPES.IPlanNotificationService);
+          const notification = await planNotificationService.createPriceChangeNotification(
+            oldPlan.id,
+            Number(oldPlan.price),
+            Number(updates.price),
+            effectiveDate,
+            adminId
+          );
+
+          await planNotificationService.sendPlanNotifications(notification.id);
+        } catch (notificationError) {
+          // Log but don't fail if notification service is unavailable (e.g., during tests)
+          logger.warn('Failed to send price change notifications', {
+            error: notificationError,
+            basePlanId,
+            oldPrice: oldPlan.price,
+            newPrice: updates.price
+          });
+        }
+      }
+
+      return newVersion;
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.createPlanVersion');
+    }
+  }
+
+  async getPlanVersions(basePlanId: string): Promise<SubscriptionPlan[]> {
+    try {
+      return await this.subscriptionPlanRepository.findAllVersions(basePlanId);
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getPlanVersions');
+    }
+  }
+
+  async getPlanVersion(basePlanId: string, version: number): Promise<SubscriptionPlan | undefined> {
+    try {
+      return await this.subscriptionPlanRepository.findVersion(basePlanId, version);
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getPlanVersion');
+    }
+  }
+
+  /**
+   * P3.4: Rollback plan to a previous version
+   * Creates a new version with fields copied from the target version
+   * Does NOT mutate historical data - creates a new version instead
+   */
+  async rollbackPlanVersion(
+    planId: string,
+    targetVersion: number,
+    adminId: string,
+    reason: string,
+    notifySubscribers: boolean = false
+  ): Promise<SubscriptionPlan> {
+    try {
+      // Sanitize reason
+      const sanitizedReason = InputSanitizer.sanitizePlainText(reason);
+
+      // Get current plan to determine basePlanId
+      const currentPlan = await this.subscriptionPlanRepository.findById(planId);
+      if (!currentPlan) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          'Plan not found'
+        );
+      }
+
+      const basePlanId = currentPlan.basePlanId || currentPlan.id;
+
+      // Get current latest version
+      const latestVersion = await this.subscriptionPlanRepository.findLatestVersion(basePlanId);
+      if (!latestVersion) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          'Could not find latest version'
+        );
+      }
+
+      // Prevent rollback to current version
+      if (targetVersion === latestVersion.version) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          `Cannot rollback to current version (v${targetVersion}). Target version must be different from the latest version.`
+        );
+      }
+
+      // Find the target version to rollback to
+      const targetPlan = await this.subscriptionPlanRepository.findVersion(basePlanId, targetVersion);
+      if (!targetPlan) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          `Target version ${targetVersion} not found for plan ${basePlanId}`
+        );
+      }
+
+      // Validate target version is older than current
+      if (targetVersion > latestVersion.version) {
+        throw new InvalidOperationError(
+          'rollback plan version',
+          `Cannot rollback to future version. Target version (v${targetVersion}) is newer than current version (v${latestVersion.version}).`
+        );
+      }
+
+      // Prepare updates by copying all relevant fields from target version
+      const rollbackUpdates: Partial<SubscriptionPlan> = {
+        name: targetPlan.name,
+        description: targetPlan.description,
+        price: targetPlan.price,
+        currency: targetPlan.currency,
+        features: targetPlan.features,
+        maxUniversities: targetPlan.maxUniversities,
+        maxCountries: targetPlan.maxCountries,
+        universityTier: targetPlan.universityTier,
+        supportType: targetPlan.supportType,
+        turnaroundDays: targetPlan.turnaroundDays,
+        includeLoanAssistance: targetPlan.includeLoanAssistance,
+        includeVisaSupport: targetPlan.includeVisaSupport,
+        includeCounselorSession: targetPlan.includeCounselorSession,
+        includeScholarshipPlanning: targetPlan.includeScholarshipPlanning,
+        includeMockInterview: targetPlan.includeMockInterview,
+        includeExpertEditing: targetPlan.includeExpertEditing,
+        includePostAdmitSupport: targetPlan.includePostAdmitSupport,
+        includeDedicatedManager: targetPlan.includeDedicatedManager,
+        includeNetworkingEvents: targetPlan.includeNetworkingEvents,
+        includeFlightAccommodation: targetPlan.includeFlightAccommodation,
+        isBusinessFocused: targetPlan.isBusinessFocused,
+        isActive: targetPlan.isActive,
+        displayOrder: targetPlan.displayOrder
+      };
+
+      // Create new version with rollback data
+      const releaseNotes = `Rolled back from v${latestVersion.version} to v${targetVersion}. Reason: ${sanitizedReason}`;
+      const newVersion = await this.createPlanVersion(
+        basePlanId,
+        rollbackUpdates,
+        adminId,
+        releaseNotes,
+        notifySubscribers
+      );
+
+      // Log rollback action in audit trail
+      await this.planAuditRepository.logChange({
+        planId: newVersion.id,
+        changedBy: adminId,
+        changeType: 'rollback',
+        fieldChanges: {
+          action: { old: null, new: 'rollback' },
+          fromVersion: { old: null, new: latestVersion.version },
+          toVersion: { old: null, new: targetVersion },
+          newVersion: { old: null, new: newVersion.version },
+          targetPlanId: { old: null, new: targetPlan.id },
+          rollbackData: { old: latestVersion, new: targetPlan }
+        },
+        changeReason: sanitizedReason
+      });
+
+      logger.info('Plan version rolled back successfully', {
+        planId: newVersion.id,
+        basePlanId,
+        fromVersion: latestVersion.version,
+        targetVersion,
+        newVersion: newVersion.version,
+        adminId,
+        reason: sanitizedReason
+      });
+
+      return newVersion;
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.rollbackPlanVersion');
+    }
+  }
+
+  /**
+   * Auto-grandfather existing subscribers when price increases
+   * This ensures existing customers retain their original price
+   * P0.4: Critical fix for auto-grandfathering on price updates
+   */
+  private async grandfatherExistingSubscribers(
+    planId: string,
+    grandfatheredPrice: number,
+    adminId: string
+  ): Promise<number> {
+    try {
+      // Find all active subscriptions for this plan
+      const activeSubscriptions = await this.userSubscriptionRepo.findAll({
+        planId,
+        status: 'active'
+      });
+
+      if (activeSubscriptions.length === 0) {
+        logger.info('No active subscribers to grandfather', { planId });
+        return 0;
+      }
+
+      let grandfatheredCount = 0;
+
+      // Update each subscription with grandfathered price
+      for (const subscription of activeSubscriptions) {
+        // Skip if already grandfathered at a lower price
+        if (subscription.isGrandfathered && subscription.grandfatheredPrice) {
+          const existingGrandfatheredPrice = Number(subscription.grandfatheredPrice);
+          if (existingGrandfatheredPrice <= grandfatheredPrice) {
+            logger.debug('Skipping subscription already grandfathered at lower price', {
+              subscriptionId: subscription.id,
+              existingPrice: existingGrandfatheredPrice,
+              newGrandfatheredPrice: grandfatheredPrice
+            });
+            continue;
+          }
+        }
+
+        // Apply grandfathering
+        await this.userSubscriptionRepo.updateGrandfatheredPrice(
+          subscription.id,
+          grandfatheredPrice
+        );
+
+        grandfatheredCount++;
+
+        // Log to audit trail
+        await this.planAuditRepository.logChange({
+          planId,
+          changedBy: adminId,
+          changeType: 'grandfathered',
+          fieldChanges: {
+            subscriptionId: { old: null, new: subscription.id },
+            userId: { old: null, new: subscription.userId },
+            grandfatheredPrice: { old: subscription.grandfatheredPrice || null, new: grandfatheredPrice },
+            isGrandfathered: { old: subscription.isGrandfathered || false, new: true }
+          },
+          changeReason: `Auto-grandfathered due to price increase`
+        });
+      }
+
+      return grandfatheredCount;
+    } catch (error) {
+      logger.error('Error grandfathering existing subscribers', {
+        error,
+        planId,
+        grandfatheredPrice,
+        adminId
+      });
+      throw error;
+    }
+  }
+
+  async deprecatePlan(
+    planId: string,
+    successorPlanId: string | undefined,
+    adminId: string,
+    reason: string
+  ): Promise<void> {
+    try {
+      const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(planId);
+      
+      if (subscriberCount === 0) {
+        throw new Error(
+          'Cannot deprecate plan with no subscribers. Use archive instead.'
+        );
+      }
+
+      await this.subscriptionPlanRepository.deprecatePlan(planId, successorPlanId);
+
+      await this.planAuditRepository.logChange({
+        planId,
+        changedBy: adminId,
+        changeType: 'deprecated',
+        fieldChanges: {
+          subscriberCount: { old: 0, new: subscriberCount },
+          successorPlanId: { old: null, new: successorPlanId || null }
+        },
+        changeReason: reason
+      });
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.deprecatePlan');
+    }
+  }
+
+  async archivePlan(planId: string, adminId: string, reason: string): Promise<void> {
+    try {
+      await this.subscriptionPlanRepository.archivePlan(planId);
+
+      await this.planAuditRepository.logChange({
+        planId,
+        changedBy: adminId,
+        changeType: 'archived',
+        fieldChanges: {
+          archived: { old: false, new: true }
+        },
+        changeReason: reason
+      });
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.archivePlan');
+    }
+  }
+
+  async getPlanAnalytics(planId: string): Promise<PlanAnalytics> {
+    try {
+      const plan = await this.subscriptionPlanRepository.findById(planId);
+      const subscriberCount = await this.subscriptionPlanRepository.getSubscriberCount(planId);
+      
+      const subscriptions = await this.userSubscriptionRepo.findAll({ planId });
+      const totalRevenue = subscriptions.reduce((sum, sub) => {
+        return sum + Number(sub.amountPaid || 0);
+      }, 0);
+
+      let successorPlan: SubscriptionPlan | null = null;
+      if (plan.successorPlanId) {
+        const foundSuccessor = await this.subscriptionPlanRepository.findByIdOptional(plan.successorPlanId);
+        successorPlan = foundSuccessor || null;
+      }
+
+      return {
+        planId: plan.id,
+        planName: plan.name,
+        version: plan.version,
+        activeSubscribers: subscriberCount,
+        totalRevenue,
+        isDeprecated: !!plan.deprecatedAt,
+        deprecatedAt: plan.deprecatedAt,
+        successorPlan
+      };
+    } catch (error) {
+      return this.handleError(error, 'SubscriptionService.getPlanAnalytics');
     }
   }
 

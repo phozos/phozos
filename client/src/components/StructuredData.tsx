@@ -1,4 +1,5 @@
 import { Helmet } from 'react-helmet-async';
+import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from '@/lib/company-info';
 
 interface BreadcrumbItem {
   name: string;
@@ -36,19 +37,32 @@ export function StructuredData({
     "address": [
       {
         "@type": "PostalAddress",
-        "addressLocality": "Bengaluru",
-        "addressRegion": "Karnataka",
-        "addressCountry": "IN",
-        "name": "Corporate Office",
-        "description": "Koramangala, Bengaluru, Karnataka, India"
+        "streetAddress": `${CORPORATE_OFFICE.address.street}, ${CORPORATE_OFFICE.address.area}`,
+        "addressLocality": CORPORATE_OFFICE.address.city,
+        "addressRegion": CORPORATE_OFFICE.address.state,
+        "postalCode": CORPORATE_OFFICE.address.postalCode,
+        "addressCountry": CORPORATE_OFFICE.address.countryCode,
+        "name": CORPORATE_OFFICE.label,
+        "description": CORPORATE_OFFICE.full
       },
       {
         "@type": "PostalAddress",
-        "addressLocality": "Bathinda",
-        "addressRegion": "Punjab",
-        "addressCountry": "IN",
-        "name": "Registered Office",
-        "description": "Bathinda, Punjab, India"
+        "addressLocality": REGISTERED_OFFICE.address.city,
+        "addressRegion": REGISTERED_OFFICE.address.state,
+        "addressCountry": REGISTERED_OFFICE.address.countryCode,
+        "name": REGISTERED_OFFICE.label,
+        "description": REGISTERED_OFFICE.full
+      },
+      {
+        "@type": "PostalAddress",
+        "streetAddress": US_OFFICE.address.street,
+        "addressLocality": US_OFFICE.address.city,
+        "addressRegion": US_OFFICE.address.state,
+        "postalCode": US_OFFICE.address.postalCode,
+        "addressCountry": US_OFFICE.address.countryCode,
+        "name": US_OFFICE.label,
+        "description": US_OFFICE.full,
+        "telephone": US_OFFICE.phone
       }
     ],
     "areaServed": {

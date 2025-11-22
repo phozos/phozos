@@ -16,11 +16,27 @@ export * from './ai-matching.repository';
 export * from './chat.repository';
 export * from './payment.repository';
 export * from './subscription.repository';
+export * from './subscription-plan-audit.repository';
+export * from './subscription-plan-notification.repository';
+export * from './user-plan-notification.repository';
+export * from './plan-migration.repository';
 export * from './security-settings.repository';
 export * from './testimonial.repository';
 export * from './student-timeline.repository';
 export * from './forum-reports.repository';
 export * from './staff-invitation.repository';
+export * from './quota-usage.repository';
+export * from './feature-usage.repository';
+export * from './partner-profile.repository';
+export * from './partner-referral-link.repository';
+export * from './referral-click.repository';
+export * from './partner-student-referral.repository';
+export * from './partner-commission.repository';
+export * from './partner-payout.repository';
+export * from './payment-record.repository';
+export * from './cancellation-request.repository';
+export * from './refund.repository';
+export * from './chargeback-dispute.repository';
 
 import { userRepository } from './user.repository';
 import { studentRepository } from './student.repository';
@@ -38,11 +54,27 @@ import { aiMatchingRepository } from './ai-matching.repository';
 import { chatRepository } from './chat.repository';
 import { paymentRepository } from './payment.repository';
 import { subscriptionPlanRepository, userSubscriptionRepository } from './subscription.repository';
+import { subscriptionPlanAuditRepository } from './subscription-plan-audit.repository';
+import { subscriptionPlanNotificationRepository } from './subscription-plan-notification.repository';
+import { userPlanNotificationRepository } from './user-plan-notification.repository';
+import { planMigrationRepository, planMigrationUserRepository } from './plan-migration.repository';
 import { securitySettingsRepository } from './security-settings.repository';
 import { testimonialRepository } from './testimonial.repository';
 import { studentTimelineRepository } from './student-timeline.repository';
 import { forumReportsRepository } from './forum-reports.repository';
 import { staffInvitationRepository } from './staff-invitation.repository';
+import { quotaUsageRepository } from './quota-usage.repository';
+import { featureUsageRepository } from './feature-usage.repository';
+import { partnerProfileRepository } from './partner-profile.repository';
+import { partnerReferralLinkRepository } from './partner-referral-link.repository';
+import { referralClickRepository } from './referral-click.repository';
+import { partnerStudentReferralRepository } from './partner-student-referral.repository';
+import { partnerCommissionRepository } from './partner-commission.repository';
+import { partnerPayoutRepository } from './partner-payout.repository';
+import { paymentRecordRepository } from './payment-record.repository';
+import { cancellationRequestRepository } from './cancellation-request.repository';
+import { refundRepository } from './refund.repository';
+import { chargebackDisputeRepository } from './chargeback-dispute.repository';
 
 export const repositories = {
   user: userRepository,
@@ -62,9 +94,26 @@ export const repositories = {
   payment: paymentRepository,
   subscriptionPlan: subscriptionPlanRepository,
   userSubscription: userSubscriptionRepository,
+  subscriptionPlanAudit: subscriptionPlanAuditRepository,
+  subscriptionPlanNotification: subscriptionPlanNotificationRepository,
+  userPlanNotification: userPlanNotificationRepository,
+  planMigration: planMigrationRepository,
+  planMigrationUser: planMigrationUserRepository,
   securitySettings: securitySettingsRepository,
   testimonial: testimonialRepository,
   studentTimeline: studentTimelineRepository,
   forumReports: forumReportsRepository,
-  staffInvitation: staffInvitationRepository
+  staffInvitation: staffInvitationRepository,
+  quotaUsage: quotaUsageRepository,
+  featureUsage: featureUsageRepository,
+  partnerProfile: partnerProfileRepository,
+  partnerReferralLink: partnerReferralLinkRepository,
+  referralClick: referralClickRepository,
+  partnerStudentReferral: partnerStudentReferralRepository,
+  partnerCommission: partnerCommissionRepository,
+  partnerPayout: partnerPayoutRepository,
+  paymentRecord: paymentRecordRepository,
+  cancellationRequest: cancellationRequestRepository,
+  refund: refundRepository,
+  chargebackDispute: chargebackDisputeRepository
 };

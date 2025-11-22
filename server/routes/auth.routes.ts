@@ -28,6 +28,13 @@ router.post('/team-login',
   asyncHandler((req: Request, res: Response) => authController.loginTeam(req, res))
 );
 
+// Partner login - Public route with CSRF protection
+router.post('/partner-login', 
+  loginRateLimit,
+  csrfProtection,
+  asyncHandler((req: Request, res: Response) => authController.loginPartner(req, res))
+);
+
 // Token refresh - Public route (Phase 2: Token Refresh Pattern)
 // No CSRF protection needed as refresh token is in HttpOnly cookie
 router.post('/refresh', 

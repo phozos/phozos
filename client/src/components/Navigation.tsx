@@ -10,12 +10,12 @@ import {
   Moon, 
   Sun, 
   Menu, 
-  GraduationCap,
   User,
   Settings,
   LogOut,
   Search
 } from "lucide-react";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -89,6 +89,7 @@ export default function Navigation({ user, onSignOut }: NavigationProps) {
       { href: "/dashboard", label: "Dashboard" },
       { href: "/applications", label: "Applications" },
       { href: "/documents", label: "Documents" },
+      { href: "/subscription-management", label: "Subscription" },
     ] : []),
     ...(user.teamRole === "admin" ? [{ href: "/dashboard/admin", label: "Admin Dashboard" }] : []),
     ...(user.teamRole === "counselor" ? [{ href: "/dashboard/team", label: "Counselor Dashboard" }] : [])
@@ -111,8 +112,8 @@ export default function Navigation({ user, onSignOut }: NavigationProps) {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-amber-500 rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-lg flex items-center justify-center p-1">
+              <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
             </div>
             <span className="text-xl font-bold text-foreground">Phozos</span>
           </Link>

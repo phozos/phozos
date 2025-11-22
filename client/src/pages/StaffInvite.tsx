@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { GraduationCap, Shield, Eye, EyeOff, AlertTriangle, CheckCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 export default function StaffInvite() {
   const [, navigate] = useLocation();
@@ -120,8 +121,8 @@ export default function StaffInvite() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-background to-slate-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center space-y-2">
-          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-slate-600 rounded-xl flex items-center justify-center mx-auto">
-            <Shield className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center mx-auto p-1.5">
+            <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" loading="lazy" />
           </div>
           <CardTitle className="text-2xl">Join Phozos Team</CardTitle>
           <CardDescription>

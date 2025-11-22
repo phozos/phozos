@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApiQuery } from "@/hooks/api-hooks";
+import { useApiQuery, useApiMutation } from "@/hooks/api-hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api-client";
 import AppShell from "@/components/AppShell";
@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 import { 
   TrendingUp, 
   Users, 
@@ -25,12 +28,21 @@ import {
   Eye,
   Target,
   BookOpen,
-  Globe
+  Globe,
+  Lock,
+  Bell,
+  ArrowRight,
+  CreditCard,
+  Settings
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
   
   if (!user) {
     return <LoadingSkeleton type="card" count={3} />;
@@ -69,6 +81,90 @@ export default function Dashboard() {
       enabled: !!user,
     }
   );
+
+  // Fetch user's subscription
+  const { data: subscription, isLoading: subscriptionLoading } = useApiQuery<any>(
+    ["/api/subscription/user/subscription"],
+    '/api/subscription/user/subscription',
+    undefined,
+    { 
+      staleTime: 5 * 60 * 1000,
+      enabled: !!user,
+    }
+  );
+
+  // Fetch effective price info
+  const { data: priceInfo, isLoading: priceLoading } = useApiQuery<any>(
+    ["/api/subscription/effective-price"],
+    '/api/subscription/effective-price',
+    undefined,
+    { 
+      staleTime: 5 * 60 * 1000,
+      enabled: !!user,
+    }
+  );
+
+  // Fetch plan change notifications
+  const { data: planNotifications = [], isLoading: planNotificationsLoading } = useApiQuery<any[]>(
+    ["/api/subscription/plan-notifications/unread"],
+    '/api/subscription/plan-notifications/unread',
+    undefined,
+    {
+      staleTime: 60 * 1000,
+      enabled: !!user,
+    }
+  );
+
+  // Mark plan notification as read mutation
+  const markAsReadMutation = useApiMutation(
+    (notificationId: string) => api.post(`/api/subscription/plan-notifications/${notificationId}/read`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/plan-notifications/unread"] });
+      },
+      onError: (error) => {
+        console.error("Failed to mark notification as read:", error);
+      },
+    }
+  );
+
+  // Acknowledge plan notification mutation
+  const acknowledgeMutation = useApiMutation(
+    (notificationId: string) => api.post(`/api/subscription/plan-notifications/${notificationId}/acknowledge`),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/subscription/plan-notifications/unread"] });
+        toast({ title: "Success", description: "Notification acknowledged" });
+      },
+      onError: () => {
+        toast({ title: "Error", description: "Failed to acknowledge notification", variant: "destructive" });
+      },
+    }
+  );
+
+  const handleMarkAsRead = (notificationId: string) => {
+    markAsReadMutation.mutate(notificationId);
+  };
+
+  const handleAcknowledge = (notificationId: string) => {
+    acknowledgeMutation.mutate(notificationId);
+  };
+
+  const handleViewPlanDetails = (planId: string) => {
+    setLocation("/subscription-plans");
+  };
+
+  // Automatically mark notifications as read when they're displayed
+  useEffect(() => {
+    if (planNotifications && planNotifications.length > 0) {
+      planNotifications.forEach((notif: any) => {
+        // Only mark as read if not already read (using camelCase from Drizzle)
+        if (!notif.readAt) {
+          handleMarkAsRead(notif.id);
+        }
+      });
+    }
+  }, [planNotifications?.length]); // Dependency on length to avoid re-marking on every render
 
   const stats = [
     {
@@ -184,6 +280,53 @@ export default function Dashboard() {
           </p>
         </div>
 
+        {/* Plan Change Notifications */}
+        {planNotifications && planNotifications.length > 0 && (
+          <div className="mb-8 space-y-4">
+            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Plan Change Notifications
+            </h2>
+            {planNotifications.map((notif: any) => (
+              <Card key={notif.id} className="border-l-4 border-l-blue-500">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Bell className="w-5 h-5 text-blue-600" />
+                    {notif.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-foreground whitespace-pre-line">{notif.message}</p>
+                  
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleAcknowledge(notif.id)}
+                      disabled={acknowledgeMutation.isPending}
+                    >
+                      {acknowledgeMutation.isPending ? "Processing..." : "I Understand"}
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => handleViewPlanDetails(notif.planId)}
+                    >
+                      View Plan Details
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                  
+                  {notif.effectiveDate && (
+                    <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
+                      Effective Date: {format(new Date(notif.effectiveDate), 'MMMM d, yyyy')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {stats.map((stat) => (
@@ -207,7 +350,6 @@ export default function Dashboard() {
                 <div className="mt-4">
                   <span className={`text-sm ${
                     stat.changeType === 'positive' ? 'text-green-600' :
-                    stat.changeType === 'negative' ? 'text-red-600' :
                     'text-muted-foreground'
                   }`}>
                     {stat.change}
@@ -318,6 +460,82 @@ export default function Dashboard() {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Subscription Card */}
+            {subscription && subscription.id && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Subscription</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Plan:</span>
+                      <span className="font-semibold">{subscription.plan?.name || 'N/A'}</span>
+                    </div>
+                    
+                    {subscription.isGrandfathered && (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Your Price:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-green-600">
+                              ₹{subscription.grandfatheredPrice}
+                            </span>
+                            <Badge variant="secondary" className="bg-amber-100 dark:bg-amber-900">
+                              <Lock className="w-3 h-3 mr-1" />
+                              Locked
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        {priceInfo?.priceUpdate?.shouldOffer && (
+                          <Alert className="mt-3">
+                            <TrendingUp className="h-4 w-4" />
+                            <AlertTitle>Price Drop Available!</AlertTitle>
+                            <AlertDescription className="text-xs mt-1">
+                              This plan now costs ₹{priceInfo.priceUpdate.newPrice} 
+                              (save ₹{priceInfo.priceUpdate.savings}). 
+                              <Button variant="link" className="h-auto p-0 text-xs" asChild>
+                                <Link href="/subscription-plans">Update my price</Link>
+                              </Button>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        
+                        <div className="text-xs text-muted-foreground mt-2 p-2 bg-muted rounded">
+                          <Lock className="w-3 h-3 inline mr-1" />
+                          Your price is locked. New subscribers pay ₹{subscription.plan?.price || 'N/A'}.
+                        </div>
+                      </>
+                    )}
+                    
+                    {!subscription.isGrandfathered && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-muted-foreground">Price:</span>
+                        <span className="font-semibold">₹{subscription.plan?.price || 'N/A'}</span>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Status:</span>
+                      <Badge variant={subscription.status === 'active' ? 'default' : 'secondary'}>
+                        {subscription.status}
+                      </Badge>
+                    </div>
+                    
+                    <div className="pt-3 border-t">
+                      <Button asChild variant="outline" className="w-full">
+                        <Link href="/subscription-management">
+                          <Settings className="w-4 h-4 mr-2" />
+                          Manage Subscription
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             {/* Quick Actions */}
             <Card>
               <CardHeader>

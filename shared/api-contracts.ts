@@ -356,6 +356,216 @@ export type DocumentsListResponse = z.infer<typeof DocumentsListResponseSchema>;
 export type MessageResponse = z.infer<typeof MessageResponseSchema>;
 
 // ===========================
+// Feature Management Types (Phase 4)
+// ===========================
+
+export const ImpactAnalysisSchema = z.object({
+  summary: z.object({
+    totalSubscribers: z.number(),
+    grandfatheredUsers: z.number(),
+    affectedUsers: z.number(),
+    byTier: z.record(z.number()),
+    byStatus: z.object({
+      active: z.number(),
+      grandfathered: z.number(),
+      expired: z.number()
+    })
+  }),
+  featureBreakdown: z.array(z.object({
+    featureName: z.string(),
+    changeType: z.enum(['added', 'removed', 'modified']),
+    oldValue: z.any().optional(),
+    newValue: z.any().optional(),
+    impact: z.object({
+      affectedUsers: z.number(),
+      notificationsRequired: z.number(),
+      estimatedAdoption: z.number(),
+      currentlyAtLimit: z.number().optional(),
+      willBenefitImmediately: z.number().optional()
+    })
+  })),
+  recommendations: z.array(z.string()),
+  risks: z.array(z.object({
+    level: z.enum(['low', 'medium', 'high', 'critical']),
+    description: z.string(),
+    mitigation: z.string()
+  })),
+  financialImpact: z.object({
+    estimatedRevenue: z.object({
+      upgrades: z.number(),
+      downgrades: z.number(),
+      net: z.number()
+    }),
+    churnRisk: z.object({
+      level: z.enum(['low', 'medium', 'high']),
+      percentage: z.number(),
+      affectedUsers: z.number()
+    }),
+    costSavings: z.number().optional()
+  }),
+  migrationPlan: z.object({
+    recommendedStrategy: z.enum(['immediate', 'gradual', 'phased']),
+    suggestedTimeline: z.object({
+      announcement: z.string(),
+      implementation: z.string(),
+      completion: z.string()
+    }),
+    requiredActions: z.array(z.string())
+  }).optional()
+});
+
+export const FeatureUsageOverviewSchema = z.object({
+  featureName: z.string(),
+  displayName: z.string(),
+  totalPlansOffering: z.number(),
+  totalUsersWithAccess: z.number(),
+  activeUsers: z.number(),
+  adoptionRate: z.number(),
+  trend: z.enum(['increasing', 'stable', 'decreasing']),
+  usageCount: z.number()
+});
+
+export const FeatureHealthSchema = z.object({
+  featureName: z.string(),
+  healthStatus: z.enum(['healthy', 'warning', 'critical']),
+  adoptionRate: z.number(),
+  satisfactionScore: z.number().optional(),
+  alerts: z.array(z.object({
+    type: z.enum(['low_adoption', 'high_cost', 'high_value', 'deprecation_candidate']),
+    severity: z.enum(['info', 'warning', 'critical']),
+    message: z.string(),
+    recommendation: z.string().optional(),
+    estimatedSavings: z.number().optional()
+  })),
+  metrics: z.object({
+    totalUsers: z.number(),
+    activeUsers: z.number(),
+    usageFrequency: z.number(),
+    upgradeDriveRate: z.number().optional()
+  })
+});
+
+export const DashboardSummarySchema = z.object({
+  totalFeatures: z.number(),
+  activePlans: z.number(),
+  totalSubscribers: z.number(),
+  healthyFeatures: z.number(),
+  featuresAtRisk: z.number(),
+  deprecatedFeatures: z.number(),
+  recentChanges: z.number()
+});
+
+export const FeatureLifecycleSchema = z.object({
+  featureName: z.string(),
+  status: z.enum(['active', 'deprecated', 'sunset']),
+  addedDate: z.string(),
+  plans: z.array(z.object({
+    planId: z.string(),
+    planName: z.string(),
+    addedVersion: z.number(),
+    currentVersion: z.number()
+  })),
+  totalUsers: z.number(),
+  versionHistory: z.array(z.object({
+    version: z.number(),
+    date: z.string(),
+    changes: z.string(),
+    addedToPlanCount: z.number()
+  })),
+  deprecationSchedule: z.object({
+    announcementDate: z.string(),
+    removalDate: z.string(),
+    reason: z.string()
+  }).optional()
+});
+
+export const BulkOperationResultSchema = z.object({
+  success: z.boolean(),
+  operationId: z.string(),
+  affectedPlans: z.number(),
+  affectedUsers: z.number(),
+  errors: z.array(z.object({
+    planId: z.string(),
+    error: z.string()
+  })),
+  warnings: z.array(z.string())
+});
+
+export const DeprecationScheduleSchema = z.object({
+  id: z.string(),
+  featureName: z.string(),
+  planIds: z.array(z.string()),
+  currentPhase: z.enum(['announcement', 'grace_period', 'soft_disable', 'hard_removal']),
+  status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']),
+  announcementDate: z.string(),
+  gracePeriodStartDate: z.string(),
+  softDisableDate: z.string(),
+  hardRemovalDate: z.string(),
+  reason: z.string(),
+  replacementFeature: z.string().optional(),
+  migrationGuideUrl: z.string().optional(),
+  affectedUserCount: z.number(),
+  notificationsSent: z.number(),
+  usersAcknowledged: z.number(),
+  usersMigrated: z.number(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().optional(),
+  cancelledAt: z.string().optional(),
+  cancellationReason: z.string().optional()
+});
+
+export const DeprecationImpactSchema = z.object({
+  featureName: z.string(),
+  totalAffectedUsers: z.number(),
+  activeUsers: z.number(),
+  usageFrequency: z.number(),
+  lastUsedDate: z.string().nullable(),
+  byPlan: z.array(z.object({
+    planId: z.string(),
+    planName: z.string(),
+    affectedUsers: z.number()
+  })),
+  usersAcknowledged: z.number(),
+  usersMigrated: z.number(),
+  usersAtRisk: z.number(),
+  estimatedChurnRisk: z.number(),
+  estimatedCostSavings: z.number()
+});
+
+export const DeprecationTimelineSchema = z.array(z.object({
+  phase: z.enum(['announcement', 'grace_period', 'soft_disable', 'hard_removal']),
+  startDate: z.string(),
+  endDate: z.string(),
+  status: z.enum(['pending', 'active', 'completed']),
+  actions: z.array(z.string())
+}));
+
+// API Response Wrappers for Feature Management
+export const ApiImpactAnalysisResponse = createApiResponseSchema(ImpactAnalysisSchema);
+export const ApiFeatureUsageOverviewResponse = createApiResponseSchema(z.array(FeatureUsageOverviewSchema));
+export const ApiFeatureHealthResponse = createApiResponseSchema(z.array(FeatureHealthSchema));
+export const ApiDashboardSummaryResponse = createApiResponseSchema(DashboardSummarySchema);
+export const ApiFeatureLifecycleResponse = createApiResponseSchema(FeatureLifecycleSchema);
+export const ApiBulkOperationResultResponse = createApiResponseSchema(BulkOperationResultSchema);
+export const ApiDeprecationScheduleResponse = createApiResponseSchema(DeprecationScheduleSchema);
+export const ApiDeprecationSchedulesResponse = createApiResponseSchema(z.array(DeprecationScheduleSchema));
+export const ApiDeprecationImpactResponse = createApiResponseSchema(DeprecationImpactSchema);
+export const ApiDeprecationTimelineResponse = createApiResponseSchema(DeprecationTimelineSchema);
+
+// Type Exports for Feature Management
+export type ImpactAnalysis = z.infer<typeof ImpactAnalysisSchema>;
+export type FeatureUsageOverview = z.infer<typeof FeatureUsageOverviewSchema>;
+export type FeatureHealth = z.infer<typeof FeatureHealthSchema>;
+export type DashboardSummary = z.infer<typeof DashboardSummarySchema>;
+export type FeatureLifecycle = z.infer<typeof FeatureLifecycleSchema>;
+export type BulkOperationResult = z.infer<typeof BulkOperationResultSchema>;
+export type DeprecationSchedule = z.infer<typeof DeprecationScheduleSchema>;
+export type DeprecationImpact = z.infer<typeof DeprecationImpactSchema>;
+export type DeprecationTimeline = z.infer<typeof DeprecationTimelineSchema>;
+
+// ===========================
 // Endpoint URL Constants
 // ===========================
 
@@ -381,5 +591,16 @@ export const API_ENDPOINTS = {
   SYSTEM_HEALTH: '/api/system/health',
   
   // Documents
-  DOCUMENTS: '/api/documents'
+  DOCUMENTS: '/api/documents',
+  
+  // Feature Management (Admin)
+  FEATURE_MANAGEMENT_DASHBOARD: '/api/admin/feature-management/dashboard',
+  FEATURE_MANAGEMENT_USAGE_OVERVIEW: '/api/admin/feature-management/usage-overview',
+  FEATURE_MANAGEMENT_HEALTH: '/api/admin/feature-management/health',
+  FEATURE_MANAGEMENT_LIFECYCLE: '/api/admin/feature-management/lifecycle',
+  FEATURE_MANAGEMENT_BULK_OPERATION: '/api/admin/feature-management/bulk-operation',
+  FEATURE_IMPACT_PREVIEW: '/api/admin/feature-management/impact-preview',
+  FEATURE_DEPRECATION_SCHEDULES: '/api/admin/feature-management/deprecation/schedules',
+  FEATURE_DEPRECATION_IMPACT: '/api/admin/feature-management/deprecation/impact',
+  FEATURE_DEPRECATION_TIMELINE: '/api/admin/feature-management/deprecation/timeline'
 } as const;

@@ -24,20 +24,21 @@ import { useTheme } from "@/components/ui/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useApiQuery } from "@/hooks/api-hooks";
+import { getProfilePath, getDashboardPath } from "@/lib/navigation-config";
 import { 
   Bell, 
   Moon, 
   Sun, 
   Menu, 
-  GraduationCap,
   User,
-  Settings,
   LogOut,
   Search,
   ChevronDown,
   X,
-  Loader2
+  Loader2,
+  CreditCard
 } from "lucide-react";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 export default function AppShell() {
   const { user, logout, loading } = useAuth();
@@ -74,17 +75,8 @@ export default function AppShell() {
       return;
     }
 
-    if (user.userType === 'customer') {
-      navigate('/dashboard/student');
-    } else if (user.userType === 'company_profile') {
-      navigate('/dashboard/company');
-    } else if (user.teamRole === 'admin') {
-      navigate('/dashboard/admin');
-    } else if (user.teamRole) {
-      navigate('/dashboard/team');
-    } else {
-      navigate('/');
-    }
+    const dashboardPath = getDashboardPath(user);
+    navigate(dashboardPath);
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -134,10 +126,20 @@ export default function AppShell() {
       { href: "/dashboard/student", label: "Dashboard" },
       { href: "/applications", label: "Applications" },
       { href: "/documents", label: "Documents" },
+      { href: "/subscription-management", label: "My Subscription" },
     ] : []),
-    ...(user.teamRole === "admin" ? [{ href: "/dashboard/admin", label: "Admin Dashboard" }] : []),
+    ...(user.teamRole === "admin" ? [
+      { href: "/dashboard/admin", label: "Admin Dashboard" },
+    ] : []),
     ...(user.teamRole === "counselor" ? [{ href: "/dashboard/team", label: "Counselor Dashboard" }] : []),
-    ...(user.userType === "company_profile" ? [{ href: "/dashboard/company", label: "Company Dashboard" }] : [])
+    ...(user.userType === "company_profile" ? [{ href: "/dashboard/company", label: "Company Dashboard" }] : []),
+    ...(user.userType === "partner" ? [
+      { href: "/dashboard/partner", label: "Dashboard" },
+      { href: "/dashboard/partner/profile", label: "Profile" },
+      { href: "/dashboard/partner/referral-links", label: "Referral Links" },
+      { href: "/dashboard/partner/commissions", label: "Commissions" },
+      { href: "/dashboard/partner/payouts", label: "Payouts" },
+    ] : [])
   ] : [];
 
   const allNavigationItems = user 
@@ -158,12 +160,7 @@ export default function AppShell() {
   };
 
   const getUserProfileLink = () => {
-    if (!user) return "/profile";
-    if (user.userType === 'customer') return "/profile";
-    if (user.userType === 'company_profile') return "/profile/company";
-    if (user.teamRole === 'admin') return "/profile/admin";
-    if (user.teamRole === 'counselor') return "/profile/counselor";
-    return "/profile";
+    return getProfilePath(user);
   };
 
   return (
@@ -182,8 +179,8 @@ export default function AppShell() {
             onClick={handleLogoClick}
             data-testid="logo-button"
           >
-            <div className="w-8 h-8 bg-gradient-to-r from-primary to-amber-500 rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-lg flex items-center justify-center p-1">
+              <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
             </div>
             <span className="text-xl font-bold text-foreground">Phozos</span>
           </div>
@@ -352,10 +349,12 @@ export default function AppShell() {
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/settings")}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </DropdownMenuItem>
+                  {user.userType === "customer" && (
+                    <DropdownMenuItem onClick={() => navigate('/subscription-management')}>
+                      <CreditCard className="mr-2 h-4 w-4" />
+                      <span>Subscription</span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={handleLogout}
@@ -425,6 +424,9 @@ export default function AppShell() {
                             variant={isActiveLink(item.href) ? "default" : "ghost"}
                             className="w-full justify-start"
                           >
+                            {item.href === "/subscription-management" && (
+                              <CreditCard className="mr-2 h-4 w-4" />
+                            )}
                             {item.label}
                           </Button>
                         </Link>

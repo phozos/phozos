@@ -40,6 +40,16 @@ import {
   subscriptionPlanRepository,
   IUserSubscriptionRepository,
   userSubscriptionRepository,
+  ISubscriptionPlanAuditRepository,
+  subscriptionPlanAuditRepository,
+  ISubscriptionPlanNotificationRepository,
+  subscriptionPlanNotificationRepository,
+  IUserPlanNotificationRepository,
+  userPlanNotificationRepository,
+  IPlanMigrationRepository,
+  planMigrationRepository,
+  IPlanMigrationUserRepository,
+  planMigrationUserRepository,
   ISecuritySettingsRepository,
   securitySettingsRepository,
   ITestimonialRepository,
@@ -48,10 +58,43 @@ import {
   studentTimelineRepository,
   IStaffInvitationRepository,
   staffInvitationRepository,
+  IQuotaUsageRepository,
+  quotaUsageRepository,
+  IFeatureUsageRepository,
+  featureUsageRepository,
+  IPartnerProfileRepository,
+  partnerProfileRepository,
+  IPartnerReferralLinkRepository,
+  partnerReferralLinkRepository,
+  IReferralClickRepository,
+  referralClickRepository,
+  IPartnerStudentReferralRepository,
+  partnerStudentReferralRepository,
+  IPartnerCommissionRepository,
+  partnerCommissionRepository,
+  IPartnerPayoutRepository,
+  partnerPayoutRepository,
+  IPaymentRecordRepository,
+  paymentRecordRepository,
+  ICancellationRequestRepository,
+  cancellationRequestRepository,
+  IRefundRepository,
+  refundRepository,
+  IChargebackDisputeRepository,
+  chargebackDisputeRepository,
 } from '../repositories';
 import { jwtService } from '../security/jwtService';
 import { validationService } from './infrastructure/validation.service';
 import { temporaryPasswordService } from './domain/temporaryPassword.service';
+import { featureEntitlementService } from './domain/feature-entitlement.service';
+import { featureVersioningService } from './domain/feature-versioning.service';
+import { featureChangeNotificationService } from './domain/feature-change-notification.service';
+import { quotaManagementService } from './domain/quota-management.service';
+import { featureAnalyticsService } from './domain/feature-analytics.service';
+import { CancellationService, ICancellationService } from './domain/cancellation.service';
+import { RefundService, IRefundService } from './domain/refund.service';
+import { DisputeService, IDisputeService } from './domain/dispute.service';
+import { razorpayService } from './integration/razorpay.service';
 
 /**
  * DI Container Interface
@@ -84,10 +127,27 @@ export const TYPES = {
   IPaymentRepository: Symbol.for('IPaymentRepository'),
   ISubscriptionPlanRepository: Symbol.for('ISubscriptionPlanRepository'),
   IUserSubscriptionRepository: Symbol.for('IUserSubscriptionRepository'),
+  ISubscriptionPlanAuditRepository: Symbol.for('ISubscriptionPlanAuditRepository'),
+  ISubscriptionPlanNotificationRepository: Symbol.for('ISubscriptionPlanNotificationRepository'),
+  IUserPlanNotificationRepository: Symbol.for('IUserPlanNotificationRepository'),
+  IPlanMigrationRepository: Symbol.for('IPlanMigrationRepository'),
+  IPlanMigrationUserRepository: Symbol.for('IPlanMigrationUserRepository'),
   ISecuritySettingsRepository: Symbol.for('ISecuritySettingsRepository'),
   ITestimonialRepository: Symbol.for('ITestimonialRepository'),
   IStudentTimelineRepository: Symbol.for('IStudentTimelineRepository'),
   IStaffInvitationRepository: Symbol.for('IStaffInvitationRepository'),
+  IQuotaUsageRepository: Symbol.for('IQuotaUsageRepository'),
+  IFeatureUsageRepository: Symbol.for('IFeatureUsageRepository'),
+  IPartnerProfileRepository: Symbol.for('IPartnerProfileRepository'),
+  IPartnerReferralLinkRepository: Symbol.for('IPartnerReferralLinkRepository'),
+  IReferralClickRepository: Symbol.for('IReferralClickRepository'),
+  IPartnerStudentReferralRepository: Symbol.for('IPartnerStudentReferralRepository'),
+  IPartnerCommissionRepository: Symbol.for('IPartnerCommissionRepository'),
+  IPartnerPayoutRepository: Symbol.for('IPartnerPayoutRepository'),
+  IPaymentRecordRepository: Symbol.for('IPaymentRecordRepository'),
+  ICancellationRequestRepository: Symbol.for('ICancellationRequestRepository'),
+  IRefundRepository: Symbol.for('IRefundRepository'),
+  IChargebackDisputeRepository: Symbol.for('IChargebackDisputeRepository'),
   
   // Infrastructure Service Tokens (Phase 5.4)
   WebSocketService: Symbol.for('WebSocketService'),
@@ -105,6 +165,9 @@ export const TYPES = {
   IForumService: Symbol.for('IForumService'),
   INotificationService: Symbol.for('INotificationService'),
   IPaymentService: Symbol.for('IPaymentService'),
+  IPaymentAlertingService: Symbol.for('IPaymentAlertingService'),
+  IPlanNotificationService: Symbol.for('IPlanNotificationService'),
+  IPlanMigrationService: Symbol.for('IPlanMigrationService'),
   IRegistrationService: Symbol.for('IRegistrationService'),
   ISubscriptionService: Symbol.for('ISubscriptionService'),
   ITemporaryPasswordService: Symbol.for('ITemporaryPasswordService'),
@@ -112,6 +175,18 @@ export const TYPES = {
   IUniversityService: Symbol.for('IUniversityService'),
   IUserProfileService: Symbol.for('IUserProfileService'),
   IUserSubscriptionService: Symbol.for('IUserSubscriptionService'),
+  IFeatureEntitlementService: Symbol.for('IFeatureEntitlementService'),
+  IFeatureVersioningService: Symbol.for('IFeatureVersioningService'),
+  IFeatureChangeNotificationService: Symbol.for('IFeatureChangeNotificationService'),
+  IQuotaManagementService: Symbol.for('IQuotaManagementService'),
+  IFeatureAnalyticsService: Symbol.for('IFeatureAnalyticsService'),
+  
+  // Partner Service Tokens
+  IPartnerService: Symbol.for('IPartnerService'),
+  IReferralLinkService: Symbol.for('IReferralLinkService'),
+  IReferralTrackingService: Symbol.for('IReferralTrackingService'),
+  ICommissionService: Symbol.for('ICommissionService'),
+  IPayoutService: Symbol.for('IPayoutService'),
   
   // Admin Service Tokens (Phase 3)
   IAdminAnalyticsService: Symbol.for('IAdminAnalyticsService'),
@@ -123,6 +198,8 @@ export const TYPES = {
   IAdminTestimonialService: Symbol.for('IAdminTestimonialService'),
   IAdminUniversityService: Symbol.for('IAdminUniversityService'),
   IAdminUserService: Symbol.for('IAdminUserService'),
+  ISubscriptionAnalyticsService: Symbol.for('ISubscriptionAnalyticsService'),
+  IBulkSubscriptionAdminService: Symbol.for('IBulkSubscriptionAdminService'),
   
   // Integration Service Tokens (Phase 3)
   IAIMatchingService: Symbol.for('IAIMatchingService'),
@@ -132,6 +209,11 @@ export const TYPES = {
   
   // Security Service Tokens (Phase 3)
   JwtService: Symbol.for('JwtService'),
+  
+  // Subscription Management Service Tokens (Phase 2)
+  ICancellationService: Symbol.for('ICancellationService'),
+  IRefundService: Symbol.for('IRefundService'),
+  IDisputeService: Symbol.for('IDisputeService'),
 } as const;
 
 /**
@@ -160,10 +242,27 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPaymentRepository, paymentRepository);
     this.bindings.set(TYPES.ISubscriptionPlanRepository, subscriptionPlanRepository);
     this.bindings.set(TYPES.IUserSubscriptionRepository, userSubscriptionRepository);
+    this.bindings.set(TYPES.ISubscriptionPlanAuditRepository, subscriptionPlanAuditRepository);
+    this.bindings.set(TYPES.ISubscriptionPlanNotificationRepository, subscriptionPlanNotificationRepository);
+    this.bindings.set(TYPES.IUserPlanNotificationRepository, userPlanNotificationRepository);
+    this.bindings.set(TYPES.IPlanMigrationRepository, planMigrationRepository);
+    this.bindings.set(TYPES.IPlanMigrationUserRepository, planMigrationUserRepository);
     this.bindings.set(TYPES.ISecuritySettingsRepository, securitySettingsRepository);
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
     this.bindings.set(TYPES.IStaffInvitationRepository, staffInvitationRepository);
+    this.bindings.set(TYPES.IQuotaUsageRepository, quotaUsageRepository);
+    this.bindings.set(TYPES.IFeatureUsageRepository, featureUsageRepository);
+    this.bindings.set(TYPES.IPartnerProfileRepository, partnerProfileRepository);
+    this.bindings.set(TYPES.IPartnerReferralLinkRepository, partnerReferralLinkRepository);
+    this.bindings.set(TYPES.IReferralClickRepository, referralClickRepository);
+    this.bindings.set(TYPES.IPartnerStudentReferralRepository, partnerStudentReferralRepository);
+    this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
+    this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
+    this.bindings.set(TYPES.IPaymentRecordRepository, paymentRecordRepository);
+    this.bindings.set(TYPES.ICancellationRequestRepository, cancellationRequestRepository);
+    this.bindings.set(TYPES.IRefundRepository, refundRepository);
+    this.bindings.set(TYPES.IChargebackDisputeRepository, chargebackDisputeRepository);
     
     // Bind security services
     this.bindings.set(TYPES.JwtService, jwtService);
@@ -171,6 +270,42 @@ class Container implements IContainer {
     // Bind infrastructure services (no dependencies - can be bound immediately)
     this.bindings.set(TYPES.IValidationService, validationService);
     this.bindings.set(TYPES.ITemporaryPasswordService, temporaryPasswordService);
+    
+    // Bind feature services
+    this.bindings.set(TYPES.IFeatureEntitlementService, featureEntitlementService);
+    this.bindings.set(TYPES.IFeatureVersioningService, featureVersioningService);
+    this.bindings.set(TYPES.IFeatureChangeNotificationService, featureChangeNotificationService);
+    this.bindings.set(TYPES.IQuotaManagementService, quotaManagementService);
+    this.bindings.set(TYPES.IFeatureAnalyticsService, featureAnalyticsService);
+    
+    // Bind subscription management services (Phase 2)
+    // Note: Services are instantiated with their dependencies to avoid circular dependency issues
+    this.bindings.set(
+      TYPES.ICancellationService,
+      new CancellationService(
+        cancellationRequestRepository,
+        userSubscriptionRepository,
+        paymentRepository
+      )
+    );
+    this.bindings.set(
+      TYPES.IRefundService,
+      new RefundService(
+        refundRepository,
+        userSubscriptionRepository,
+        paymentRecordRepository,
+        cancellationRequestRepository,
+        razorpayService
+      )
+    );
+    this.bindings.set(
+      TYPES.IDisputeService,
+      new DisputeService(
+        chargebackDisputeRepository,
+        userSubscriptionRepository,
+        paymentRecordRepository
+      )
+    );
     
     // Note: Service bindings are registered lazily to avoid circular dependencies
     // Services will be bound when they are first requested
@@ -231,10 +366,24 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IPaymentRepository, paymentRepository);
     this.bindings.set(TYPES.ISubscriptionPlanRepository, subscriptionPlanRepository);
     this.bindings.set(TYPES.IUserSubscriptionRepository, userSubscriptionRepository);
+    this.bindings.set(TYPES.ISubscriptionPlanAuditRepository, subscriptionPlanAuditRepository);
+    this.bindings.set(TYPES.ISubscriptionPlanNotificationRepository, subscriptionPlanNotificationRepository);
+    this.bindings.set(TYPES.IUserPlanNotificationRepository, userPlanNotificationRepository);
+    this.bindings.set(TYPES.IPlanMigrationRepository, planMigrationRepository);
+    this.bindings.set(TYPES.IPlanMigrationUserRepository, planMigrationUserRepository);
     this.bindings.set(TYPES.ISecuritySettingsRepository, securitySettingsRepository);
     this.bindings.set(TYPES.ITestimonialRepository, testimonialRepository);
     this.bindings.set(TYPES.IStudentTimelineRepository, studentTimelineRepository);
     this.bindings.set(TYPES.IStaffInvitationRepository, staffInvitationRepository);
+    this.bindings.set(TYPES.IQuotaUsageRepository, quotaUsageRepository);
+    this.bindings.set(TYPES.IFeatureUsageRepository, featureUsageRepository);
+    this.bindings.set(TYPES.IPartnerProfileRepository, partnerProfileRepository);
+    this.bindings.set(TYPES.IPartnerReferralLinkRepository, partnerReferralLinkRepository);
+    this.bindings.set(TYPES.IReferralClickRepository, referralClickRepository);
+    this.bindings.set(TYPES.IPartnerStudentReferralRepository, partnerStudentReferralRepository);
+    this.bindings.set(TYPES.IPartnerCommissionRepository, partnerCommissionRepository);
+    this.bindings.set(TYPES.IPartnerPayoutRepository, partnerPayoutRepository);
+    this.bindings.set(TYPES.IPaymentRecordRepository, paymentRecordRepository);
     this.bindings.set(TYPES.JwtService, jwtService);
   }
   
@@ -255,7 +404,10 @@ class Container implements IContainer {
     const { forumService } = await import('./domain/forum.service');
     const { notificationService } = await import('./domain/notification.service');
     const { paymentService } = await import('./domain/payment.service');
+    const { paymentAlertingService } = await import('./domain/payment-alerting.service');
     const { registrationService } = await import('./domain/registration.service');
+    const { PlanNotificationService } = await import('./domain/plan-notification.service');
+    const { planMigrationService } = await import('./domain/plan-migration.service');
     const { subscriptionService } = await import('./domain/subscription.service');
     const { temporaryPasswordService } = await import('./domain/temporaryPassword.service');
     const { testimonialService } = await import('./domain/testimonial.service');
@@ -272,8 +424,16 @@ class Container implements IContainer {
     const { adminTestimonialService } = await import('./domain/admin/testimonial-admin.service');
     const { adminUniversityService } = await import('./domain/admin/university-admin.service');
     const { adminUserService } = await import('./domain/admin/user-admin.service');
+    const { subscriptionAnalyticsService } = await import('./domain/subscription-analytics.service');
+    const { bulkSubscriptionAdminService } = await import('./domain/bulk-subscription-admin.service');
     
     const { aiMatchingService } = await import('./integration/ai-matching.service');
+    
+    const { partnerService } = await import('./domain/partner.service');
+    const { referralLinkService } = await import('./domain/referral-link.service');
+    const { referralTrackingService } = await import('./domain/referral-tracking.service');
+    const { commissionService } = await import('./domain/commission.service');
+    const { payoutService } = await import('./domain/payout.service');
     
     // Bind domain services
     this.bindings.set(TYPES.IAuthService, authService);
@@ -287,7 +447,10 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IForumService, forumService);
     this.bindings.set(TYPES.INotificationService, notificationService);
     this.bindings.set(TYPES.IPaymentService, paymentService);
+    this.bindings.set(TYPES.IPaymentAlertingService, paymentAlertingService);
     this.bindings.set(TYPES.IRegistrationService, registrationService);
+    this.bindings.set(TYPES.IPlanNotificationService, new PlanNotificationService());
+    this.bindings.set(TYPES.IPlanMigrationService, planMigrationService);
     this.bindings.set(TYPES.ISubscriptionService, subscriptionService);
     this.bindings.set(TYPES.ITemporaryPasswordService, temporaryPasswordService);
     this.bindings.set(TYPES.ITestimonialService, testimonialService);
@@ -305,9 +468,18 @@ class Container implements IContainer {
     this.bindings.set(TYPES.IAdminTestimonialService, adminTestimonialService);
     this.bindings.set(TYPES.IAdminUniversityService, adminUniversityService);
     this.bindings.set(TYPES.IAdminUserService, adminUserService);
+    this.bindings.set(TYPES.ISubscriptionAnalyticsService, subscriptionAnalyticsService);
+    this.bindings.set(TYPES.IBulkSubscriptionAdminService, bulkSubscriptionAdminService);
     
     // Bind integration services
     this.bindings.set(TYPES.IAIMatchingService, aiMatchingService);
+    
+    // Bind partner services
+    this.bindings.set(TYPES.IPartnerService, partnerService);
+    this.bindings.set(TYPES.IReferralLinkService, referralLinkService);
+    this.bindings.set(TYPES.IReferralTrackingService, referralTrackingService);
+    this.bindings.set(TYPES.ICommissionService, commissionService);
+    this.bindings.set(TYPES.IPayoutService, payoutService);
   }
 }
 

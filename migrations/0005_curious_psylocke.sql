@@ -1,0 +1,1 @@
+ALTER TABLE "failed_payments" ADD COLUMN "digest_sent_at" timestamp;

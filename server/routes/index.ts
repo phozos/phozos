@@ -19,6 +19,10 @@ import companyRoutes from './company.routes';
 import subscriptionRoutes from './subscription.routes';
 import testimonialRoutes from './testimonial.routes';
 import systemRoutes from './system.routes';
+import paymentRoutes from './payment.routes';
+import partnerRoutes from './partner.routes';
+import { publicReferralController } from '../controllers/public-referral.controller';
+import { referralClickRateLimit } from '../middleware/security';
 import { WebSocketService } from '../services/infrastructure/websocket';
 import { WebSocketEventHandlers } from '../services/infrastructure/websocket-handlers';
 import { adminSecurityService } from '../services/domain/admin';
@@ -76,16 +80,28 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Database Health Check Endpoint (before global middleware)
   apiRouter.get('/health', healthCheckEndpoint);
 
+  // Phase 6.1: Public referral handler (NO authentication required)
+  // Must be before checkMaintenanceMode to allow referral clicks during maintenance
+  apiRouter.get('/ref/:linkCode',
+    referralClickRateLimit,
+    (req: Request, res: Response) => publicReferralController.handleReferralClick(req, res)
+  );
+
   // Apply global middleware
   apiRouter.use(checkMaintenanceMode);
 
   // Initialize WebSocket service and handlers via DI container (Phase 5.4)
-  const wsService = new WebSocketService(httpServer, forumService);
-  const wsHandlers = new WebSocketEventHandlers(wsService, forumService);
-  
-  // Bind to DI container for centralized access
-  container.bind(TYPES.WebSocketService, wsService);
-  container.bind(TYPES.WebSocketEventHandlers, wsHandlers);
+  try {
+    const wsService = new WebSocketService(httpServer, forumService);
+    const wsHandlers = new WebSocketEventHandlers(wsService, forumService);
+    
+    // Bind to DI container for centralized access
+    container.bind(TYPES.WebSocketService, wsService);
+    container.bind(TYPES.WebSocketEventHandlers, wsHandlers);
+  } catch (error) {
+    console.error('WebSocket server error:', error instanceof Error ? error.message : 'Unknown error');
+    console.log('⚠️ Server continuing without WebSocket support');
+  }
 
   // Mount domain routes
   apiRouter.use('/auth', authRoutes);
@@ -106,6 +122,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   apiRouter.use('/company', companyRoutes);
   apiRouter.use('/subscription', subscriptionRoutes);
   apiRouter.use('/testimonials', testimonialRoutes);
+  apiRouter.use('/payment', paymentRoutes);
+  apiRouter.use('/partner', partnerRoutes);
   apiRouter.use('/', systemRoutes);
 
   return apiRouter;
@@ -132,6 +150,7 @@ export function createModularRoutes(): Router {
   router.use('/chat', chatRoutes);
   router.use('/analytics', analyticsRoutes);
   router.use('/student', studentRoutes);
+  router.use('/partner', partnerRoutes);
 
   return router;
 }
@@ -155,7 +174,8 @@ export {
   companyRoutes,
   subscriptionRoutes,
   testimonialRoutes,
-  systemRoutes
+  systemRoutes,
+  partnerRoutes
 };
 
 /**

@@ -1,4 +1,4 @@
-import { GraduationCap } from "lucide-react";
+import logoWhite from "@assets/branding/logo/logo-white.png";
 
 interface LoadingScreenProps {
   message?: string;
@@ -22,8 +22,8 @@ export default function LoadingScreen({ message = "Loading..." }: LoadingScreenP
           </div>
           
           {/* Main logo */}
-          <div className="relative w-16 h-16 bg-gradient-to-r from-primary to-amber-500 rounded-xl flex items-center justify-center shadow-lg">
-            <GraduationCap className="w-8 h-8 text-white animate-bounce" />
+          <div className="relative w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl flex items-center justify-center shadow-lg p-2 animate-bounce">
+            <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" />
           </div>
         </div>
 

@@ -58,6 +58,20 @@ export const speedLimiter = slowDown({
   validate: { delayMs: false }
 });
 
+// Phase 6: Rate limiting for referral link clicks (10 clicks per hour per IP)
+// Prevents abuse and fraudulent click generation
+export const referralClickRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // 10 clicks per hour per IP
+  message: {
+    error: "Too many referral clicks from this IP. Please try again later.",
+    retryAfter: "1 hour"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => getClientIp(req),
+});
+
 // Phase 5 Simplification: Removed complex database-backed IP registration limits
 // The existing registrationRateLimit (memory-based) already handles IP limiting effectively
 

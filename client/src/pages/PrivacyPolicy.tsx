@@ -43,7 +43,7 @@ export default function PrivacyPolicy() {
                 <li>Date of birth, nationality</li>
                 <li>Educational background and transcripts</li>
                 <li>Test scores (SAT, ACT, TOEFL, IELTS, etc.)</li>
-                <li>Payment information (processed securely through Stripe)</li>
+                <li>Payment information (processed securely through Razorpay)</li>
               </ul>
               
               <h3 className="text-xl font-semibold mb-2">2.2 Usage Information</h3>

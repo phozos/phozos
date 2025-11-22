@@ -5,13 +5,13 @@ import LoadingScreen from "@/components/LoadingScreen";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedUserTypes?: ('customer' | 'team_member' | 'company_profile')[];
+  allowedUserTypes?: ('customer' | 'team_member' | 'company_profile' | 'partner')[];
   allowedRoles?: string[];
 }
 
 export default function ProtectedRoute({ 
   children, 
-  allowedUserTypes = ['customer', 'team_member', 'company_profile'],
+  allowedUserTypes = ['customer', 'team_member', 'company_profile', 'partner'],
   allowedRoles 
 }: ProtectedRouteProps) {
   const { user, loading, authReady } = useAuth();
@@ -38,6 +38,8 @@ export default function ProtectedRoute({
           navigate('/dashboard/student');
         } else if (user.userType === 'company_profile') {
           navigate('/dashboard/company');
+        } else if (user.userType === 'partner') {
+          navigate('/dashboard/partner');
         } else if (user.userType === 'team_member' && user.teamRole === 'admin') {
           navigate('/dashboard/admin');
         } else if (user.userType === 'team_member') {

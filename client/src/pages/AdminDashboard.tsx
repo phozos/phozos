@@ -19,7 +19,7 @@ import BulkImportUniversities from "@/components/BulkImportUniversities";
 import UniversityExport from "@/components/UniversityExport";
 import UniversityAnalytics from "@/components/UniversityAnalytics";
 import SubscriptionManagement from "@/components/admin/SubscriptionManagement";
-import { CompanyProfileManagement } from "@/components/admin";
+import { CompanyProfileManagement, PlanChangeHistory } from "@/components/admin";
 import { PasswordResetDialog } from "@/components/admin/PasswordResetDialog";
 import { 
   Settings,
@@ -68,10 +68,14 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  TestTube
+  XCircle,
+  TestTube,
+  History,
+  Wallet
 } from "lucide-react";
 import { Link } from "wouter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useSubscriptionManagementAnalytics } from "@/hooks/useAdminSubscriptionManagement";
 import {
   Table,
   TableBody,
@@ -108,6 +112,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 
 
 // Extract dialog components outside to prevent re-creation on every render
@@ -1305,10 +1310,11 @@ export default function AdminDashboard() {
           description: "The security setting has been successfully updated.",
         });
       },
-      onError: (error: any, newData, context) => {
+      onError: (error: any, newData, context: unknown) => {
         // If the mutation fails, use the context returned from onMutate to roll back
-        if (context?.previousSettings) {
-          queryClient.setQueryData(['/api/admin/security/settings'], context.previousSettings);
+        const ctx = context as { previousSettings?: any } | undefined;
+        if (ctx?.previousSettings) {
+          queryClient.setQueryData(['/api/admin/security/settings'], ctx.previousSettings);
         }
         
         console.error('Security setting update error:', error);
@@ -1983,6 +1989,18 @@ export default function AdminDashboard() {
             </button>
             
             <button
+              onClick={() => setSelectedTab("plan-change-history")}
+              className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors ${
+                selectedTab === "plan-change-history"
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-r-2 border-blue-500"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              <History className="w-4 h-4 mr-3" />
+              Plan Change History
+            </button>
+            
+            <button
               onClick={() => setSelectedTab("applications")}
               className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors ${
                 selectedTab === "applications"
@@ -2080,6 +2098,78 @@ export default function AdminDashboard() {
               <Settings className="w-4 h-4 mr-3" />
               Settings
             </button>
+
+            <Separator className="my-4" />
+
+            <div className="px-3 mb-2">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Partner System
+              </h3>
+            </div>
+
+            <Link 
+              href="/dashboard/admin/partners"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <Building2 className="w-4 h-4 mr-3" />
+              Partners
+            </Link>
+
+            <Link 
+              href="/dashboard/admin/partner-analytics"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <BarChart3 className="w-4 h-4 mr-3" />
+              Partner Analytics
+            </Link>
+
+            <Link 
+              href="/dashboard/admin/commissions"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <DollarSign className="w-4 h-4 mr-3" />
+              Commissions
+            </Link>
+
+            <Link 
+              href="/dashboard/admin/payouts"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <Wallet className="w-4 h-4 mr-3" />
+              Payouts
+            </Link>
+
+            <Separator className="my-4" />
+
+            <div className="px-3 mb-2">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Subscription Management
+              </h3>
+            </div>
+
+            <Link 
+              href="/admin/subscriptions/cancellation-requests"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <XCircle className="w-4 h-4 mr-3" />
+              Cancellation Requests
+            </Link>
+
+            <Link 
+              href="/admin/subscriptions/refund-management"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <DollarSign className="w-4 h-4 mr-3" />
+              Refund Management
+            </Link>
+
+            <Link 
+              href="/admin/subscriptions/dispute-management"
+              className="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg text-left transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+            >
+              <AlertTriangle className="w-4 h-4 mr-3" />
+              Dispute Management
+            </Link>
           </nav>
         </div>
 
@@ -2165,6 +2255,24 @@ export default function AdminDashboard() {
             <p className="text-muted-foreground">Platform statistics and key metrics</p>
           </div>
           <div className="flex items-center space-x-4">
+            <Link href="/admin/analytics">
+              <Button variant="default">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Subscription Analytics
+              </Button>
+            </Link>
+            <Link href="/admin/plan-analytics">
+              <Button variant="outline">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Plan Analytics
+              </Button>
+            </Link>
+            <Link href="/admin/migrations">
+              <Button variant="outline">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Migrations
+              </Button>
+            </Link>
             <Link href="/test/conversions">
               <Button variant="outline" data-testid="button-test-conversions">
                 <TestTube className="w-4 h-4 mr-2" />
@@ -2288,7 +2396,124 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <SubscriptionManagementOverview />
       </div>
+    );
+  }
+
+  function SubscriptionManagementOverview() {
+    const { data: analytics } = useSubscriptionManagementAnalytics();
+    
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-bold">Subscription Management</CardTitle>
+            <div className="flex gap-2">
+              <Link href="/admin/subscriptions/cancellation-requests">
+                <Button variant="outline" size="sm">
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Cancellations
+                </Button>
+              </Link>
+              <Link href="/admin/subscriptions/refund-management">
+                <Button variant="outline" size="sm">
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Refunds
+                </Button>
+              </Link>
+              <Link href="/admin/subscriptions/dispute-management">
+                <Button variant="outline" size="sm">
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Disputes
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-800">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Pending Cancellation Requests
+                    </p>
+                    <p className="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-2">
+                      {analytics?.cancellations?.pending || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {analytics?.cancellations?.total || 0}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-orange-600" />
+                  </div>
+                </div>
+                <Link href="/admin/subscriptions/cancellation-requests">
+                  <Button variant="link" size="sm" className="mt-3 p-0 h-auto text-orange-600">
+                    View all requests →
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Pending Refund Requests
+                    </p>
+                    <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">
+                      {analytics?.refunds?.pending || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {analytics?.refunds?.total || 0}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <DollarSign className="w-5 h-5 text-blue-600" />
+                  </div>
+                </div>
+                <Link href="/admin/subscriptions/refund-management">
+                  <Button variant="link" size="sm" className="mt-3 p-0 h-auto text-blue-600">
+                    Manage refunds →
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Open Disputes
+                    </p>
+                    <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">
+                      {analytics?.disputes?.open || 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Total: {analytics?.disputes?.total || 0}
+                    </p>
+                  </div>
+                  <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                  </div>
+                </div>
+                <Link href="/admin/subscriptions/dispute-management">
+                  <Button variant="link" size="sm" className="mt-3 p-0 h-auto text-red-600">
+                    Handle disputes →
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -4227,6 +4452,7 @@ export default function AdminDashboard() {
             {selectedTab === "analytics" && renderAnalyticsContent()}
             {selectedTab === "security" && renderSecurityContent()}
             {selectedTab === "settings" && renderSettingsContent()}
+            {selectedTab === "plan-change-history" && <PlanChangeHistory />}
           </div>
         </div>
       </div>

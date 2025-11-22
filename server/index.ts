@@ -21,6 +21,11 @@ import { errorHandler } from "./middleware/error-handler";
 import { sendError } from "./utils/response";
 import { requireAdmin } from "./middleware/authentication";
 import { injectSEOMeta } from "./middleware/seo-meta";
+import { paymentAlertsScheduler } from "./services/infrastructure/payment-alerts-scheduler";
+import { subscriptionAuditOutboxProcessor } from "./services/infrastructure/subscription-audit-outbox-processor";
+import { archiveOutboxEventsJob } from "./jobs/archive-completed-outbox-events";
+import { jobScheduler } from "./jobs/scheduler";
+import { webhookProcessor } from "./jobs/webhook-processor";
 
 // Phase 1: Centralized configuration module (replaces scattered process.env usage)
 import config, { isDev, isProd, featuresConfig, corsConfig, securityConfig } from "./config/index";
@@ -34,8 +39,27 @@ const allowedOrigins = config.cors.ALLOWED_ORIGINS.length > 0
 
 const app = express();
 
-// Configure trust proxy for secure IP detection and rate limiting
-// Using config value instead of hardcoded 'true' to prevent IP spoofing
+/**
+ * CRITICAL: Configure trust proxy for production deployments
+ * 
+ * REQUIRED FOR WEBHOOK IP VALIDATION:
+ * - Enables Express to trust X-Forwarded-* headers from proxies (Nginx, AWS ALB, etc.)
+ * - Allows req.ip to reflect the true client IP, not the proxy IP
+ * - Without this, webhook IP whitelist validation will FAIL in production
+ * 
+ * WHY THIS MATTERS:
+ * - Razorpay webhooks arrive through proxies in production
+ * - Express exposes proxied IPs as IPv6-mapped: ::ffff:3.7.71.51
+ * - X-Forwarded-For header contains the original client IP
+ * - Webhook security middleware needs this to validate Razorpay IPs
+ * 
+ * SECURITY NOTE:
+ * - Set TRUST_PROXY=1 (trust first proxy) for most deployments
+ * - Set TRUST_PROXY=false only for direct connections (no proxy)
+ * - Never set to 'true' (unlimited) to prevent IP spoofing attacks
+ * 
+ * CONFIG: Controlled via TRUST_PROXY environment variable
+ */
 app.set('trust proxy', securityConfig.TRUST_PROXY);
 
 // HTTPS Redirect Middleware (Feature flag controlled)
@@ -100,8 +124,40 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// CRITICAL: Webhook endpoint must receive raw body for signature verification
+// This MUST come before express.json() middleware
+// Razorpay webhooks: Max observed ~1.2KB, using 2KB for safety margin
+// Blocks payloads >2KB to prevent DDoS attacks while allowing legitimate webhooks
+app.use('/api/payment/webhook', express.raw({ type: 'application/json', limit: '2kb' }));
+
+// Global body size limits to prevent large payload attacks
+// 100KB is Express default; reducing to 10KB for better security
+// Most API requests are <5KB; 10KB provides comfortable margin
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+
+// Custom error handler for body size limit exceeded
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.too.large') {
+    // Log rejected oversized payloads for security monitoring
+    console.warn('Request body too large rejected', {
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      contentLength: req.headers['content-length'],
+      limit: err.limit,
+    });
+    
+    return res.status(413).json({
+      success: false,
+      error: 'PAYLOAD_TOO_LARGE',
+      message: 'Request body exceeds maximum allowed size',
+      limit: err.limit,
+    });
+  }
+  next(err);
+});
+
 app.use(cookieParser());
 
 // Add CSRF token provider globally (safe - only adds token generation capability)
@@ -307,5 +363,113 @@ if (featuresConfig.COMPLIANCE_REPORT_ENABLED) {
     host: "0.0.0.0",
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Start payment alerts scheduler for daily digest
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      paymentAlertsScheduler.start();
+      console.log('✅ Payment alerts scheduler started');
+    } catch (error) {
+      console.error('❌ Failed to start payment alerts scheduler:', error);
+      console.error('   Daily digest will not be sent automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
+
+    // Start subscription audit outbox processor for event processing
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      subscriptionAuditOutboxProcessor.start();
+      console.log('✅ Subscription audit outbox processor started');
+    } catch (error) {
+      console.error('❌ Failed to start subscription audit outbox processor:', error);
+      console.error('   Event processing will not occur automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
+
+    // Start webhook processor for async webhook processing (Phase 3)
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      webhookProcessor.start();
+      console.log('✅ Webhook processor started for async webhook processing');
+    } catch (error) {
+      console.error('❌ Failed to start webhook processor:', error);
+      console.error('   Webhook processing will not occur asynchronously.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
+
+    // Start archive outbox events job for cleanup
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      archiveOutboxEventsJob.start();
+      console.log('✅ Archive outbox events job started');
+    } catch (error) {
+      console.error('❌ Failed to start archive outbox events job:', error);
+      console.error('   Archival will not occur automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
+
+    // Start subscription management background jobs (refund sync, cleanup, etc.)
+    // This runs after server is listening to ensure all services are initialized
+    try {
+      jobScheduler.start();
+      console.log('✅ Subscription management background jobs started');
+    } catch (error) {
+      console.error('❌ Failed to start subscription management background jobs:', error);
+      console.error('   Background job processing will not occur automatically.');
+      console.error('   This is not a critical error - the server will continue running.');
+    }
   });
+
+  // Graceful shutdown handlers
+  const gracefulShutdown = (signal: string) => {
+    console.log(`\n${signal} received, shutting down gracefully...`);
+    
+    try {
+      paymentAlertsScheduler.stop();
+      console.log('✅ Payment alerts scheduler stopped');
+    } catch (error) {
+      console.error('❌ Error stopping payment alerts scheduler:', error);
+    }
+
+    try {
+      subscriptionAuditOutboxProcessor.stop();
+      console.log('✅ Subscription audit outbox processor stopped');
+    } catch (error) {
+      console.error('❌ Error stopping subscription audit outbox processor:', error);
+    }
+
+    try {
+      webhookProcessor.stop();
+      console.log('✅ Webhook processor stopped');
+    } catch (error) {
+      console.error('❌ Error stopping webhook processor:', error);
+    }
+
+    try {
+      archiveOutboxEventsJob.stop();
+      console.log('✅ Archive outbox events job stopped');
+    } catch (error) {
+      console.error('❌ Error stopping archive outbox events job:', error);
+    }
+
+    try {
+      jobScheduler.stop();
+      console.log('✅ Subscription management background jobs stopped');
+    } catch (error) {
+      console.error('❌ Error stopping subscription management background jobs:', error);
+    }
+
+    httpServer.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      console.error('Forcefully shutting down');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();

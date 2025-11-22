@@ -5,14 +5,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { GraduationCap, Users, Shield, Eye, EyeOff, AlertTriangle, Phone } from "lucide-react";
+import { GraduationCap, Users, Shield, Eye, EyeOff, AlertTriangle, Phone, UserCheck, Building2 } from "lucide-react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import MathCaptcha from "@/components/MathCaptcha";
 import { useApiQuery } from "@/hooks/api-hooks";
 import { api } from "@/lib/api-client";
-import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
+import { parsePhoneNumber, isValidPhoneNumber, getCountryCallingCode } from 'libphonenumber-js';
 import { SEO } from "@/components/SEO";
+import logoWhite from "@assets/branding/logo/logo-white.png";
+
+/**
+ * Helper function to read cookie by name
+ */
+function getCookie(name: string): string | null {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    const cookieValue = parts.pop()?.split(';').shift();
+    return cookieValue || null;
+  }
+  return null;
+}
 
 // Interface for security settings to ensure proper typing
 interface SecuritySettings {
@@ -20,10 +34,113 @@ interface SecuritySettings {
   secretCode?: string;
 }
 
+// Interface for referral information
+interface ReferralInfo {
+  code: string | null;
+  clickId: string | null;
+}
+
+// Interface for cached country data
+interface CachedCountry {
+  code: string;
+  expires: number;
+  timestamp: string;
+}
+
+// Constants for country detection caching
+const CACHE_KEY = 'phozos_detected_country';
+const CACHE_DURATION_DAYS = 30;
+
+// Helper functions for country detection and caching
+async function detectCountryCode(): Promise<string | null> {
+  const cached = getCachedCountry();
+  if (cached) {
+    console.log('📍 Using cached country:', cached);
+    return cached;
+  }
+
+  try {
+    const response = await fetch('https://api.ipgeolocation.io/ipgeo?fields=country_code2', {
+      signal: AbortSignal.timeout(3000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const country = data.country_code2;
+      
+      if (country) {
+        cacheCountry(country);
+        console.log('📍 Detected country from IP:', country);
+        return country;
+      }
+    }
+  } catch (error) {
+    console.warn('Primary geolocation API failed:', error);
+  }
+
+  try {
+    const response = await fetch('https://ipinfo.io/json', {
+      signal: AbortSignal.timeout(3000)
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const country = data.country;
+      
+      if (country) {
+        cacheCountry(country);
+        console.log('📍 Detected country from fallback API:', country);
+        return country;
+      }
+    }
+  } catch (error) {
+    console.error('Fallback geolocation API failed:', error);
+  }
+
+  return null;
+}
+
+function getCachedCountry(): string | null {
+  try {
+    const stored = localStorage.getItem(CACHE_KEY);
+    if (!stored) return null;
+
+    const cached: CachedCountry = JSON.parse(stored);
+    
+    if (Date.now() > cached.expires) {
+      localStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+
+    return cached.code;
+  } catch (error) {
+    console.error('Error reading cached country:', error);
+    return null;
+  }
+}
+
+function cacheCountry(code: string): void {
+  try {
+    const cached: CachedCountry = {
+      code,
+      expires: Date.now() + (CACHE_DURATION_DAYS * 24 * 60 * 60 * 1000),
+      timestamp: new Date().toISOString()
+    };
+    
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
+  } catch (error) {
+    console.error('Error caching country:', error);
+  }
+}
+
+function clearCachedCountry(): void {
+  localStorage.removeItem(CACHE_KEY);
+}
+
 export default function Auth() {
   const [location, navigate] = useLocation();
   const { login, getCsrfToken } = useAuth();
-  const [loginType, setLoginType] = useState<"student" | "admin" | null>(null);
+  const [loginType, setLoginType] = useState<"student" | "admin" | "partner" | null>(null);
   const [isSignup, setIsSignup] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mathChallenge, setMathChallenge] = useState<string>("");
@@ -41,6 +158,12 @@ export default function Auth() {
   const [phoneCountry, setPhoneCountry] = useState<string | null>(null);
   const [phoneValid, setPhoneValid] = useState<boolean | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [hasReferral, setHasReferral] = useState(false);
+  const [referralInfo, setReferralInfo] = useState<ReferralInfo>({ code: null, clickId: null });
+  const [detectedCountry, setDetectedCountry] = useState<string | null>(null);
+  const [isDetectingCountry, setIsDetectingCountry] = useState<boolean>(false);
+  const [contactPickerSupported, setContactPickerSupported] = useState<boolean>(false);
+  const [showContactPickerButton, setShowContactPickerButton] = useState<boolean>(false);
 
   // Handle phone number validation and country detection
   const handlePhoneChange = (phoneNumber: string) => {
@@ -106,10 +229,94 @@ export default function Auth() {
       'BD': 'Bangladesh',
       'PK': 'Pakistan',
       'NP': 'Nepal',
-      'LK': 'Sri Lanka'
+      'LK': 'Sri Lanka',
+      'AF': 'Afghanistan',
+      'AR': 'Argentina',
+      'AT': 'Austria',
+      'BE': 'Belgium',
+      'CH': 'Switzerland',
+      'CL': 'Chile',
+      'CO': 'Colombia',
+      'CZ': 'Czech Republic',
+      'DK': 'Denmark',
+      'FI': 'Finland',
+      'GR': 'Greece',
+      'HK': 'Hong Kong',
+      'IE': 'Ireland',
+      'IL': 'Israel',
+      'IQ': 'Iraq',
+      'JO': 'Jordan',
+      'KW': 'Kuwait',
+      'LB': 'Lebanon',
+      'NL': 'Netherlands',
+      'NO': 'Norway',
+      'NZ': 'New Zealand',
+      'OM': 'Oman',
+      'PE': 'Peru',
+      'PL': 'Poland',
+      'PT': 'Portugal',
+      'QA': 'Qatar',
+      'RO': 'Romania',
+      'SE': 'Sweden',
+      'TR': 'Turkey',
+      'UA': 'Ukraine',
+      'UY': 'Uruguay',
+      'VE': 'Venezuela'
     };
     
     return countryNames[countryCode] || countryCode;
+  };
+
+  // Get calling code from country code
+  const getCallingCode = (countryCode: string): string => {
+    try {
+      const code = getCountryCallingCode(countryCode as any);
+      return `+${code}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Open Contact Picker API for mobile users
+  const openContactPicker = async (): Promise<void> => {
+    if (!('contacts' in navigator)) {
+      console.warn('Contact Picker API not supported');
+      return;
+    }
+
+    try {
+      const props = ['tel', 'name'];
+      const opts = { multiple: false };
+
+      // @ts-ignore - ContactsManager not in TS types yet
+      const contacts = await navigator.contacts.select(props, opts);
+      
+      if (contacts && contacts.length > 0) {
+        const contact = contacts[0];
+        
+        if (contact.tel && contact.tel.length > 0) {
+          const phoneNumber = contact.tel[0];
+          handlePhoneChange(phoneNumber);
+          
+          if (contact.name && contact.name.length > 0) {
+            const fullName = contact.name[0];
+            const nameParts = fullName.split(' ');
+            
+            if (!formData.firstName && nameParts.length > 0) {
+              setFormData(prev => ({
+                ...prev,
+                firstName: nameParts[0],
+                lastName: nameParts.slice(1).join(' ') || ''
+              }));
+            }
+          }
+
+          console.log('📱 Contact selected from picker:', contact);
+        }
+      }
+    } catch (error) {
+      console.log('Contact picker cancelled or failed:', error);
+    }
   };
 
   // Query security settings to check team login visibility
@@ -137,14 +344,79 @@ export default function Auth() {
     return isVisibleByDefault || isVisibleBySecret;
   };
 
-  // Check URL parameters for admin access
+  // Check URL parameters for admin access and signup mode
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const type = urlParams.get('type');
+    const signup = urlParams.get('signup');
+    const ref = urlParams.get('ref');
+    
     if (type === 'admin') {
       setLoginType('admin');
     }
+    
+    // Auto-open signup form when signup=true in URL (from referral links)
+    if (signup === 'true') {
+      setLoginType('student');
+      setIsSignup(true);
+    }
+    
+    // Log referral information if present
+    if (ref) {
+      console.log('📎 Referral code from URL:', ref);
+    }
   }, [location]);
+
+  // Check for referral cookies on page load
+  useEffect(() => {
+    const referralCode = getCookie('referral_code');
+    const clickId = getCookie('click_id');
+    
+    if (referralCode) {
+      setHasReferral(true);
+      setReferralInfo({ code: referralCode, clickId });
+      console.log('📎 Referral detected:', { referralCode, clickId });
+    }
+  }, []);
+
+  // Detect country on component mount (signup only)
+  useEffect(() => {
+    async function detectAndSetCountry() {
+      setIsDetectingCountry(true);
+      
+      const country = await detectCountryCode();
+      
+      if (country) {
+        setDetectedCountry(country);
+        
+        const callingCode = getCallingCode(country);
+        if (callingCode) {
+          const phoneInput = document.getElementById('phone') as HTMLInputElement;
+          if (phoneInput) {
+            phoneInput.placeholder = `${callingCode} XXXXXXXXXX`;
+          }
+        }
+      }
+      
+      setIsDetectingCountry(false);
+    }
+
+    if (isSignup && loginType === 'student') {
+      detectAndSetCountry();
+    }
+  }, [isSignup, loginType]);
+
+  // Check Contact Picker support
+  useEffect(() => {
+    const isSupported = 'contacts' in navigator && 'ContactsManager' in window;
+    setContactPickerSupported(isSupported);
+    
+    setShowContactPickerButton(isSignup && isSupported);
+    
+    if (isSupported) {
+      console.log('📱 Contact Picker API supported');
+    }
+  }, [isSignup]);
 
   const handleStudentAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,14 +436,15 @@ export default function Auth() {
     
     const endpoint = isSignup ? "/api/auth/student-register" : "/api/auth/student-login";
     
-    // For signup, include anti-spam data
+    // For signup, include anti-spam data and referral info
     const payload = isSignup 
       ? { 
           ...formData, 
           mathChallenge,
           mathAnswer,
           formStartTime: formStartTime.toString(),
-          honeypot: "" // Hidden field for bot detection
+          honeypot: "", // Hidden field for bot detection
+          referralClickId: referralInfo.clickId || undefined // Include referral click ID if present
         } 
       : { email: formData.email, password: formData.password };
     
@@ -269,6 +542,39 @@ export default function Auth() {
     }
   };
 
+  const handlePartnerLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    
+    // Ensure CSRF token is available before making request
+    const csrfToken = await getCsrfToken();
+    if (!csrfToken) {
+      setError("Unable to establish secure connection. This may be due to network issues or browser restrictions. Please try: 1) Refreshing the page, 2) Clearing browser cache, or 3) Using a different browser.");
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      // API client now auto-unwraps the envelope, so we get the login response directly
+      const response = await api.post("/api/auth/partner-login", {
+        email: formData.email,
+        password: formData.password,
+      }) as any;
+      
+      // Wait for login state to be properly set
+      await login(response.user, response.token);
+      
+      // Navigate to partner dashboard after login completion
+      navigate("/dashboard/partner");
+    } catch (error) {
+      console.error("Partner login error:", error);
+      setError("Login failed. Please check your credentials and try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const resetToMain = () => {
     setLoginType(null);
     setIsSignup(false);
@@ -301,8 +607,8 @@ export default function Auth() {
 
           {/* Logo and Title */}
           <div className="text-center space-y-2">
-            <div className="w-16 h-16 bg-gradient-to-r from-primary to-amber-500 rounded-2xl flex items-center justify-center mx-auto">
-              <GraduationCap className="w-8 h-8 text-white" />
+            <div className="w-16 h-16 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-2xl flex items-center justify-center mx-auto p-2">
+              <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" loading="lazy" />
             </div>
             <h1 className="text-3xl font-bold text-foreground">Welcome to Phozos</h1>
             <p className="text-muted-foreground">Choose how you'd like to sign in</p>
@@ -351,6 +657,26 @@ export default function Auth() {
               </Card>
             )}
 
+            {/* Partner Access */}
+            <Card 
+              className="cursor-pointer hover:shadow-md transition-all duration-200 hover:bg-accent/50"
+              onClick={() => setLoginType("partner")}
+            >
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-lg">Partner Access</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Education consultants and partner organizations
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Secret Search Input - only show if team login is not visible by default */}
             {Boolean(securitySettings && !(securitySettings as SecuritySettings)?.visible) && (
               <div className="pt-4">
@@ -388,8 +714,8 @@ export default function Auth() {
 
           <Card className="w-full">
             <CardHeader className="text-center space-y-2">
-              <div className="w-12 h-12 bg-gradient-to-r from-primary to-amber-500 rounded-xl flex items-center justify-center mx-auto">
-                <GraduationCap className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-700 dark:to-slate-800 rounded-xl flex items-center justify-center mx-auto p-2">
+                <img src={logoWhite} alt="Phozos Logo" className="w-full h-full object-contain" loading="lazy" />
               </div>
               <CardTitle className="text-2xl">
                 {isSignup ? "Get Started - Create Account" : "Sign In to Your Account"}
@@ -399,6 +725,16 @@ export default function Auth() {
               </CardDescription>
             </CardHeader>
           <CardContent className="space-y-6">
+            {/* Referral Badge - Display when user came from a partner referral link */}
+            {hasReferral && isSignup && (
+              <Alert className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                <UserCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-100">
+                  <strong>Welcome!</strong> You were referred by a Phozos partner. You'll receive priority support and exclusive benefits!
+                </AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleStudentAuth} className="space-y-4">
               {isSignup && (
                 <div className="grid grid-cols-2 gap-4">
@@ -429,13 +765,33 @@ export default function Auth() {
 
               {isSignup && (
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    
+                    {isDetectingCountry && (
+                      <span className="text-xs text-muted-foreground">
+                        Detecting location...
+                      </span>
+                    )}
+                    
+                    {detectedCountry && !isDetectingCountry && (
+                      <span className="text-xs text-green-600 flex items-center gap-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        Detected: {getCountryName(detectedCountry)}
+                      </span>
+                    )}
+                  </div>
+                  
                   <div className="relative">
                     <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+1234567890 (include country code)"
+                      placeholder={
+                        detectedCountry 
+                          ? `${getCallingCode(detectedCountry)} XXXXXXXXXX`
+                          : "+1234567890 (include country code)"
+                      }
                       value={formData.phone}
                       onChange={(e) => handlePhoneChange(e.target.value)}
                       className={`pl-10 ${
@@ -445,6 +801,19 @@ export default function Auth() {
                       required
                     />
                   </div>
+                  
+                  {showContactPickerButton && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={openContactPicker}
+                      className="w-full"
+                    >
+                      <UserCheck className="h-4 w-4 mr-2" />
+                      Select from Contacts
+                    </Button>
+                  )}
                   
                   {phoneCountry && phoneValid && (
                     <div className="flex items-center gap-2 text-sm text-green-600">
@@ -461,8 +830,24 @@ export default function Auth() {
                   )}
                   
                   <p className="text-xs text-muted-foreground">
-                    Include country code so counselors can contact you easily
+                    {detectedCountry 
+                      ? `We detected you're in ${getCountryName(detectedCountry)}. Include country code so counselors can contact you.`
+                      : 'Include country code so counselors can contact you easily'
+                    }
                   </p>
+                  
+                  {detectedCountry && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearCachedCountry();
+                        setDetectedCountry(null);
+                      }}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Wrong country? Click to reset
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -641,6 +1026,118 @@ export default function Auth() {
                 {isLoading ? "Signing In..." : "Sign In"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Partner Login
+  if (loginType === "partner") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-background to-emerald-50/30 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-4">
+          {/* Back to Home Button */}
+          <div className="flex justify-start">
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate("/")}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              ← Back to Home
+            </Button>
+          </div>
+
+          <Card className="w-full">
+            <CardHeader className="text-center space-y-2">
+              <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mx-auto">
+                <Building2 className="w-6 h-6 text-white" />
+              </div>
+              <CardTitle className="text-2xl">Partner Access</CardTitle>
+              <CardDescription>
+                Education consultant and partner organization login
+              </CardDescription>
+            </CardHeader>
+          <CardContent className="space-y-6">
+            {error && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <form onSubmit={handlePartnerLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your partner email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({...formData, email: e.target.value})}
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({...formData, password: e.target.value})}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing In..." : "Sign In"}
+              </Button>
+            </form>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  New partner?
+                </span>
+              </div>
+            </div>
+
+            <div className="text-center space-y-2">
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={() => navigate("/partner/register")}
+              >
+                Register as Partner
+              </Button>
+              <Button 
+                variant="link" 
+                onClick={resetToMain}
+                className="text-sm"
+              >
+                Back to login options
+              </Button>
+            </div>
           </CardContent>
         </Card>
         </div>

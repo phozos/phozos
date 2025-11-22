@@ -16,5 +16,28 @@ router.get('/status/:studentId', asyncHandler((req: Request, res: Response) => s
 router.use(requireAuth);
 router.get('/user/subscription', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserSubscription(req, res)));
 router.post('/user/subscribe', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.subscribe(req, res)));
+router.post('/upgrade', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.upgradeSubscription(req, res)));
+router.get('/effective-price', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getMyEffectivePrice(req, res)));
+
+// User subscription management routes (Phase 2)
+router.get('/me', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserSubscription(req, res)));
+router.get('/me/history', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserSubscriptionHistory(req, res)));
+router.post('/me/cancel-request', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.createCancellationRequest(req, res)));
+router.get('/me/cancel-requests', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserCancellationRequests(req, res)));
+router.post('/me/refund-request', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.createRefundRequest(req, res)));
+router.get('/me/refund-requests', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserRefundRequests(req, res)));
+router.post('/me/dispute', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.createDispute(req, res)));
+router.get('/me/disputes', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUserDisputes(req, res)));
+router.get('/me/refund-eligibility', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.checkRefundEligibility(req, res)));
+
+// Plan notification routes
+router.get('/plan-notifications/unread', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getUnreadPlanNotifications(req, res)));
+router.post('/plan-notifications/:notificationId/read', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.markPlanNotificationRead(req, res)));
+router.post('/plan-notifications/:notificationId/acknowledge', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.acknowledgePlanChange(req, res)));
+
+// Plan migration routes
+router.get('/migration-offer', asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.getMigrationOffer(req, res)));
+router.post('/migrations/:migrationId/accept', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.acceptMigration(req, res)));
+router.post('/migrations/:migrationId/decline', csrfProtection, asyncHandler((req: AuthenticatedRequest, res: Response) => subscriptionController.declineMigration(req, res)));
 
 export default router;
