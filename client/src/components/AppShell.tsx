@@ -38,7 +38,7 @@ import {
   Loader2,
   CreditCard
 } from "lucide-react";
-import logoWhite from "@assets/branding/logo/logo-white.png";
+import logoWhite from "@/assets/branding/logos/logo-white.png";
 
 export default function AppShell() {
   const { user, logout, loading } = useAuth();

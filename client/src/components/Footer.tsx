@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Facebook, Instagram, Twitter, Mail, Phone, MapPin } from "lucide-react";
 import { CORPORATE_OFFICE, REGISTERED_OFFICE, US_OFFICE } from "@/lib/company-info";
-import logoWhite from "@assets/branding/logo/logo-white.png";
+import logoWhite from "@/assets/branding/logos/logo-white.png";
 
 export default function Footer() {
   return (

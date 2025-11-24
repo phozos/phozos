@@ -1,4 +1,4 @@
-import logoWhite from "@assets/branding/logo/logo-white.png";
+import logoWhite from "@/assets/branding/logos/logo-white.png";
 
 interface LoadingScreenProps {
   message?: string;
