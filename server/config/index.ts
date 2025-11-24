@@ -30,9 +30,14 @@ const __dirname = dirname(__filename);
  * 4. .env.{NODE_ENV}.local (environment-specific local overrides, gitignored)
  * 
  * dotenv-flow automatically handles this layering and respects the NODE_ENV variable.
+ * 
+ * Path resolution:
+ * - Uses process.cwd() by default (works correctly in both dev and production/bundled builds)
+ * - Supports CONFIG_ROOT environment variable override for custom deployments
+ * - In bundled builds (esbuild), __dirname points to dist/, but process.cwd() always points to project root
  */
 dotenvFlow.config({
-  path: resolve(__dirname, '../..'),
+  path: process.env.CONFIG_ROOT || process.cwd(),
   silent: true, // Don't throw errors if files don't exist
   node_env: process.env.NODE_ENV || 'development',
 });
