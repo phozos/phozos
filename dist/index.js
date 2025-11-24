@@ -134,7 +134,7 @@ var init_errors = __esm({
 
 // server/config/index.ts
 import dotenvFlow from "dotenv-flow";
-import { resolve, dirname } from "path";
+import { dirname } from "path";
 import { fileURLToPath } from "url";
 import { z } from "zod";
 function validateConfiguration() {
@@ -246,7 +246,7 @@ var init_config = __esm({
     __filename = fileURLToPath(import.meta.url);
     __dirname = dirname(__filename);
     dotenvFlow.config({
-      path: resolve(__dirname, "../.."),
+      path: process.env.CONFIG_ROOT || process.cwd(),
       silent: true,
       // Don't throw errors if files don't exist
       node_env: process.env.NODE_ENV || "development"
