@@ -13,7 +13,7 @@ import { useApiQuery } from "@/hooks/api-hooks";
 import { api } from "@/lib/api-client";
 import { parsePhoneNumber, isValidPhoneNumber, getCountryCallingCode } from 'libphonenumber-js';
 import { SEO } from "@/components/SEO";
-import logoWhite from "@assets/branding/logo/logo-white.png";
+import logoWhite from "@/assets/branding/logos/logo-white.png";
 
 /**
  * Helper function to read cookie by name

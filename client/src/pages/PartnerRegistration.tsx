@@ -24,7 +24,7 @@ import { Building2, ArrowRight, ArrowLeft, CheckCircle, AlertTriangle } from "lu
 import { useToast } from "@/hooks/use-toast";
 import { SEO } from "@/components/SEO";
 import { BUSINESS_TYPES } from "@shared/types/partner-types";
-import logoWhite from "@assets/branding/logo/logo-white.png";
+import logoWhite from "@/assets/branding/logos/logo-white.png";
 
 // Zod validation schema
 const partnerRegistrationSchema = z.object({

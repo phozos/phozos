@@ -15,7 +15,7 @@ import {
   LogOut,
   Search
 } from "lucide-react";
-import logoWhite from "@assets/branding/logo/logo-white.png";
+import logoWhite from "@/assets/branding/logos/logo-white.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
